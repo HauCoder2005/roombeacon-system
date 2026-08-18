@@ -1,8 +1,10 @@
+<div align="center">
+
 # RoomBeacon
 
 ### Location-Aware Rental Discovery & Data Intelligence Platform
 
-<p align="left">
+<p align="center">
   <img src="https://cdn.simpleicons.org/python/3776AB" width="38" height="38" alt="Python" />
   &nbsp;&nbsp;
   <img src="https://cdn.simpleicons.org/apacheairflow/017CEE" width="38" height="38" alt="Apache Airflow" />
@@ -19,7 +21,7 @@
   &nbsp;&nbsp;
   <img src="https://cdn.simpleicons.org/git/F05032" width="38" height="38" alt="Git" />
   &nbsp;&nbsp;
-  <img src="https://cdn.simpleicons.org/github/181717" width="38" height="38" alt="GitHub" />
+  <img src="https://cdn.simpleicons.org/github/FFFFFF" width="38" height="38" alt="GitHub" />
 </p>
 
 [![Python Version](https://img.shields.io/badge/Python-3.11+-3776AB.svg?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
@@ -30,6 +32,8 @@
 [![Database](https://img.shields.io/badge/Serving_DB-MySQL-4479A1.svg?style=flat-square&logo=mysql&logoColor=white)](https://www.mysql.com/)
 [![Architecture](https://img.shields.io/badge/Architecture-Clean%20%2B%20Hexagonal-informational.svg?style=flat-square)](docs/source-structure.md)
 [![License](https://img.shields.io/badge/License-MIT-lightgrey.svg?style=flat-square)](LICENSE)
+
+</div>
 
 ---
 
