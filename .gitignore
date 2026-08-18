@@ -1,0 +1,179 @@
+# ==============================================================================
+# RoomBeacon — Git Ignore Configuration
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Python & Virtual Environments
+# ------------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environments
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+.env.venv/
+.poetry/
+
+# ------------------------------------------------------------------------------
+# Environment Variables & Secrets
+# ------------------------------------------------------------------------------
+.env
+.env.local
+.env.*.local
+*.local.env
+*.pem
+*.key
+*.cert
+secrets/
+
+# Keep the template tracked
+!.env.example
+
+# ------------------------------------------------------------------------------
+# Testing, Coverage & Code Quality
+# ------------------------------------------------------------------------------
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.tox/
+.nox/
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.pytype/
+
+# ------------------------------------------------------------------------------
+# IDEs, Editors & OS Files
+# ------------------------------------------------------------------------------
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+
+# Visual Studio Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# JetBrains (PyCharm, IntelliJ)
+.idea/
+*.iml
+*.iws
+
+# Sublime Text & Vim
+*.sublime-workspace
+*.sublime-project
+*.swp
+*.swo
+*.swn
+
+# ------------------------------------------------------------------------------
+# Data Directory (Ignore actual dataset contents, preserve folder structure)
+# ------------------------------------------------------------------------------
+data/raw/*
+!data/raw/.gitkeep
+
+data/bronze/*
+!data/bronze/.gitkeep
+
+data/silver/*
+!data/silver/.gitkeep
+
+data/gold/*
+!data/gold/.gitkeep
+
+data/exports/*
+!data/exports/.gitkeep
+
+data/temp/*
+!data/temp/.gitkeep
+
+# Local data files
+*.parquet
+*.csv
+*.tsv
+*.jsonl
+*.feather
+
+# ------------------------------------------------------------------------------
+# Apache Airflow Local Runtime
+# ------------------------------------------------------------------------------
+airflow/logs/*
+!airflow/logs/.gitkeep
+airflow/standalone_admin_password.txt
+airflow/airflow.db
+airflow/airflow.db-journal
+
+# ------------------------------------------------------------------------------
+# Databases & Analytical Engines
+# ------------------------------------------------------------------------------
+*.duckdb
+*.duckdb.wal
+*.duckdb.tmp
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+
+# ------------------------------------------------------------------------------
+# Browser Automation & Crawling Artifacts
+# ------------------------------------------------------------------------------
+.playwright/
+playwright-report/
+test-results/
+screenshots/
+har/
+
+# ------------------------------------------------------------------------------
+# Docker & Deployment Overrides
+# ------------------------------------------------------------------------------
+docker-compose.override.yml
+*.log
