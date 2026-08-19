@@ -1,6 +1,6 @@
-import os
 from dataclasses import dataclass, field
 
+from roombeacon_crawler.config.get_env import env
 from roombeacon_crawler.enums.crawl_date_mode import CrawlDateMode
 
 
@@ -8,49 +8,33 @@ from roombeacon_crawler.enums.crawl_date_mode import CrawlDateMode
 class CrawlerSettings:
     """Cấu hình vận hành toàn cục của RoomBeacon Crawler."""
 
-    user_agent: str = field(
-        default_factory=lambda: os.getenv(
-            "CRAWLER_USER_AGENT", "RoomBeaconCrawler/0.1"
-        )
-    )
+    user_agent: str = field(default_factory=lambda: env.crawler.user_agent)
     playwright_headless: bool = field(
-        default_factory=lambda: os.getenv(
-            "PLAYWRIGHT_HEADLESS", "true"
-        ).lower()
-        in ("1", "true", "yes")
+        default_factory=lambda: env.crawler.playwright_headless
+    )
+    obey_robots_txt: bool = field(
+        default_factory=lambda: env.crawler.obey_robots_txt
     )
     request_timeout: float = field(
-        default_factory=lambda: float(os.getenv("REQUEST_TIMEOUT", "30.0"))
+        default_factory=lambda: env.crawler.request_timeout_seconds
     )
     request_delay_seconds: float = field(
-        default_factory=lambda: float(os.getenv("REQUEST_DELAY_SECONDS", "1.5"))
+        default_factory=lambda: env.crawler.request_delay_seconds
     )
     max_concurrency: int = field(
-        default_factory=lambda: int(os.getenv("MAX_CONCURRENCY", "1"))
+        default_factory=lambda: env.crawler.max_concurrency
     )
-    max_retries: int = field(
-        default_factory=lambda: int(os.getenv("MAX_RETRIES", "3"))
-    )
-    start_page: int = field(
-        default_factory=lambda: int(os.getenv("START_PAGE", "1"))
-    )
-    max_pages: int = field(
-        default_factory=lambda: int(os.getenv("MAX_PAGES", "5"))
-    )
+    max_retries: int = field(default_factory=lambda: env.crawler.max_retries)
+    start_page: int = field(default_factory=lambda: env.crawler.start_page)
+    max_pages: int = field(default_factory=lambda: env.crawler.max_pages)
     max_records_per_page: int = field(
-        default_factory=lambda: int(os.getenv("MAX_RECORDS_PER_PAGE", "50"))
+        default_factory=lambda: env.crawler.max_records_per_page
     )
     max_total_records: int = field(
-        default_factory=lambda: int(os.getenv("MAX_TOTAL_RECORDS", "50"))
+        default_factory=lambda: env.crawler.max_total_records
     )
     crawl_date_mode: CrawlDateMode = field(
-        default_factory=lambda: CrawlDateMode(
-            os.getenv("CRAWL_DATE_MODE", CrawlDateMode.LATEST.value)
-        )
+        default_factory=lambda: CrawlDateMode.from_str(env.crawler.date_mode)
     )
-    date_from: str | None = field(
-        default_factory=lambda: os.getenv("DATE_FROM")
-    )
-    date_to: str | None = field(
-        default_factory=lambda: os.getenv("DATE_TO")
-    )
+    date_from: str | None = field(default_factory=lambda: env.crawler.date_from)
+    date_to: str | None = field(default_factory=lambda: env.crawler.date_to)
