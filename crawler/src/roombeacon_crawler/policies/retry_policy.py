@@ -8,11 +8,12 @@ class RetryPolicy:
         CrawlStatus.TIMEOUT,
         CrawlStatus.CONNECTION_ERROR,
         CrawlStatus.SERVER_ERROR,
+        CrawlStatus.RATE_LIMITED,
     }
 
     def __init__(
         self,
-        max_retries: int = 3,
+        max_retries: int = 2,
         base_delay_seconds: float = 2.0,
         max_delay_seconds: float = 30.0,
     ) -> None:
@@ -21,8 +22,13 @@ class RetryPolicy:
         self.max_delay_seconds = max_delay_seconds
 
     def should_retry(self, status: CrawlStatus, attempt: int) -> bool:
-        """Kiểm tra xem có nên thực hiện retry lại request với status hiện tại không."""
-        if attempt >= self.max_retries:
+        """Kiểm tra xem có nên thực hiện retry lại request với status hiện tại không.
+
+        Args:
+            status: Trạng thái kỹ thuật của lần thử vừa thực hiện.
+            attempt: Thứ tự lần thử hiện tại (bắt đầu từ 1 cho request đầu tiên).
+        """
+        if attempt > self.max_retries:
             return False
         return status in self.RETRYABLE_STATUSES
 

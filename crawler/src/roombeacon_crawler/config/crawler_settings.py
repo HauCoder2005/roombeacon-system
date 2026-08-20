@@ -8,6 +8,7 @@ from roombeacon_crawler.enums.crawl_date_mode import CrawlDateMode
 class CrawlerSettings:
     """Cấu hình vận hành toàn cục của RoomBeacon Crawler."""
 
+    data_dir: str = field(default_factory=lambda: env.crawler.data_dir)
     user_agent: str = field(default_factory=lambda: env.crawler.user_agent)
     playwright_headless: bool = field(
         default_factory=lambda: env.crawler.playwright_headless

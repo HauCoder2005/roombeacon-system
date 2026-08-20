@@ -1,0 +1,22 @@
+{
+  "run_id": "run_20260819_155536",
+  "source": "nhatrovn",
+  "started_at": "2026-08-19T15:55:36.931360+00:00",
+  "finished_at": "2026-08-19T15:55:37.227685+00:00",
+  "target_url": "https://nhatrovn.vn/cho-thue-phong-tro/ho-chi-minh/",
+  "status": "success",
+  "stop_reason": null,
+  "failure_reason": null,
+  "max_pages": 1,
+  "max_records": 20,
+  "crawl_details": false,
+  "pages_success": 1,
+  "pages_failed": 0,
+  "details_success": 0,
+  "details_failed": 0,
+  "records_created": 20,
+  "duplicates_skipped": 0,
+  "errors": [],
+  "manifest_path": "/data/manifests/nhatrovn/2026-08-19/run_20260819_155536.json",
+  "bronze_path": "/data/bronze/nhatrovn/2026-08-19/run_20260819_155536"
+}

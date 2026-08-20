@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Cho thuê phòng trọ TP.HCM | Nhatrovn</title>
+</head>
+<body>
+    <div class="container">
+        <div class="row">
+            <!-- Card 1 -->
+            <div class="col-6 col-lg-3 mb-4">
+                <a href="/cho-thue-phong-tro/ho-chi-minh/thanh-pho-thu-duc/chi-tiet/6a83dc4ccb235d6c3c150348/" class="text-decoration-none">
+                    <div class="property-card" data-current-status="hot" data-is-auth="1">
+                        <div class="property-card-image">
+                            <img src="https://api.nhatrovn.vn/api/common/img/test/6a83dc4ccb235d6c3c150348/thumb1.jpg" alt="1110/B13 PHẠM VĂN ĐỒNG">
+                            <div class="property-card-badges">
+                                <div class="property-card-badge status-over">Sắp hết</div>
+                                <div class="property-card-badge is-auth">Đã xác thực</div>
+                            </div>
+                        </div>
+                        <div class="property-card-content">
+                            <div class="rn-vacant-badge">Còn 3 phòng trống</div>
+                            <div class="rn-property-address">1110/XX Phạm Văn Đồng, Phường Linh Đông, Thành phố Thủ Đức, Thành phố Hồ Chí Minh</div>
+                            <div class="property-card-price">Giá: 5 triệu</div>
+                            <div class="rn-property-total">Tổng: 20 phòng</div>
+                        </div>
+                    </div>
+                </a>
+            </div>
+
+            <!-- Card 2 -->
+            <div class="col-6 col-lg-3 mb-4">
+                <a href="/cho-thue-phong-tro/ho-chi-minh/quan-10/chi-tiet/7b94ed5ddc346e7d4d261459/" class="text-decoration-none">
+                    <div class="property-card" data-current-status="new" data-is-auth="1">
+                        <div class="property-card-image">
+                            <img src="https://api.nhatrovn.vn/api/common/img/test/7b94ed5ddc346e7d4d261459/thumb2.jpg" alt="CHDV CAO CẤP TÔ HIẾN THÀNH">
+                        </div>
+                        <div class="property-card-content">
+                            <div class="rn-vacant-badge">Còn 1 phòng trống</div>
+                            <div class="rn-property-address">285 Tô Hiến Thành, Phường 13, Quận 10, Thành phố Hồ Chí Minh</div>
+                            <div class="property-card-price">Giá: 6.5 triệu</div>
+                        </div>
+                    </div>
+                </a>
+            </div>
+
+            <!-- Card 3: Duplicate of Card 1 (to test deduplication) -->
+            <div class="col-6 col-lg-3 mb-4">
+                <a href="/cho-thue-phong-tro/ho-chi-minh/thanh-pho-thu-duc/chi-tiet/6a83dc4ccb235d6c3c150348/" class="text-decoration-none">
+                    <div class="property-card">
+                        <div class="property-card-image">
+                            <img src="https://api.nhatrovn.vn/api/common/img/test/6a83dc4ccb235d6c3c150348/thumb1.jpg" alt="1110/B13 PHẠM VĂN ĐỒNG">
+                        </div>
+                        <div class="property-card-content">
+                            <div class="rn-property-address">1110/XX Phạm Văn Đồng, Phường Linh Đông, Thành phố Thủ Đức, Thành phố Hồ Chí Minh</div>
+                            <div class="property-card-price">Giá: 5 triệu</div>
+                        </div>
+                    </div>
+                </a>
+            </div>
+
+            <!-- Card 4: Missing optional image and price -->
+            <div class="col-6 col-lg-3 mb-4">
+                <a href="/cho-thue-phong-tro/ho-chi-minh/quan-3/chi-tiet/8c05fe6eeb457f8e5e372560/" class="text-decoration-none">
+                    <div class="property-card">
+                        <div class="property-card-content">
+                            <div class="rn-property-address">123 Nam Kỳ Khởi Nghĩa, Phường 7, Quận 3, Thành phố Hồ Chí Minh</div>
+                        </div>
+                    </div>
+                </a>
+            </div>
+        </div>
+
+        <!-- Pagination Container -->
+        <div id="paginationContainer">
+            <span class="pagination-btn active">1</span>
+            <a href="javascript:void(0)" onclick="goToPage(2)" class="pagination-btn">2</a>
+            <a href="javascript:void(0)" onclick="goToPage(3)" class="pagination-btn">3</a>
+            <span class="pagination-ellipsis">...</span>
+            <a href="javascript:void(0)" onclick="goToPage(42)" class="pagination-btn">42</a>
+            <a href="javascript:void(0)" onclick="goToPage(2)" class="pagination-btn pagination-arrow">
+                <span>&gt;</span>
+            </a>
+        </div>
+        <div class="text-center mt-3">
+            <small class="text-muted">Hiển thị 20 kết quả (Trang 1 / 42)</small>
+        </div>
+    </div>
+</body>
+</html>

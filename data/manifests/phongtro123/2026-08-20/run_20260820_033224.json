@@ -1,0 +1,23 @@
+{
+  "run_id": "run_20260820_033224",
+  "source": "phongtro123",
+  "started_at": "2026-08-20T03:32:24.772972+00:00",
+  "finished_at": "2026-08-20T03:32:25.699050+00:00",
+  "target_url": "https://phongtro123.com/cho-thue-phong-tro",
+  "status": "success",
+  "stop_reason": null,
+  "failure_reason": null,
+  "max_pages": 1,
+  "max_records": 20,
+  "crawl_details": false,
+  "pages_attempted": 1,
+  "pages_success": 0,
+  "pages_failed": 0,
+  "details_success": 0,
+  "details_failed": 0,
+  "records_created": 0,
+  "duplicates_skipped": 0,
+  "errors": [],
+  "manifest_path": "/data/manifests/phongtro123/2026-08-20/run_20260820_033224.json",
+  "bronze_path": null
+}

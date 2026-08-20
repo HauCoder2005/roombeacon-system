@@ -15,5 +15,7 @@ class CrawlStatus(str, Enum):
     TIMEOUT = "timeout"
     CONNECTION_ERROR = "connection_error"
     ROBOTS_DENIED = "robots_denied"
+    UNSUPPORTED_SOURCE = "unsupported_source"
+    UNSUPPORTED_TARGET = "unsupported_target"
     PARSE_ERROR = "parse_error"
     UNKNOWN = "unknown"

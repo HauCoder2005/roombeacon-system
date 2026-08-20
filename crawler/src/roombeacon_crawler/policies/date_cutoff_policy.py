@@ -1,6 +1,9 @@
 from datetime import datetime
+import logging
 
 from roombeacon_crawler.enums.crawl_date_mode import CrawlDateMode
+
+logger = logging.getLogger(__name__)
 
 
 class DateCutoffPolicy:
@@ -11,7 +14,7 @@ class DateCutoffPolicy:
         mode: CrawlDateMode = CrawlDateMode.LATEST,
         date_from: datetime | None = None,
         date_to: datetime | None = None,
-        max_pages_safety: int = 100,
+        max_pages_safety: int = 1000,
     ) -> None:
         self.mode = mode
         self.date_from = date_from
@@ -22,9 +25,11 @@ class DateCutoffPolicy:
         self,
         oldest_item_dt: datetime | None,
         current_page: int,
+        max_pages: int | None = None,
     ) -> bool:
         """Kiểm tra xem có nên tiếp tục sang trang tiếp theo hay dừng lại do vượt ngưỡng ngày."""
-        if current_page >= self.max_pages_safety:
+        effective_max = max_pages if max_pages is not None else self.max_pages_safety
+        if current_page >= effective_max:
             return False
 
         if self.mode == CrawlDateMode.FULL_HISTORY:

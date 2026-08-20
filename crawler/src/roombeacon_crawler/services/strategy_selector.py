@@ -1,10 +1,11 @@
+from typing import Any
 from urllib.parse import urlparse
 
 from roombeacon_crawler.enums.fetch_strategy import FetchStrategy
 
 
 class StrategySelector:
-    """Lựa chọn chiến lược fetch (HTTP vs BROWSER) dựa trên tên miền của website nguồn."""
+    """Lựa chọn chiến lược fetch (HTTP vs BROWSER) dựa trên adapter hint, domain mapping hoặc override."""
 
     DEFAULT_SOURCE_STRATEGIES: dict[str, FetchStrategy] = {
         "nhatot.com": FetchStrategy.BROWSER,
@@ -24,11 +25,17 @@ class StrategySelector:
     def select(
         self,
         url: str,
+        adapter: Any = None,
         override_strategy: FetchStrategy | None = None,
     ) -> FetchStrategy:
         """Xác định FetchStrategy cho một URL."""
         if override_strategy is not None:
             return override_strategy
+
+        if adapter is not None and hasattr(adapter, "settings"):
+            default_strat = getattr(adapter.settings, "default_strategy", None)
+            if default_strat is not None:
+                return default_strat
 
         try:
             parsed = urlparse(url)

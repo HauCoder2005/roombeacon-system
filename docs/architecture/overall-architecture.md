@@ -2627,8 +2627,7 @@ roombeacon/
 ├── serving/
 ├── airflow/
 ├── data/
-├── docs/
-└── docker/
+└── docs/
 ```
 
 Mỗi workload độc lập.

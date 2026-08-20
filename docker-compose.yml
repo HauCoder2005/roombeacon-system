@@ -7,73 +7,106 @@ services:
     image: "${MYSQL_IMAGE}:${MYSQL_VERSION}"
     container_name: "${BRONZE_MYSQL_CONTAINER_NAME}"
     restart: "${DOCKER_RESTART_POLICY}"
+
     networks:
       - "${ROOMBEACON_DATA_NETWORK}"
+
     command:
       - "--character-set-server=${MYSQL_CHARSET}"
       - "--collation-server=${MYSQL_COLLATION}"
+
     environment:
       MYSQL_ROOT_PASSWORD: "${BRONZE_MYSQL_ROOT_PASSWORD}"
       MYSQL_DATABASE: "${BRONZE_MYSQL_DATABASE}"
       MYSQL_USER: "${BRONZE_MYSQL_USER}"
       MYSQL_PASSWORD: "${BRONZE_MYSQL_PASSWORD}"
+
     ports:
       - "127.0.0.1:${BRONZE_MYSQL_HOST_PORT}:3306"
+
     volumes:
       - "${BRONZE_MYSQL_VOLUME}:/var/lib/mysql"
+
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$${MYSQL_ROOT_PASSWORD} --silent || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          "mysqladmin ping -h 127.0.0.1 -u root -p$${MYSQL_ROOT_PASSWORD} --silent || exit 1"
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 30s
+
 
   mysql-airflow:
     image: "${MYSQL_IMAGE}:${MYSQL_VERSION}"
     container_name: "${AIRFLOW_MYSQL_CONTAINER_NAME}"
     restart: "${DOCKER_RESTART_POLICY}"
+
     networks:
       - "${ROOMBEACON_ORCHESTRATION_NETWORK}"
+
     command:
       - "--character-set-server=utf8mb4"
       - "--collation-server=utf8mb4_unicode_ci"
+
     environment:
       MYSQL_ROOT_PASSWORD: "${AIRFLOW_MYSQL_ROOT_PASSWORD}"
       MYSQL_DATABASE: "${AIRFLOW_MYSQL_DATABASE}"
       MYSQL_USER: "${AIRFLOW_MYSQL_USER}"
       MYSQL_PASSWORD: "${AIRFLOW_MYSQL_PASSWORD}"
+
     ports:
       - "127.0.0.1:${AIRFLOW_MYSQL_HOST_PORT}:3306"
+
     volumes:
       - "${AIRFLOW_MYSQL_VOLUME}:/var/lib/mysql"
+
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$${MYSQL_ROOT_PASSWORD} --silent || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          "mysqladmin ping -h 127.0.0.1 -u root -p$${MYSQL_ROOT_PASSWORD} --silent || exit 1"
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 30s
 
+
   minio:
     image: "${MINIO_IMAGE}:${MINIO_VERSION}"
     container_name: "${MINIO_CONTAINER_NAME}"
     restart: "${DOCKER_RESTART_POLICY}"
+
     networks:
       - "${ROOMBEACON_DATA_NETWORK}"
+
     command: server /data --console-address ":9001"
+
     environment:
       MINIO_ROOT_USER: "${MINIO_ROOT_USER}"
       MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD}"
+
     ports:
       - "127.0.0.1:${MINIO_API_PORT}:9000"
       - "127.0.0.1:${MINIO_CONSOLE_PORT}:9001"
+
     volumes:
       - "${MINIO_VOLUME}:/data"
+
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://127.0.0.1:9000/minio/health/live || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          "curl -f http://127.0.0.1:9000/minio/health/live || exit 1"
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
+
 
   # ============================================================
   # STORAGE INITIALIZATION
@@ -82,189 +115,444 @@ services:
   minio-bootstrap:
     image: "minio/mc:latest"
     container_name: "roombeacon-minio-bootstrap"
+
     networks:
       - "${ROOMBEACON_DATA_NETWORK}"
+
     depends_on:
       minio:
         condition: service_healthy
+
     entrypoint: /bin/sh
+
     command:
       - "-c"
       - >
-        until /usr/bin/mc alias set myminio http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD}; do
+        until /usr/bin/mc alias set
+        myminio
+        http://minio:9000
+        ${MINIO_ROOT_USER}
+        ${MINIO_ROOT_PASSWORD};
+        do
           echo "Waiting for MinIO endpoint...";
           sleep 2;
         done;
+
         /usr/bin/mc mb --ignore-existing myminio/${MINIO_BUCKET_RAW};
         /usr/bin/mc mb --ignore-existing myminio/${MINIO_BUCKET_ASSETS};
         /usr/bin/mc mb --ignore-existing myminio/${MINIO_BUCKET_QUARANTINE};
         /usr/bin/mc mb --ignore-existing myminio/${MINIO_BUCKET_EXPORTS};
+
         echo "MinIO buckets bootstrap completed successfully.";
         exit 0;
+
     restart: "no"
 
+
   # ============================================================
-  # AIRFLOW (ORCHESTRATION)
+  # AIRFLOW INITIALIZATION
   # ============================================================
 
   airflow-init:
     build:
       context: .
-      dockerfile: docker/airflow/Dockerfile
+      dockerfile: airflow/Dockerfile
+
       args:
         AIRFLOW_IMAGE: "${AIRFLOW_IMAGE}"
         AIRFLOW_VERSION: "${AIRFLOW_VERSION}"
+
     image: "roombeacon-airflow-custom:${AIRFLOW_VERSION}"
+
     container_name: "${AIRFLOW_CONTAINER_NAME_PREFIX}-init"
+
     networks:
       - "${ROOMBEACON_ORCHESTRATION_NETWORK}"
+
     depends_on:
       mysql-airflow:
         condition: service_healthy
+
+    # ----------------------------------------------------------
+    # Shared Airflow runtime environment
+    # ----------------------------------------------------------
+
     environment: &airflow-env
       AIRFLOW_HOME: "${AIRFLOW_HOME}"
+
+      # --------------------------------------------------------
+      # Airflow Core
+      # --------------------------------------------------------
+
       AIRFLOW__CORE__EXECUTOR: "${AIRFLOW__CORE__EXECUTOR}"
       AIRFLOW__CORE__LOAD_EXAMPLES: "${AIRFLOW__CORE__LOAD_EXAMPLES}"
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "${AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION}"
       AIRFLOW__CORE__DEFAULT_TIMEZONE: "${AIRFLOW__CORE__DEFAULT_TIMEZONE}"
+
+      # --------------------------------------------------------
+      # Airflow 3 Execution API
+      #
+      # IMPORTANT:
+      # localhost is WRONG inside airflow-scheduler.
+      #
+      # Scheduler/LocalExecutor task must communicate with
+      # the API Server through Docker DNS.
+      # --------------------------------------------------------
+
+      AIRFLOW__CORE__EXECUTION_API_SERVER_URL: "http://airflow-api-server:8080/execution/"
+
+      # --------------------------------------------------------
+      # Logging
+      # --------------------------------------------------------
+
       AIRFLOW__LOGGING__LOGGING_LEVEL: "${AIRFLOW__LOGGING__LOGGING_LEVEL}"
+
+      # --------------------------------------------------------
+      # Scheduler
+      # --------------------------------------------------------
+
       AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "${AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK}"
+
+      # --------------------------------------------------------
+      # Metadata Database
+      # --------------------------------------------------------
+
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: "${AIRFLOW__DATABASE__SQL_ALCHEMY_CONN}"
+
       AIRFLOW__DATABASE__SQL_ENGINE_COLLATION_FOR_IDS: "${AIRFLOW__DATABASE__SQL_ENGINE_COLLATION_FOR_IDS}"
+
       AIRFLOW__DATABASE__SQL_ALCHEMY_POOL_PRE_PING: "${AIRFLOW__DATABASE__SQL_ALCHEMY_POOL_PRE_PING}"
+
       AIRFLOW__DATABASE__SQL_ALCHEMY_POOL_RECYCLE: "${AIRFLOW__DATABASE__SQL_ALCHEMY_POOL_RECYCLE}"
+
+      # --------------------------------------------------------
+      # Fernet
+      # --------------------------------------------------------
+
       AIRFLOW__CORE__FERNET_KEY: "${AIRFLOW__CORE__FERNET_KEY}"
+
+      # --------------------------------------------------------
+      # Simple Auth Manager
+      # --------------------------------------------------------
+
       AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS: "${AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS}"
+
       AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: "${AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS}"
+
       AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_PASSWORDS_FILE: "${AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_PASSWORDS_FILE}"
+
+      # --------------------------------------------------------
+      # RoomBeacon
+      # --------------------------------------------------------
+
       ROOMBEACON_ENV: "${ROOMBEACON_ENV}"
+
+      # Airflow DAG can import:
+      #
+      # from roombeacon_crawler...
+      #
+      PYTHONPATH: "/opt/roombeacon/crawler/src"
+
     user: "${AIRFLOW_UID}:0"
+
     volumes: &airflow-volumes
       - "${AIRFLOW_DAGS_DIR}:/opt/airflow/dags"
+
       - "${AIRFLOW_LOGS_DIR}:/opt/airflow/logs"
+
       - "${AIRFLOW_CONFIG_DIR}:/opt/airflow/config"
+
       - "${AIRFLOW_PLUGINS_DIR}:/opt/airflow/plugins"
+
+      # Crawler source is read-only inside Airflow
+      - "./crawler/src:/opt/roombeacon/crawler/src:ro"
+
+      - "${ROOMBEACON_DATA_DIR}:/data"
+
     command:
       - "bash"
       - "-c"
       - >
         airflow db migrate &&
         echo "Airflow metadata database migration completed successfully."
+
     restart: "no"
+
+
+  # ============================================================
+  # AIRFLOW API SERVER
+  # ============================================================
 
   airflow-api-server:
     image: "roombeacon-airflow-custom:${AIRFLOW_VERSION}"
+
     container_name: "${AIRFLOW_CONTAINER_NAME_PREFIX}-api-server"
+
     restart: "${DOCKER_RESTART_POLICY}"
+
     networks:
       - "${ROOMBEACON_ORCHESTRATION_NETWORK}"
+
     depends_on:
       mysql-airflow:
         condition: service_healthy
+
       airflow-init:
         condition: service_completed_successfully
+
     environment:
       <<: *airflow-env
+
+      # Must be identical to scheduler JWT secret.
+      AIRFLOW__API_AUTH__JWT_SECRET: "${AIRFLOW__API_AUTH__JWT_SECRET}"
+
     user: "${AIRFLOW_UID}:0"
+
     volumes: *airflow-volumes
+
     ports:
       - "127.0.0.1:${AIRFLOW_API_PORT}:8080"
+
     command: api-server
+
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://127.0.0.1:8080/health || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          "curl -f http://127.0.0.1:8080/api/v2/monitor/health || exit 1"
+        ]
       interval: 15s
       timeout: 10s
       retries: 5
       start_period: 30s
 
+
+  # ============================================================
+  # AIRFLOW SCHEDULER + LOCALEXECUTOR
+  # ============================================================
+
   airflow-scheduler:
     image: "roombeacon-airflow-custom:${AIRFLOW_VERSION}"
+
     container_name: "${AIRFLOW_CONTAINER_NAME_PREFIX}-scheduler"
+
     restart: "${DOCKER_RESTART_POLICY}"
+
+    # ----------------------------------------------------------
+    # Scheduler needs BOTH networks.
+    #
+    # orchestration:
+    #   scheduler -> api-server
+    #   scheduler -> mysql-airflow
+    #
+    # data:
+    #   crawler task -> minio
+    #   crawler task -> mysql-bronze
+    #
+    # LocalExecutor executes crawler workload from this runtime.
+    # ----------------------------------------------------------
+
     networks:
       - "${ROOMBEACON_ORCHESTRATION_NETWORK}"
+      - "${ROOMBEACON_DATA_NETWORK}"
+
     depends_on:
       mysql-airflow:
         condition: service_healthy
+
       airflow-init:
         condition: service_completed_successfully
+
+      airflow-api-server:
+        condition: service_healthy
+
     environment:
       <<: *airflow-env
+
+      # --------------------------------------------------------
+      # JWT used by Scheduler/Execution API
+      # --------------------------------------------------------
+
+      AIRFLOW__API_AUTH__JWT_SECRET: "${AIRFLOW__API_AUTH__JWT_SECRET}"
+
+      # --------------------------------------------------------
+      # RoomBeacon Crawler
+      #
+      # LocalExecutor runs crawler workload in scheduler runtime,
+      # therefore crawler runtime configuration must be available
+      # here.
+      # --------------------------------------------------------
+
+      CRAWLER_ENV: "${CRAWLER_ENV}"
+      CRAWLER_LOG_LEVEL: "${CRAWLER_LOG_LEVEL}"
+      CRAWLER_DATA_DIR: "${CRAWLER_DATA_DIR}"
+
+      CRAWLER_USER_AGENT: "${CRAWLER_USER_AGENT}"
+      CRAWLER_OBEY_ROBOTS_TXT: "${CRAWLER_OBEY_ROBOTS_TXT}"
+
+      PLAYWRIGHT_HEADLESS: "${PLAYWRIGHT_HEADLESS}"
+
+      # --------------------------------------------------------
+      # MySQL Bronze
+      # --------------------------------------------------------
+
+      BRONZE_MYSQL_HOST: "${BRONZE_MYSQL_HOST}"
+      BRONZE_MYSQL_PORT: "${BRONZE_MYSQL_PORT}"
+      BRONZE_MYSQL_DATABASE: "${BRONZE_MYSQL_DATABASE}"
+      BRONZE_MYSQL_USER: "${BRONZE_MYSQL_USER}"
+      BRONZE_MYSQL_PASSWORD: "${BRONZE_MYSQL_PASSWORD}"
+
+      # --------------------------------------------------------
+      # MinIO application access
+      # --------------------------------------------------------
+
+      MINIO_ENDPOINT: "${MINIO_ENDPOINT}"
+      MINIO_SECURE: "${MINIO_SECURE}"
+
+      MINIO_CRAWLER_ACCESS_KEY: "${MINIO_CRAWLER_ACCESS_KEY}"
+      MINIO_CRAWLER_SECRET_KEY: "${MINIO_CRAWLER_SECRET_KEY}"
+
+      MINIO_BUCKET_RAW: "${MINIO_BUCKET_RAW}"
+      MINIO_BUCKET_ASSETS: "${MINIO_BUCKET_ASSETS}"
+      MINIO_BUCKET_QUARANTINE: "${MINIO_BUCKET_QUARANTINE}"
+      MINIO_BUCKET_EXPORTS: "${MINIO_BUCKET_EXPORTS}"
+
     user: "${AIRFLOW_UID}:0"
+
     volumes: *airflow-volumes
+
     command: scheduler
+
     healthcheck:
-      test: ["CMD-SHELL", "airflow jobs check --job-type SchedulerJob --hostname \"$${HOSTNAME}\" || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          "airflow jobs check --job-type SchedulerJob --hostname \"$${HOSTNAME}\" || exit 1"
+        ]
       interval: 20s
       timeout: 10s
       retries: 5
       start_period: 30s
 
+
+  # ============================================================
+  # AIRFLOW DAG PROCESSOR
+  # ============================================================
+
   airflow-dag-processor:
     image: "roombeacon-airflow-custom:${AIRFLOW_VERSION}"
+
     container_name: "${AIRFLOW_CONTAINER_NAME_PREFIX}-dag-processor"
+
     restart: "${DOCKER_RESTART_POLICY}"
+
     networks:
       - "${ROOMBEACON_ORCHESTRATION_NETWORK}"
+
     depends_on:
       mysql-airflow:
         condition: service_healthy
+
       airflow-init:
         condition: service_completed_successfully
+
     environment:
       <<: *airflow-env
+
     user: "${AIRFLOW_UID}:0"
+
     volumes: *airflow-volumes
+
     command: dag-processor
+
+
+  # ============================================================
+  # AIRFLOW TRIGGERER
+  # ============================================================
 
   airflow-triggerer:
     image: "roombeacon-airflow-custom:${AIRFLOW_VERSION}"
+
     container_name: "${AIRFLOW_CONTAINER_NAME_PREFIX}-triggerer"
+
     restart: "${DOCKER_RESTART_POLICY}"
+
     networks:
       - "${ROOMBEACON_ORCHESTRATION_NETWORK}"
+
     depends_on:
       mysql-airflow:
         condition: service_healthy
+
       airflow-init:
         condition: service_completed_successfully
+
     environment:
       <<: *airflow-env
+
     user: "${AIRFLOW_UID}:0"
+
     volumes: *airflow-volumes
+
     command: triggerer
 
+
   # ============================================================
-  # PROCESSING RUNTIME (DUCKDB)
+  # PROCESSING RUNTIME — DUCKDB
   # ============================================================
 
   processing:
     build:
       context: .
-      dockerfile: docker/processing/Dockerfile
+      dockerfile: processing/Dockerfile
+
       args:
         DUCKDB_VERSION: "${DUCKDB_VERSION}"
+
     image: "roombeacon-processing:${DUCKDB_VERSION}"
+
     container_name: "${DUCKDB_CONTAINER_NAME}"
+
     networks:
       - "${ROOMBEACON_DATA_NETWORK}"
+
     volumes:
       - "${ROOMBEACON_DATA_DIR}:${ROOMBEACON_CONTAINER_DATA_DIR}"
+
     profiles:
       - tools
       - processing
-    command: ["python", "-c", "import duckdb; print('DuckDB version:', duckdb.__version__)"]
+
+    command:
+      [
+        "python",
+        "-c",
+        "import duckdb; print('DuckDB version:', duckdb.__version__)"
+      ]
+
+
+# ==============================================================
+# NETWORKS
+# ==============================================================
 
 networks:
   roombeacon-data-net:
     name: "${ROOMBEACON_DATA_NETWORK}"
+
   roombeacon-orchestration-net:
     name: "${ROOMBEACON_ORCHESTRATION_NETWORK}"
+
+
+# ==============================================================
+# VOLUMES
+# ==============================================================
 
 volumes:
   roombeacon-mysql-bronze-data:
     name: "${BRONZE_MYSQL_VOLUME}"
+
   roombeacon-mysql-airflow-data:
     name: "${AIRFLOW_MYSQL_VOLUME}"
+
   roombeacon-minio-data:
     name: "${MINIO_VOLUME}"

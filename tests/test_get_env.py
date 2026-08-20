@@ -2,6 +2,7 @@ import os
 import unittest
 from unittest.mock import patch
 
+from roombeacon_crawler.config.env.airflow import AirflowEnv, load_airflow_env
 from roombeacon_crawler.config.env.crawler import load_crawler_env
 from roombeacon_crawler.config.env.loader import (
     get_bool,
@@ -120,6 +121,29 @@ class TestDomainEnvLoaders(unittest.TestCase):
         self.assertEqual(p_env.project_name, "roombeacon")
         self.assertEqual(p_env.environment, "development")
 
+    def test_load_airflow_env_with_secrets(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "AIRFLOW__API_AUTH__JWT_SECRET": "test-only-jwt-secret-value",
+                "AIRFLOW__CORE__FERNET_KEY": "test-only-fernet-key-value",
+            },
+        ):
+            a_env = load_airflow_env()
+            self.assertEqual(a_env.jwt_secret, "test-only-jwt-secret-value")
+            self.assertEqual(a_env.fernet_key, "test-only-fernet-key-value")
+
+            # Verify secrets are NOT present in repr
+            r = repr(a_env)
+            self.assertNotIn("test-only-jwt-secret-value", r)
+            self.assertNotIn("test-only-fernet-key-value", r)
+
+    def test_load_airflow_env_defaults_none(self) -> None:
+        with patch.dict(os.environ, {}, clear=True):
+            a_env = load_airflow_env()
+            self.assertIsNone(a_env.jwt_secret)
+            self.assertIsNone(a_env.fernet_key)
+
     def test_environment_facade(self) -> None:
         self.assertIsNotNone(env.crawler)
         self.assertIsNotNone(env.mysql_bronze)
@@ -130,6 +154,7 @@ class TestDomainEnvLoaders(unittest.TestCase):
         self.assertIsNotNone(env.clickhouse)
         self.assertIsNotNone(env.backend)
         self.assertIsNotNone(env.security)
+        self.assertIsNotNone(env.airflow)
 
         # verify reload
         loaded = load_environment()

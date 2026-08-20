@@ -33,7 +33,7 @@ with DAG(
     dag_id="roombeacon_system_healthcheck",
     default_args=default_args,
     description="System DAG kiểm tra trạng thái hoạt động của RoomBeacon Airflow",
-    schedule_interval=None,
+    schedule=None,
     start_date=datetime(2026, 1, 1),
     catchup=False,
     tags=["system", "healthcheck", "roombeacon"],
