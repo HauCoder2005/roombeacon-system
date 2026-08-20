@@ -49,3 +49,11 @@ crawler/src/roombeacon_crawler/
 ├── sources/        # Source Adapters, Selectors, Parsers riêng biệt (Nhà Tốt, ...)
 └── pipeline/       # ListingCrawlPipeline, DetailCrawlPipeline, CrawlRunner
 ```
+
+---
+
+## 4. Tài liệu chi tiết liên quan
+* [Automated Crawl Orchestration & Checkpoint State](AIRFLOW_CRAWL_ORCHESTRATION.md)
+* [Multi-Source Architecture](02-multi-source-architecture.md)
+* [Fetch and Access Policy](03-fetch-and-access-policy.md)
+* [Storage Contract](08-storage-contract.md)

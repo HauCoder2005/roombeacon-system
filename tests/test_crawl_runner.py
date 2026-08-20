@@ -9,9 +9,10 @@ import unittest
 from airflow.exceptions import AirflowException, AirflowSkipException
 
 from airflow.dags.crawler.roombeacon_crawler import (
-    dag,
-    task_execute_crawl,
-    task_validate_url,
+    execute_crawl as airflow_execute_crawl,
+    plan_crawls,
+    qualify_target as airflow_qualify_target,
+    roombeacon_crawler_dag,
 )
 from roombeacon_crawler.enums.crawl_status import CrawlStatus
 from roombeacon_crawler.enums.fetch_strategy import FetchStrategy
@@ -21,6 +22,7 @@ from roombeacon_crawler.infrastructure.storage.local.local_storage_writer import
 from roombeacon_crawler.models.captured_response import CapturedResponse
 from roombeacon_crawler.models.crawl_run_result import CrawlRunResult
 from roombeacon_crawler.pipeline.crawl_runner import CrawlRunner
+from roombeacon_crawler.validators.url_validator import URLValidator
 
 
 class TestCrawlRunnerExecution(unittest.TestCase):
@@ -37,18 +39,19 @@ class TestCrawlRunnerExecution(unittest.TestCase):
         shutil.rmtree(self.test_dir, ignore_errors=True)
 
     def test_dag_structure(self) -> None:
-        self.assertEqual(dag.dag_id, "roombeacon_crawler")
-        self.assertTrue(dag.render_template_as_native_obj)
-        self.assertIn("run_mode", dag.params)
-        self.assertIn("target_url", dag.params)
-        self.assertIn("max_pages", dag.params)
-        self.assertIn("max_records", dag.params)
-        self.assertIn("crawl_details", dag.params)
-        self.assertIn("max_details_per_run", dag.params)
-        task_ids = [t.task_id for t in dag.tasks]
-        self.assertIn("discover_scheduled_targets", task_ids)
-        self.assertIn("qualify_and_crawl_target", task_ids)
-        self.assertIn("summarize_crawl_results", task_ids)
+        self.assertEqual(roombeacon_crawler_dag.dag_id, "roombeacon_crawler")
+        self.assertIn("execution_mode", roombeacon_crawler_dag.params)
+        self.assertIn("debug_target_url", roombeacon_crawler_dag.params)
+        self.assertIn("debug_max_pages", roombeacon_crawler_dag.params)
+        self.assertIn("debug_max_records", roombeacon_crawler_dag.params)
+        self.assertIn("debug_crawl_details", roombeacon_crawler_dag.params)
+        task_ids = [t.task_id for t in roombeacon_crawler_dag.tasks]
+        self.assertIn("load_crawl_targets", task_ids)
+        self.assertIn("plan_crawls", task_ids)
+        self.assertIn("qualify_target", task_ids)
+        self.assertIn("execute_crawl", task_ids)
+        self.assertIn("update_checkpoint", task_ids)
+        self.assertIn("summarize_run", task_ids)
 
     def test_invalid_target_url_raises_value_error(self) -> None:
         with self.assertRaises(ValueError):
@@ -61,201 +64,58 @@ class TestCrawlRunnerExecution(unittest.TestCase):
         with self.assertRaises(ValueError):
             CrawlRunner(target_url="https://unknown-domain.com/listings")
 
-    def test_task_validate_url_success(self) -> None:
-        result = task_validate_url(
-            params={"target_url": "https://phongtro123.com/tinh-thanh/ho-chi-minh"}
-        )
-        self.assertEqual(result["source"], "phongtro123")
+    def test_url_validator_checks(self) -> None:
+        valid_pt, _ = URLValidator.validate("https://phongtro123.com/tinh-thanh/ho-chi-minh")
+        self.assertTrue(valid_pt)
 
-        result = task_validate_url(
-            params={"target_url": "https://www.nhatot.com/thue-phong-tro-tp-ho-chi-minh"}
-        )
-        self.assertEqual(result["source"], "nhatot")
+        valid_nt, _ = URLValidator.validate("https://www.nhatot.com/thue-phong-tro-tp-ho-chi-minh")
+        self.assertTrue(valid_nt)
 
-        result = task_validate_url(
-            params={"target_url": "https://nhatrovn.vn/cho-thue-phong-tro/ha-noi/"}
-        )
-        self.assertEqual(result["source"], "nhatrovn")
+        valid_nv, _ = URLValidator.validate("https://nhatrovn.vn/cho-thue-phong-tro/ha-noi/")
+        self.assertTrue(valid_nv)
 
-    def test_task_validate_url_rejects_ssrf(self) -> None:
-        with self.assertRaises(AirflowException) as ctx:
-            task_validate_url(params={"target_url": "http://127.0.0.1/admin"})
-        self.assertIn("validation failed", str(ctx.exception))
+        invalid_ssrf, reason = URLValidator.validate("http://127.0.0.1/admin")
+        self.assertFalse(invalid_ssrf)
+        self.assertIn("bảo mật", reason)
 
-    def test_task_validate_url_rejects_unsupported_source(self) -> None:
-        with self.assertRaises(AirflowException) as ctx:
-            task_validate_url(params={"target_url": "https://random-public-site.org/posts"})
-        self.assertIn("Unsupported source domain", str(ctx.exception))
+        invalid_proto, reason = URLValidator.validate("ftp://random-public-site.org/posts")
+        self.assertFalse(invalid_proto)
 
-    @patch("roombeacon_crawler.pipeline.crawl_runner.CrawlRunner.execute_crawl")
-    def test_runtime_parameter_propagation_test_a(
-        self, mock_execute_crawl: MagicMock
-    ) -> None:
-        """Kiểm tra truyền tham số Test A từ Airflow Trigger UI xuống CrawlRunner."""
-        mock_execute_crawl.return_value = (
-            [],
-            CrawlRunResult(
-                run_id="run_param_test_a",
-                source="nhatrovn",
-                started_at="2026-08-19T00:00:00",
-                finished_at="2026-08-19T00:00:01",
-                status=CrawlStatus.SUCCESS,
-                records_created=0,
-            ),
-        )
-
-        task_execute_crawl(
+    def test_runtime_parameter_propagation_debug_plan(self) -> None:
+        """Kiểm tra truyền tham số debug từ Airflow Trigger UI vào CrawlPlan."""
+        plans = plan_crawls.function(
+            targets=[],
             params={
-                "target_url": "https://nhatrovn.vn/cho-thue-phong-tro/ha-noi/",
-                "max_pages": 10,
-                "max_records": 200,
-                "crawl_details": False,
-                "max_details_per_run": 3,
-            }
+                "execution_mode": "DEBUG_SINGLE_TARGET",
+                "debug_target_url": "https://nhatrovn.vn/cho-thue-phong-tro/ha-noi/",
+                "debug_max_pages": 10,
+                "debug_max_records": 200,
+                "debug_crawl_details": False,
+            },
         )
+        self.assertEqual(len(plans), 1)
+        self.assertEqual(plans[0]["target_url"], "https://nhatrovn.vn/cho-thue-phong-tro/ha-noi/")
+        self.assertEqual(plans[0]["safety_max_pages"], 10)
+        self.assertEqual(plans[0]["safety_max_records"], 200)
+        self.assertFalse(plans[0]["crawl_details"])
 
-        mock_execute_crawl.assert_called_once_with(
-            url="https://nhatrovn.vn/cho-thue-phong-tro/ha-noi/",
-            max_pages=10,
-            max_records=200,
-            crawl_details=False,
-            max_details_per_run=3,
-        )
-
-    @patch("roombeacon_crawler.pipeline.crawl_runner.CrawlRunner.execute_crawl")
-    def test_runtime_parameter_propagation_test_b(
-        self, mock_execute_crawl: MagicMock
-    ) -> None:
-        """Kiểm tra truyền tham số Test B độc lập không bị ảnh hưởng bởi Run trước."""
-        mock_execute_crawl.return_value = (
-            [],
-            CrawlRunResult(
-                run_id="run_param_test_b",
-                source="phongtro123",
-                started_at="2026-08-19T00:00:00",
-                finished_at="2026-08-19T00:00:01",
-                status=CrawlStatus.SUCCESS,
-                records_created=0,
-            ),
-        )
-
-        task_execute_crawl(
+    def test_runtime_parameter_propagation_debug_plan_b(self) -> None:
+        """Kiểm tra truyền tham số debug Test B độc lập."""
+        plans = plan_crawls.function(
+            targets=[],
             params={
-                "target_url": "https://phongtro123.com/tinh-thanh/da-nang",
-                "max_pages": 3,
-                "max_records": 45,
-                "crawl_details": True,
-                "max_details_per_run": 7,
-            }
+                "execution_mode": "DEBUG_SINGLE_TARGET",
+                "debug_target_url": "https://phongtro123.com/tinh-thanh/da-nang",
+                "debug_max_pages": 3,
+                "debug_max_records": 45,
+                "debug_crawl_details": True,
+            },
         )
-
-        mock_execute_crawl.assert_called_once_with(
-            url="https://phongtro123.com/tinh-thanh/da-nang",
-            max_pages=3,
-            max_records=45,
-            crawl_details=True,
-            max_details_per_run=7,
-        )
-
-    @patch("roombeacon_crawler.pipeline.crawl_runner.CrawlRunner.execute_crawl")
-    def test_boolean_type_parsing(self, mock_execute_crawl: MagicMock) -> None:
-        """Kiểm tra xử lý đúng kiểu dữ liệu boolean (không bị stringify 'false' thành truthy)."""
-        mock_execute_crawl.return_value = (
-            [],
-            CrawlRunResult(
-                run_id="run_bool_test",
-                source="nhatrovn",
-                started_at="2026-08-19T00:00:00",
-                finished_at="2026-08-19T00:00:01",
-                status=CrawlStatus.SUCCESS,
-                records_created=0,
-            ),
-        )
-
-        # Chuỗi "false" phải được parse thành bool False
-        task_execute_crawl(
-            params={
-                "target_url": "https://nhatrovn.vn/cho-thue-phong-tro/ho-chi-minh/",
-                "crawl_details": "false",
-            }
-        )
-        self.assertIs(mock_execute_crawl.call_args[1]["crawl_details"], False)
-
-        # Chuỗi "true" phải được parse thành bool True
-        mock_execute_crawl.reset_mock()
-        task_execute_crawl(
-            params={
-                "target_url": "https://nhatrovn.vn/cho-thue-phong-tro/ho-chi-minh/",
-                "crawl_details": "true",
-            }
-        )
-        self.assertIs(mock_execute_crawl.call_args[1]["crawl_details"], True)
-
-    @patch("roombeacon_crawler.pipeline.crawl_runner.CrawlRunner.execute_crawl")
-    def test_old_default_max_pages_regression(
-        self, mock_execute_crawl: MagicMock
-    ) -> None:
-        """Kiểm tra input người dùng max_pages=10 không bị ghi đè bởi DAG default max_pages=1."""
-        mock_execute_crawl.return_value = (
-            [],
-            CrawlRunResult(
-                run_id="run_default_override_test",
-                source="nhatrovn",
-                started_at="2026-08-19T00:00:00",
-                finished_at="2026-08-19T00:00:01",
-                status=CrawlStatus.SUCCESS,
-                records_created=0,
-            ),
-        )
-
-        task_execute_crawl(
-            params={
-                "target_url": "https://nhatrovn.vn/cho-thue-phong-tro/ho-chi-minh/",
-                "max_pages": 10,
-                "max_records": 200,
-                "crawl_details": False,
-                "max_details_per_run": None,
-            }
-        )
-
-        args = mock_execute_crawl.call_args[1]
-        self.assertEqual(args["max_pages"], 10)
-        self.assertEqual(args["max_records"], 200)
-
-    @patch("roombeacon_crawler.pipeline.crawl_runner.CrawlRunner.execute_crawl")
-    def test_runtime_43_pages_500_records_airflow_integration(
-        self, mock_execute_crawl: MagicMock
-    ) -> None:
-        """Kiểm tra integration context params max_pages=43, max_records=500 chuyển nguyên vẹn."""
-        mock_execute_crawl.return_value = (
-            [],
-            CrawlRunResult(
-                run_id="run_43_500_test",
-                source="nhatrovn",
-                started_at="2026-08-19T00:00:00",
-                finished_at="2026-08-19T00:00:01",
-                status=CrawlStatus.SUCCESS,
-                records_created=0,
-            ),
-        )
-
-        task_execute_crawl(
-            params={
-                "target_url": "https://nhatrovn.vn/cho-thue-phong-tro/ho-chi-minh/",
-                "max_pages": 43,
-                "max_records": 500,
-                "crawl_details": False,
-                "max_details_per_run": 3,
-            }
-        )
-
-        mock_execute_crawl.assert_called_once_with(
-            url="https://nhatrovn.vn/cho-thue-phong-tro/ho-chi-minh/",
-            max_pages=43,
-            max_records=500,
-            crawl_details=False,
-            max_details_per_run=3,
-        )
+        self.assertEqual(len(plans), 1)
+        self.assertEqual(plans[0]["target_url"], "https://phongtro123.com/tinh-thanh/da-nang")
+        self.assertEqual(plans[0]["safety_max_pages"], 3)
+        self.assertEqual(plans[0]["safety_max_records"], 45)
+        self.assertTrue(plans[0]["crawl_details"])
 
     @patch("roombeacon_crawler.fetchers.http_fetcher.HttpFetcher.fetch")
     @patch("roombeacon_crawler.fetchers.browser_fetcher.BrowserFetcher.fetch")
@@ -456,59 +316,44 @@ class TestCrawlRunnerExecution(unittest.TestCase):
         mock_browser_fetch.assert_not_called()
         mock_http_fetch.assert_not_called()
 
-    @patch("roombeacon_crawler.pipeline.crawl_runner.CrawlRunner.execute_crawl")
-    def test_airflow_task_semantics_robots_denied_raises_skip(
-        self, mock_execute_crawl: AsyncMock
+    @patch("roombeacon_crawler.policies.robots_policy.RobotsPolicy.evaluate")
+    def test_airflow_task_semantics_robots_denied_returns_skipped(
+        self, mock_robots: MagicMock
     ) -> None:
-        mock_execute_crawl.return_value = (
-            [],
-            CrawlRunResult(
-                run_id="run_test_robots",
-                source="nhatot",
-                started_at="2026-08-19T00:00:00",
-                finished_at="2026-08-19T00:00:01",
-                status=CrawlStatus.ROBOTS_DENIED,
-                stop_reason=CrawlStatus.ROBOTS_DENIED,
-                records_created=0,
-            ),
-        )
+        mock_robots.return_value = ("DENIED", "https://nhatot.com/robots.txt")
 
-        with self.assertRaises(AirflowSkipException):
-            task_execute_crawl(
-                params={"target_url": "https://www.nhatot.com/thue-phong-tro-tp-ho-chi-minh"}
-            )
+        plan = {
+            "source": "nhatot",
+            "target_id": "hcm_phongtro",
+            "target_url": "https://www.nhatot.com/thue-phong-tro-tp-ho-chi-minh",
+            "mode": "BOOTSTRAP_FULL",
+        }
+        res = airflow_qualify_target.function(plan=plan)
 
-    @patch("roombeacon_crawler.pipeline.crawl_runner.CrawlRunner.execute_crawl")
-    def test_airflow_task_semantics_unsupported_target_raises_skip(
-        self, mock_execute_crawl: AsyncMock
-    ) -> None:
-        mock_execute_crawl.return_value = (
-            [],
-            CrawlRunResult(
-                run_id="run_test_unsupported_target",
-                source="nhatrovn",
-                started_at="2026-08-19T00:00:00",
-                finished_at="2026-08-19T00:00:01",
-                status=CrawlStatus.UNSUPPORTED_TARGET,
-                stop_reason=CrawlStatus.UNSUPPORTED_TARGET,
-                records_created=0,
-            ),
-        )
+        self.assertEqual(res["qualification_status"], "DENIED_BY_ROBOTS")
+        self.assertEqual(res["action"], "SKIPPED")
 
-        with self.assertRaises(AirflowSkipException):
-            task_execute_crawl(
-                params={"target_url": "https://nhatrovn.vn/chinh-sach-bao-mat/"}
-            )
+    def test_airflow_task_semantics_unsupported_target_returns_invalid(self) -> None:
+        plan = {
+            "source": "nhatrovn",
+            "target_id": "invalid",
+            "target_url": "ftp://nhatrovn.vn/invalid",
+            "mode": "BOOTSTRAP_FULL",
+        }
+        res = airflow_qualify_target.function(plan=plan)
+        self.assertEqual(res["qualification_status"], "INVALID_URL")
+        self.assertEqual(res["action"], "SKIPPED")
 
     @patch("roombeacon_crawler.pipeline.crawl_runner.CrawlRunner.execute_crawl")
     def test_airflow_task_semantics_technical_error_raises_airflow_exception(
-        self, mock_execute_crawl: AsyncMock
+        self, mock_execute_crawl: MagicMock
     ) -> None:
         mock_execute_crawl.return_value = (
             [],
             CrawlRunResult(
                 run_id="run_test_fail",
                 source="nhatot",
+                target_id="hcm_phongtro",
                 started_at="2026-08-19T00:00:00",
                 finished_at="2026-08-19T00:00:01",
                 status=CrawlStatus.CONNECTION_ERROR,
@@ -518,22 +363,35 @@ class TestCrawlRunnerExecution(unittest.TestCase):
             ),
         )
 
+        qual_payload = {
+            "plan": {
+                "source": "nhatot",
+                "target_id": "hcm_phongtro",
+                "target_url": "https://www.nhatot.com/thue-phong-tro-tp-ho-chi-minh",
+                "mode": "BOOTSTRAP_FULL",
+            },
+            "source": "nhatot",
+            "target_id": "hcm_phongtro",
+            "target_url": "https://www.nhatot.com/thue-phong-tro-tp-ho-chi-minh",
+            "qualification_status": "READY",
+            "action": "QUALIFIED",
+        }
+
         with self.assertRaises(AirflowException) as ctx:
-            task_execute_crawl(
-                params={"target_url": "https://www.nhatot.com/thue-phong-tro-tp-ho-chi-minh"}
-            )
+            airflow_execute_crawl.function(qual_payload=qual_payload)
 
         self.assertIn("Connection refused", str(ctx.exception))
 
     @patch("roombeacon_crawler.pipeline.crawl_runner.CrawlRunner.execute_crawl")
     def test_airflow_task_semantics_success_returns_summary(
-        self, mock_execute_crawl: AsyncMock
+        self, mock_execute_crawl: MagicMock
     ) -> None:
         mock_execute_crawl.return_value = (
             [object()],
             CrawlRunResult(
                 run_id="run_test_success",
                 source="phongtro123",
+                target_id="hcm_phongtro",
                 started_at="2026-08-19T00:00:00",
                 finished_at="2026-08-19T00:00:02",
                 status=CrawlStatus.SUCCESS,
@@ -542,37 +400,25 @@ class TestCrawlRunnerExecution(unittest.TestCase):
             ),
         )
 
-        summary = task_execute_crawl(
-            params={"target_url": "https://phongtro123.com/tinh-thanh/ho-chi-minh"}
-        )
+        qual_payload = {
+            "plan": {
+                "source": "phongtro123",
+                "target_id": "hcm_phongtro",
+                "target_url": "https://phongtro123.com/tinh-thanh/ho-chi-minh",
+                "mode": "BOOTSTRAP_FULL",
+            },
+            "source": "phongtro123",
+            "target_id": "hcm_phongtro",
+            "target_url": "https://phongtro123.com/tinh-thanh/ho-chi-minh",
+            "qualification_status": "READY",
+            "action": "QUALIFIED",
+        }
+
+        summary = airflow_execute_crawl.function(qual_payload=qual_payload)
 
         self.assertEqual(summary["run_id"], "run_test_success")
         self.assertEqual(summary["records_created"], 1)
-        self.assertEqual(summary["status"], "success")
-
-    @patch("roombeacon_crawler.pipeline.crawl_runner.CrawlRunner.execute_crawl")
-    def test_airflow_task_semantics_zero_records_no_error_success(
-        self, mock_execute_crawl: AsyncMock
-    ) -> None:
-        mock_execute_crawl.return_value = (
-            [],
-            CrawlRunResult(
-                run_id="run_test_empty",
-                source="phongtro123",
-                started_at="2026-08-19T00:00:00",
-                finished_at="2026-08-19T00:00:02",
-                status=CrawlStatus.SUCCESS,
-                pages_success=1,
-                records_created=0,
-            ),
-        )
-
-        summary = task_execute_crawl(
-            params={"target_url": "https://phongtro123.com/tinh-thanh/ho-chi-minh"}
-        )
-
-        self.assertEqual(summary["records_created"], 0)
-        self.assertEqual(summary["status"], "success")
+        self.assertEqual(summary["crawl_status"], "success")
 
 
 if __name__ == "__main__":

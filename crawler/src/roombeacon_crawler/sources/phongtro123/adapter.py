@@ -79,9 +79,11 @@ class Phongtro123SourceAdapter(BaseSourceAdapter):
         return (
             CrawlSeed(
                 source=self.SOURCE_NAME,
-                url="https://phongtro123.com/cho-thue-phong-tro",
+                target_id="hcm_phongtro",
+                url="https://phongtro123.com/tinh-thanh/ho-chi-minh",
                 enabled=True,
+                interval_minutes=45,
                 target_type_hint=CrawlTargetType.LISTING_PAGE,
-                label="phongtro123_toanquoc",
+                label="phongtro123_hcm_phongtro",
             ),
         )

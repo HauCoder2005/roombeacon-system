@@ -12,7 +12,7 @@ PRICE_REGEX = re.compile(
     r"(\d+(?:[.,]\d+)?\s*(?:triệu|tr|nghìn|k|tỷ|đ|đồng|vnđ)(?:\s*/\s*(?:tháng|m[²2]))?|\d{1,3}(?:\.\d{3})+\s*(?:đ|vnđ|đồng)(?:\s*/\s*tháng)?|thỏa\s+thuận)",
     re.IGNORECASE,
 )
-AREA_REGEX = re.compile(r"(\d+(?:[.,]\d+)?\s*m(?:²|2))", re.IGNORECASE)
+AREA_REGEX = re.compile(r"(\d+(?:[.,]\d+)?\s*m\s*(?:²|2)?)", re.IGNORECASE)
 
 
 class DOMNode:
@@ -122,13 +122,19 @@ class Phongtro123ListingParser:
             post_items = builder.root.find_all(class_contains="post-item")
             if not post_items:
                 post_items = builder.root.find_all(class_contains="item-post")
+            if not post_items:
+                ul_listing = builder.root.find(class_contains="post__listing")
+                if ul_listing:
+                    post_items = [c for c in ul_listing.children if c.tag == "li"]
+                if not post_items:
+                    post_items = [n for n in builder.root.find_all(tag="li") if n.find(class_contains="post__thumb") or n.find(tag="h3")]
 
             position = 0
             for item in post_items:
                 if len(cards) >= limit:
                     break
 
-                # Detail link
+                # Detail link & Title
                 title_node = item.find(class_contains="post-title") or item.find(tag="h3")
                 link_node = title_node.find(tag="a") if title_node else item.find(tag="a")
                 if not link_node:
@@ -142,7 +148,7 @@ class Phongtro123ListingParser:
                 if detail_url in seen_urls:
                     continue
 
-                title_raw = title_node.get_text() if title_node else link_node.get_text()
+                title_raw = title_node.get_text() if title_node else link_node.attrs.get("title") or link_node.get_text()
                 if not title_raw:
                     continue
 
@@ -155,29 +161,46 @@ class Phongtro123ListingParser:
                     listing_id = urlparse(detail_url).path.strip("/").replace(".html", "")
 
                 # Price
-                price_node = item.find(class_contains="post-price") or item.find(class_contains="item-price") or item.find(class_contains="price")
+                price_node = (
+                    item.find(class_contains="post-price")
+                    or item.find(class_contains="item-price")
+                    or item.find(class_contains="price")
+                    or item.find(class_contains="text-green")
+                )
                 price_raw = price_node.get_text() if price_node else None
                 if not price_raw:
                     match = PRICE_REGEX.search(item.get_text())
                     price_raw = match.group(1) if match else None
 
                 # Area
-                area_node = item.find(class_contains="post-acreage") or item.find(class_contains="item-acreage") or item.find(class_contains="acreage")
+                area_node = (
+                    item.find(class_contains="post-acreage")
+                    or item.find(class_contains="item-acreage")
+                    or item.find(class_contains="acreage")
+                )
                 area_raw = area_node.get_text() if area_node else None
                 if not area_raw:
                     match = AREA_REGEX.search(item.get_text())
                     area_raw = match.group(1) if match else None
 
                 # Location
-                loc_node = item.find(class_contains="post-location") or item.find(class_contains="location") or item.find(class_contains="post-address")
+                loc_node = (
+                    item.find(class_contains="post-location")
+                    or item.find(class_contains="location")
+                    or item.find(class_contains="post-address")
+                )
                 location_raw = loc_node.get_text() if loc_node else None
+                if not location_raw:
+                    loc_links = [a for a in item.find_all(tag="a") if "tinh-thanh" in a.attrs.get("href", "") or "quan-" in a.attrs.get("href", "")]
+                    if loc_links:
+                        location_raw = loc_links[0].get_text()
 
                 # Time
                 time_node = item.find(class_contains="post-time") or item.find(class_contains="time") or item.find(tag="time")
                 posted_at_raw = time_node.get_text() if time_node else None
 
                 # Author
-                author_node = item.find(class_contains="post-author") or item.find(class_contains="author") or item.find(class_contains="user-name")
+                author_node = item.find(class_contains="post-author") or item.find(class_contains="author") or item.find(class_contains="user-name") or item.find(class_contains="line-clamp-1")
                 seller_name_raw = author_node.get_text() if author_node else None
 
                 # Thumbnail image

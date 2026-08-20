@@ -94,14 +94,27 @@ class Phongtro123DetailParser:
     def __init__(self, source_name: str = "phongtro123") -> None:
         self.source_name = source_name
 
-    def parse(self, html: str, source_url: str) -> ListingDetailRaw | None:
+    def parse(
+        self,
+        html: str,
+        detail_url: str = "",
+        source_url: str = "",
+        listing_id: str | None = None,
+        **kwargs,
+    ) -> ListingDetailRaw | None:
         if not html or not html.strip():
             return None
 
+        effective_url = detail_url or source_url
         try:
             builder = DOMTreeBuilder()
             builder.feed(html)
             root = builder.root
+
+            if not listing_id and effective_url:
+                match = re.search(r"-pr(\d+)", effective_url)
+                if match:
+                    listing_id = match.group(1)
 
             title_node = root.find(tag="h1")
             title_raw = title_node.get_text() if title_node else None
@@ -128,7 +141,9 @@ class Phongtro123DetailParser:
                     image_urls.append(urljoin(source_url, src))
 
             return ListingDetailRaw(
-                detail_url=source_url,
+                source=self.source_name,
+                listing_id=listing_id,
+                detail_url=effective_url,
                 title_raw=title_raw,
                 price_raw=price_raw,
                 area_raw=area_raw,
@@ -136,8 +151,8 @@ class Phongtro123DetailParser:
                 description_raw=description_raw,
                 seller_name_raw=seller_name_raw,
                 image_urls_raw=image_urls,
-                fetched_at=datetime.now(timezone.utc).isoformat(),
+                crawled_at=datetime.now(timezone.utc).isoformat(),
             )
         except Exception as exc:
-            logger.warning("Lỗi parse detail phongtro123 (%s): %s", source_url, exc)
+            logger.warning("Lỗi parse detail phongtro123 (%s): %s", effective_url, exc)
             return None

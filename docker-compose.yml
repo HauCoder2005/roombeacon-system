@@ -1,3 +1,12 @@
+x-airflow-common: &airflow-common
+  build:
+    context: .
+    dockerfile: airflow/Dockerfile
+    args:
+      AIRFLOW_IMAGE: "${AIRFLOW_IMAGE}"
+      AIRFLOW_VERSION: "${AIRFLOW_VERSION}"
+  image: "roombeacon-airflow-custom:${AIRFLOW_VERSION}"
+
 services:
   # ============================================================
   # DATA STORAGE
@@ -154,15 +163,7 @@ services:
   # ============================================================
 
   airflow-init:
-    build:
-      context: .
-      dockerfile: airflow/Dockerfile
-
-      args:
-        AIRFLOW_IMAGE: "${AIRFLOW_IMAGE}"
-        AIRFLOW_VERSION: "${AIRFLOW_VERSION}"
-
-    image: "roombeacon-airflow-custom:${AIRFLOW_VERSION}"
+    <<: *airflow-common
 
     container_name: "${AIRFLOW_CONTAINER_NAME_PREFIX}-init"
 
@@ -284,7 +285,7 @@ services:
   # ============================================================
 
   airflow-api-server:
-    image: "roombeacon-airflow-custom:${AIRFLOW_VERSION}"
+    <<: *airflow-common
 
     container_name: "${AIRFLOW_CONTAINER_NAME_PREFIX}-api-server"
 
@@ -332,7 +333,7 @@ services:
   # ============================================================
 
   airflow-scheduler:
-    image: "roombeacon-airflow-custom:${AIRFLOW_VERSION}"
+    <<: *airflow-common
 
     container_name: "${AIRFLOW_CONTAINER_NAME_PREFIX}-scheduler"
 
@@ -440,7 +441,7 @@ services:
   # ============================================================
 
   airflow-dag-processor:
-    image: "roombeacon-airflow-custom:${AIRFLOW_VERSION}"
+    <<: *airflow-common
 
     container_name: "${AIRFLOW_CONTAINER_NAME_PREFIX}-dag-processor"
 
@@ -471,7 +472,7 @@ services:
   # ============================================================
 
   airflow-triggerer:
-    image: "roombeacon-airflow-custom:${AIRFLOW_VERSION}"
+    <<: *airflow-common
 
     container_name: "${AIRFLOW_CONTAINER_NAME_PREFIX}-triggerer"
 

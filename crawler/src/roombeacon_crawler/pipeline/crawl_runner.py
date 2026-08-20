@@ -3,20 +3,26 @@ from datetime import datetime, timezone
 import logging
 from pathlib import Path
 import time
+from typing import Any
 
 from roombeacon_crawler.config.crawler_settings import CrawlerSettings
+from roombeacon_crawler.config.get_env import env
+from roombeacon_crawler.enums.crawl_mode import CrawlMode
 from roombeacon_crawler.enums.crawl_status import CrawlStatus
 from roombeacon_crawler.enums.crawl_target_type import CrawlTargetType
+from roombeacon_crawler.enums.fetch_strategy import FetchStrategy
 from roombeacon_crawler.fetchers.browser_fetcher import BrowserFetcher
 from roombeacon_crawler.fetchers.http_fetcher import HttpFetcher
 from roombeacon_crawler.infrastructure.storage.local.local_storage_writer import (
     LocalStorageWriter,
 )
 from roombeacon_crawler.models.crawl_metadata import CrawlMetadata
+from roombeacon_crawler.models.crawl_plan import CrawlPlan
 from roombeacon_crawler.models.crawl_run_result import CrawlRunResult
 from roombeacon_crawler.models.crawl_target import CrawlTarget
 from roombeacon_crawler.models.listing_card_raw import ListingCardRaw
 from roombeacon_crawler.models.listing_detail_raw import ListingDetailRaw
+from roombeacon_crawler.mappers.bronze_mapper import BronzeMapper
 from roombeacon_crawler.models.rental_bronze_record import RentalBronzeRecord
 from roombeacon_crawler.pipeline.detail_crawl import DetailCrawlPipeline
 from roombeacon_crawler.pipeline.listing_crawl import ListingCrawlPipeline
@@ -25,54 +31,59 @@ from roombeacon_crawler.policies.fetch_policy import FetchPolicy
 from roombeacon_crawler.policies.rate_limit_policy import RateLimitPolicy
 from roombeacon_crawler.policies.retry_policy import RetryPolicy
 from roombeacon_crawler.policies.robots_policy import RobotsPolicy
+from roombeacon_crawler.repositories.crawl_state_repository import (
+    CrawlStateRepository,
+)
+from roombeacon_crawler.repositories.local_crawl_state_repository import (
+    LocalCrawlStateRepository,
+)
 from roombeacon_crawler.services.fetch_coordinator import FetchCoordinator
 from roombeacon_crawler.services.response_classifier import ResponseClassifier
 from roombeacon_crawler.services.strategy_selector import StrategySelector
 from roombeacon_crawler.sources.base import BaseSourceAdapter
 from roombeacon_crawler.sources.resolver import SourceResolver
-from roombeacon_crawler.validators.url_validator import URLValidator
 
 logger = logging.getLogger(__name__)
 
 
 class CrawlRunner:
-    """Core Application Boundary chịu trách nhiệm điều phối toàn bộ chu trình crawl đa nguồn."""
+    """Entrypoint chính điều phối toàn bộ chu trình crawl của RoomBeacon Crawler."""
 
     def __init__(
         self,
-        target_url: str,
+        target_url: str | None = None,
+        adapter: BaseSourceAdapter | None = None,
         settings: CrawlerSettings | None = None,
         storage_writer: LocalStorageWriter | None = None,
+        state_repository: CrawlStateRepository | None = None,
     ) -> None:
-        self.target_url = target_url
         self.settings = settings or CrawlerSettings()
+        self.storage_writer = storage_writer or LocalStorageWriter()
+        self.state_repository = state_repository or LocalCrawlStateRepository()
 
-        # 1. URL & SSRF Validation
-        is_valid, error_reason = URLValidator.validate(self.target_url)
-        if not is_valid:
-            raise ValueError(f"Target URL không hợp lệ: {error_reason}")
+        # Phân giải Adapter từ URL nếu chưa được truyền vào
+        if adapter is not None:
+            self.adapter = adapter
+        elif target_url:
+            resolved = SourceResolver.resolve(target_url)
+            if resolved is None:
+                raise ValueError(
+                    f"Không tìm thấy adapter cho target URL: '{target_url}'"
+                )
+            self.adapter = resolved
+        else:
+            raise ValueError("Cần cung cấp target_url hoặc adapter để khởi tạo CrawlRunner")
 
-        # 2. Phân giải Source Adapter tương ứng
-        self.adapter: BaseSourceAdapter = SourceResolver.resolve_adapter(self.target_url)
-        if not self.adapter:
-            supported = ", ".join(SourceResolver.get_supported_sources())
-            raise ValueError(
-                f"Không tìm thấy Adapter cho URL: {self.target_url}. Đang hỗ trợ: {supported}"
-            )
-
-        # 3. Khởi tạo Storage & Components
-        self.storage_writer = storage_writer or LocalStorageWriter(
-            base_data_dir=self.settings.data_dir
-        )
-
+        # Khởi tạo các thành phần cốt lõi
         self.http_fetcher = HttpFetcher(
             timeout=self.settings.request_timeout,
             user_agent=self.settings.user_agent,
         )
         self.browser_fetcher = BrowserFetcher(
+            timeout=self.settings.request_timeout,
             headless=self.settings.playwright_headless,
             user_agent=self.settings.user_agent,
-            timeout=self.settings.request_timeout,
+            viewport={"width": 1280, "height": 800},
         )
         self.rate_limit_policy = RateLimitPolicy(
             delay_seconds=self.settings.request_delay_seconds,
@@ -132,17 +143,37 @@ class CrawlRunner:
     @classmethod
     def execute_crawl(
         cls,
-        url: str,
+        url: str | None = None,
+        plan: CrawlPlan | dict | None = None,
         max_pages: int | None = None,
         max_records: int | None = None,
         crawl_details: bool = True,
         max_details_per_run: int | None = None,
         settings: CrawlerSettings | None = None,
+        state_repository: CrawlStateRepository | None = None,
     ) -> tuple[list[RentalBronzeRecord], CrawlRunResult]:
         """Public synchronous application entry point cho Airflow DAGs và scripts."""
-        runner = cls(target_url=url, settings=settings)
+        plan_obj: CrawlPlan | None = None
+        if plan is not None:
+            if isinstance(plan, dict):
+                plan_obj = CrawlPlan.from_dict(plan)
+            else:
+                plan_obj = plan
+            target_url = plan_obj.target_url
+        else:
+            target_url = url
+
+        if not target_url:
+            raise ValueError("Cần cung cấp target_url hoặc plan")
+
+        runner = cls(
+            target_url=target_url,
+            settings=settings,
+            state_repository=state_repository,
+        )
         return asyncio.run(
             runner.run(
+                plan=plan_obj,
                 max_pages=max_pages,
                 max_records=max_records,
                 crawl_details=crawl_details,
@@ -152,41 +183,69 @@ class CrawlRunner:
 
     async def run(
         self,
+        plan: CrawlPlan | None = None,
         max_pages: int | None = None,
         max_records: int | None = None,
         crawl_details: bool = True,
         max_details_per_run: int | None = None,
     ) -> tuple[list[RentalBronzeRecord], CrawlRunResult]:
-        """Thực thi phiên crawl hoàn chỉnh."""
+        """Thực thi phiên crawl hoàn chỉnh theo CrawlPlan hoặc thông số trực tiếp."""
         start_time = time.perf_counter()
         now = datetime.now(timezone.utc)
         run_id = f"run_{now.strftime('%Y%m%d_%H%M%S')}"
         started_at = now.isoformat()
 
-        effective_max_pages = (
-            max_pages if max_pages is not None else self.settings.max_pages
-        )
-        effective_max_records = (
-            max_records
-            if max_records is not None
-            else self.settings.max_total_records
-        )
+        target_id = plan.target_id if plan else "default"
+        mode = plan.mode.value if plan else "BOOTSTRAP_FULL"
+
+        if plan:
+            effective_max_pages = (
+                max_pages
+                if max_pages is not None
+                else plan.safety_max_pages
+            )
+            effective_max_records = (
+                max_records
+                if max_records is not None
+                else plan.safety_max_records
+            )
+            effective_crawl_details = (
+                crawl_details if crawl_details is not None else plan.crawl_details
+            )
+            effective_max_details = (
+                max_details_per_run
+                if max_details_per_run is not None
+                else plan.max_details_per_run
+            )
+            stop_after_known_pages = plan.incremental_stop_after_known_pages
+        else:
+            effective_max_pages = (
+                max_pages if max_pages is not None else self.settings.max_pages
+            )
+            effective_max_records = (
+                max_records
+                if max_records is not None
+                else self.settings.max_total_records
+            )
+            effective_crawl_details = crawl_details
+            effective_max_details = (
+                max_details_per_run
+                if max_details_per_run is not None
+                else self.settings.max_details_per_run
+            )
+            stop_after_known_pages = 2
 
         logger.info("=" * 60)
         logger.info("BẮT ĐẦU PHIÊN CRAWL: %s", run_id)
         logger.info("Target Base URL: %s", self.adapter.base_url)
-        logger.info("Source Name: %s", self.adapter.SOURCE_NAME)
+        logger.info("Source Name: %s | Target ID: %s | Mode: %s", self.adapter.SOURCE_NAME, target_id, mode)
         logger.info("Headless Mode: %s", self.settings.playwright_headless)
         logger.info(
             "Max Pages: %d | Max Records: %d | Crawl Details: %s",
             effective_max_pages,
             effective_max_records,
-            crawl_details,
+            effective_crawl_details,
         )
-        logger.info("=" * 60)
-        logger.info("CRAWLRUNNER LIMITS")
-        logger.info("Max Pages   : %d", effective_max_pages)
-        logger.info("Max Records : %d", effective_max_records)
         logger.info("=" * 60)
 
         # 0. Phân loại loại URL mục tiêu (Target Classification)
@@ -201,6 +260,8 @@ class CrawlRunner:
             result = CrawlRunResult(
                 run_id=run_id,
                 source=self.adapter.SOURCE_NAME,
+                target_id=target_id,
+                mode=mode,
                 target_url=self.adapter.base_url,
                 started_at=started_at,
                 finished_at=finished_at,
@@ -209,7 +270,7 @@ class CrawlRunner:
                 failure_reason=f"URL không thuộc danh mục phòng trọ hợp lệ của nguồn {self.adapter.SOURCE_NAME}",
                 max_pages=effective_max_pages,
                 max_records=effective_max_records,
-                crawl_details=crawl_details,
+                crawl_details=effective_crawl_details,
                 pages_success=0,
                 pages_failed=0,
                 details_success=0,
@@ -224,10 +285,51 @@ class CrawlRunner:
             result.manifest_path = manifest_file
             return [], result
 
-        seen_detail_urls: set[str] = set()
+        return await self._run_async(
+            run_id=run_id,
+            started_at=started_at,
+            start_time=start_time,
+            target_id=target_id,
+            mode=mode,
+            effective_max_pages=effective_max_pages,
+            effective_max_records=effective_max_records,
+            crawl_details=effective_crawl_details,
+            max_details_per_run=effective_max_details,
+            stop_after_known_pages=stop_after_known_pages,
+        )
+
+    async def _run_async(
+        self,
+        run_id: str,
+        started_at: str,
+        start_time: float,
+        target_id: str,
+        mode: str,
+        effective_max_pages: int,
+        effective_max_records: int,
+        crawl_details: bool,
+        max_details_per_run: int,
+        stop_after_known_pages: int,
+    ) -> tuple[list[RentalBronzeRecord], CrawlRunResult]:
+        """Thực thi chu trình crawl bất đồng bộ."""
         all_bronze_records: list[RentalBronzeRecord] = []
         all_detail_records: list[ListingDetailRaw] = []
         all_metadata: list[CrawlMetadata] = []
+        seen_detail_urls: set[str] = set()
+
+        observed_listing_ids: list[str] = []
+        new_listing_ids: list[str] = []
+
+        # Tải danh sách listing_id đã từng thấy cho target này
+        known_seen_ids = self.state_repository.get_seen_listing_ids(
+            self.adapter.SOURCE_NAME, target_id
+        )
+        logger.info(
+            "State Repository: Đã nạp %d known listing_ids cho %s/%s",
+            len(known_seen_ids),
+            self.adapter.SOURCE_NAME,
+            target_id,
+        )
 
         current_page = 1
         pages_attempted = 0
@@ -237,6 +339,7 @@ class CrawlRunner:
         details_failed = 0
         duplicates_skipped = 0
         details_crawled_count = 0
+        known_page_streak = 0
         final_status = CrawlStatus.SUCCESS
         stop_reason: CrawlStatus | None = None
         failure_reason: str | None = None
@@ -252,6 +355,7 @@ class CrawlRunner:
                 logger.info("Records Collected   : %d", len(all_bronze_records))
                 logger.info("Configured Max Recs : %d", effective_max_records)
                 logger.info("=" * 60)
+                stop_reason = CrawlStatus.SUCCESS
                 break
 
             page_url = self.adapter.pagination.build_page_url(
@@ -352,16 +456,34 @@ class CrawlRunner:
                     logger.info("Reason              : EMPTY_LISTING_PAGE")
                     logger.info("Current Page        : %d", current_page)
                     logger.info("=" * 60)
+                    stop_reason = CrawlStatus.SUCCESS
                     break
 
             pages_success += 1
             page_records_count = len(cards)
+
+            # Phân tích listing_ids và tính toán New vs Known cho incremental stopping
+            page_new_count = 0
+            page_known_count = 0
+            for card in cards:
+                lid = str(card.listing_id or "")
+                if lid:
+                    observed_listing_ids.append(lid)
+                    if lid in known_seen_ids:
+                        page_known_count += 1
+                    else:
+                        page_new_count += 1
+                        new_listing_ids.append(lid)
+
             logger.info(
-                "Trang %d: Thu thập được %d listing cards hợp lệ (Total Detail Targets: %d)",
+                "Trang %d: %d listing cards (Mới: %d, Đã biết: %d | Detail Targets: %d)",
                 current_page,
                 page_records_count,
+                page_new_count,
+                page_known_count,
                 len(detail_targets),
             )
+
             card_by_url: dict[str, ListingCardRaw] = {
                 c.detail_url: c for c in cards
             }
@@ -385,105 +507,80 @@ class CrawlRunner:
                         max_details_per_run is not None
                         and details_crawled_count >= max_details_per_run
                     ):
-                        from roombeacon_crawler.mappers.bronze_mapper import (
-                            BronzeMapper,
+                        logger.info(
+                            "Đã đạt giới hạn max_details_per_run (%d). Bỏ qua các detail còn lại.",
+                            max_details_per_run,
                         )
-
-                        bronze_record = BronzeMapper.map(
-                            card=card, detail=None, run_id=run_id
-                        )
-                        all_bronze_records.append(bronze_record)
+                        record = BronzeMapper.map(card=card, detail=None, run_id=run_id)
+                        all_bronze_records.append(record)
                         continue
 
-                    logger.info(
-                        "Crawl detail: %s (ID: %s)",
-                        detail_target.url,
-                        detail_target.listing_id or "N/A",
-                    )
-                    bronze_record, detail_raw, d_meta = (
+                    detail_bronze, detail_raw, detail_meta = (
                         await self.detail_pipeline.execute(
                             target=detail_target,
                             card=card,
                             run_id=run_id,
                         )
                     )
-                    all_metadata.append(d_meta)
+                    all_metadata.append(detail_meta)
                     details_crawled_count += 1
 
-                    if detail_raw:
-                        all_detail_records.append(detail_raw)
+                    if detail_raw is not None:
                         details_success += 1
+                        all_detail_records.append(detail_raw)
                     else:
                         details_failed += 1
 
-                    if bronze_record:
-                        all_bronze_records.append(bronze_record)
+                    if detail_bronze is not None:
+                        all_bronze_records.append(detail_bronze)
+                    else:
+                        record = BronzeMapper.map(card=card, detail=None, run_id=run_id)
+                        all_bronze_records.append(record)
                 else:
-                    from roombeacon_crawler.mappers.bronze_mapper import (
-                        BronzeMapper,
-                    )
+                    record = BronzeMapper.map(card=card, detail=None, run_id=run_id)
+                    all_bronze_records.append(record)
 
-                    bronze_record = BronzeMapper.map(
-                        card=card, detail=None, run_id=run_id
+            # Quy tắc dừng INCREMENTAL: Known Region Stop Rule
+            if mode in (CrawlMode.INCREMENTAL.value, CrawlMode.FORCE_INCREMENTAL.value):
+                if page_new_count > 0:
+                    known_page_streak = 0
+                elif page_records_count > 0:
+                    known_page_streak += 1
+                    logger.info(
+                        "Incremental check: Trang %d toàn bộ là tin đã biết. Streak: %d/%d",
+                        current_page,
+                        known_page_streak,
+                        stop_after_known_pages,
                     )
-                    all_bronze_records.append(bronze_record)
-
-            # Kiểm tra xem max_records đã đạt được sau khi xử lý tin của trang hiện tại chưa
-            if len(all_bronze_records) >= effective_max_records:
-                logger.info("=" * 60)
-                logger.info("PAGINATION STOP")
-                logger.info("Reason              : MAX_RECORDS_REACHED")
-                logger.info("Current Page        : %d", current_page)
-                logger.info("Configured Max Pages: %d", effective_max_pages)
-                logger.info("Records Collected   : %d", len(all_bronze_records))
-                logger.info("Configured Max Recs : %d", effective_max_records)
-                logger.info("=" * 60)
-                break
-
-            # Check Date Cutoff for next page
-            oldest_card_date = None
-            for c in reversed(cards):
-                if c.posted_at_raw:
-                    oldest_card_date = self.adapter.date_interpreter.interpret(
-                        c.posted_at_raw
-                    )
-                    if oldest_card_date:
+                    if known_page_streak >= stop_after_known_pages:
+                        logger.info("=" * 60)
+                        logger.info("PAGINATION STOP")
+                        logger.info(
+                            "Reason              : KNOWN_REGION_REACHED (streak=%d >= %d)",
+                            known_page_streak,
+                            stop_after_known_pages,
+                        )
+                        logger.info("Current Page        : %d", current_page)
+                        logger.info("=" * 60)
+                        stop_reason = CrawlStatus.SUCCESS
                         break
 
-            if not self.date_cutoff_policy.should_continue_pagination(
-                oldest_item_dt=oldest_card_date,
+            # Kiểm tra phân trang từ phía nguồn
+            has_next = self.adapter.pagination.has_next_page(
                 current_page=current_page,
                 max_pages=effective_max_pages,
-            ):
-                logger.info("=" * 60)
-                logger.info("PAGINATION STOP")
-                logger.info("Reason              : DATE_CUTOFF_REACHED")
-                logger.info("Current Page        : %d", current_page)
-                logger.info("Oldest Item Date    : %s", oldest_card_date)
-                logger.info("=" * 60)
-                break
+                current_items_count=page_records_count,
+                raw_html=raw_html,
+            )
 
-            if current_page >= effective_max_pages:
-                logger.info("=" * 60)
-                logger.info("PAGINATION STOP")
-                logger.info("Reason              : MAX_PAGES_REACHED")
-                logger.info("Current Page        : %d", current_page)
-                logger.info("Configured Max Pages: %d", effective_max_pages)
-                logger.info("=" * 60)
-                break
-
-            if not self.adapter.pagination.has_next_page(
-                current_page=current_page,
-                max_pages=effective_max_pages,
-                current_items_count=len(cards),
-                html=raw_html,
-            ):
+            if not has_next:
                 logger.info("=" * 60)
                 logger.info("PAGINATION STOP")
                 logger.info("Reason              : SOURCE_HAS_NO_NEXT_PAGE")
                 logger.info("Current Page        : %d", current_page)
                 logger.info("Configured Max Pages: %d", effective_max_pages)
                 logger.info("=" * 60)
+                stop_reason = CrawlStatus.SUCCESS
                 break
 
             current_page += 1
@@ -493,6 +590,8 @@ class CrawlRunner:
         result = CrawlRunResult(
             run_id=run_id,
             source=self.adapter.SOURCE_NAME,
+            target_id=target_id,
+            mode=mode,
             target_url=self.adapter.base_url,
             started_at=started_at,
             finished_at=finished_at,
@@ -509,6 +608,8 @@ class CrawlRunner:
             details_failed=details_failed,
             records_created=len(all_bronze_records),
             duplicates_skipped=duplicates_skipped,
+            observed_listing_ids=observed_listing_ids,
+            new_listing_ids=new_listing_ids,
             errors=errors,
         )
 
@@ -543,7 +644,12 @@ class CrawlRunner:
             details_success,
             details_failed,
         )
-        logger.info("Tổng số Bronze Records tạo: %d", len(all_bronze_records))
+        logger.info(
+            "Tổng số Bronze Records tạo: %d (Mới: %d, Quan sát: %d)",
+            len(all_bronze_records),
+            len(new_listing_ids),
+            len(observed_listing_ids),
+        )
         logger.info("Run Manifest: %s", manifest_file)
         if bronze_dir:
             logger.info("Bronze Dataset lưu tại: %s", bronze_dir)

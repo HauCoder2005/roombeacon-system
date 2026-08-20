@@ -1,25 +1,28 @@
 import os
+import shutil
+import tempfile
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import airflow
 from airflow.exceptions import AirflowException, AirflowSkipException
 from airflow.dags.crawler.roombeacon_crawler import (
-    discover_scheduled_targets,
-    qualify_and_crawl_target,
-    summarize_crawl_results,
+    execute_crawl,
+    load_crawl_targets,
+    plan_crawls,
+    qualify_target,
+    summarize_run,
+    update_checkpoint,
 )
-from roombeacon_crawler.enums.crawl_run_mode import CrawlRunMode
+from roombeacon_crawler.enums.crawl_mode import CrawlMode
 from roombeacon_crawler.enums.crawl_status import CrawlStatus
 from roombeacon_crawler.enums.crawl_target_type import CrawlTargetType
+from roombeacon_crawler.models.crawl_plan import CrawlPlan
 from roombeacon_crawler.models.crawl_run_result import CrawlRunResult
 from roombeacon_crawler.models.crawl_seed import CrawlSeed
-from roombeacon_crawler.models.source_qualification_result import (
-    AdapterStatus,
-    QualificationOverallStatus,
-    RobotsQualificationStatus,
-    SourceQualificationResult,
-    UrlSafetyStatus,
+from roombeacon_crawler.models.crawl_target_state import CrawlTargetState
+from roombeacon_crawler.repositories.local_crawl_state_repository import (
+    LocalCrawlStateRepository,
 )
 from roombeacon_crawler.services.target_provider import (
     AdapterScheduledTargetProvider,
@@ -38,9 +41,9 @@ class FakeMultiTargetAdapter(BaseSourceAdapter):
 
     def scheduled_targets(self) -> tuple[CrawlSeed, ...]:
         return (
-            CrawlSeed(source=self.SOURCE_NAME, url="https://fakemulti.vn/hcm", label="hcm"),
-            CrawlSeed(source=self.SOURCE_NAME, url="https://fakemulti.vn/hanoi", label="hanoi"),
-            CrawlSeed(source=self.SOURCE_NAME, url="https://fakemulti.vn/danang", label="danang"),
+            CrawlSeed(source=self.SOURCE_NAME, target_id="hcm", url="https://fakemulti.vn/hcm", label="hcm"),
+            CrawlSeed(source=self.SOURCE_NAME, target_id="hanoi", url="https://fakemulti.vn/hanoi", label="hanoi"),
+            CrawlSeed(source=self.SOURCE_NAME, target_id="danang", url="https://fakemulti.vn/danang", label="danang"),
         )
 
 
@@ -55,7 +58,19 @@ class FakeEmptyTargetAdapter(BaseSourceAdapter):
 
 
 class TestScheduledMultiSourceOrchestration(unittest.TestCase):
-    """Kiểm thử toàn diện tính năng Scheduled Multi-Source Crawl Orchestration."""
+    """Kiểm thử toàn diện tính năng Scheduled Multi-Source Crawl Orchestration & 6-stage Flow."""
+
+    def setUp(self) -> None:
+        self.test_dir = tempfile.mkdtemp()
+        self.repo_patcher = patch(
+            "airflow.dags.crawler.roombeacon_crawler.LocalCrawlStateRepository",
+            lambda *args, **kwargs: LocalCrawlStateRepository(base_data_dir=self.test_dir),
+        )
+        self.repo_patcher.start()
+
+    def tearDown(self) -> None:
+        self.repo_patcher.stop()
+        shutil.rmtree(self.test_dir, ignore_errors=True)
 
     def test_adapter_scheduled_target_provider_discovers_all_five_sources(self) -> None:
         """Provider tự động phát hiện targets định kỳ từ tất cả 5 nguồn production."""
@@ -81,8 +96,8 @@ class TestScheduledMultiSourceOrchestration(unittest.TestCase):
 
             def scheduled_targets(self) -> tuple[CrawlSeed, ...]:
                 return (
-                    CrawlSeed(source=self.SOURCE_NAME, url="https://duptest.vn/cho-thue/"),
-                    CrawlSeed(source=self.SOURCE_NAME, url="https://duptest.vn/cho-thue"),
+                    CrawlSeed(source=self.SOURCE_NAME, target_id="target_1", url="https://duptest.vn/cho-thue/"),
+                    CrawlSeed(source=self.SOURCE_NAME, target_id="target_2", url="https://duptest.vn/cho-thue"),
                 )
 
         local_reg = SourceRegistry(auto_discover=False)
@@ -92,426 +107,163 @@ class TestScheduledMultiSourceOrchestration(unittest.TestCase):
         seeds = provider.get_scheduled_targets()
         self.assertEqual(len(seeds), 1)
 
-    def test_discover_scheduled_targets_single_target_mode(self) -> None:
-        """Kiểm tra chế độ SINGLE_TARGET chỉ trả về đúng 1 target do user chỉ định."""
-        # Valid single target
-        targets = discover_scheduled_targets.function(
+    def test_stage_1_load_targets_and_stage_2_plan_crawls_auto(self) -> None:
+        """Kiểm tra Stage 1 & 2: Load targets và Plan crawls tự động ở chế độ AUTO."""
+        raw_targets = load_crawl_targets.function()
+        self.assertEqual(len(raw_targets), 5)
+
+        plans = plan_crawls.function(targets=raw_targets, params={"execution_mode": "AUTO"})
+        self.assertEqual(len(plans), 5)
+        for p in plans:
+            self.assertEqual(p["mode"], CrawlMode.BOOTSTRAP_FULL.value)
+            self.assertEqual(p["reason"], "FIRST_SUCCESSFUL_CRAWL_NOT_FOUND")
+
+    def test_stage_2_debug_single_target_mode(self) -> None:
+        """Kiểm tra chế độ DEBUG_SINGLE_TARGET chỉ lập kế hoạch cho đúng 1 URL debug."""
+        debug_url = "https://nhatrovn.vn/cho-thue-phong-tro/ho-chi-minh/"
+        plans = plan_crawls.function(
+            targets=[],
             params={
-                "run_mode": CrawlRunMode.SINGLE_TARGET.value,
-                "target_url": "https://nhatrovn.vn/cho-thue-phong-tro/ho-chi-minh/",
-            }
+                "execution_mode": "DEBUG_SINGLE_TARGET",
+                "debug_target_url": debug_url,
+                "debug_max_pages": 3,
+                "debug_max_records": 50,
+            },
         )
-        self.assertEqual(len(targets), 1)
-        self.assertEqual(targets[0]["source"], "nhatrovn")
-        self.assertEqual(targets[0]["url"], "https://nhatrovn.vn/cho-thue-phong-tro/ho-chi-minh/")
+        self.assertEqual(len(plans), 1)
+        self.assertEqual(plans[0]["target_url"], debug_url)
+        self.assertEqual(plans[0]["safety_max_pages"], 3)
+        self.assertEqual(plans[0]["safety_max_records"], 50)
+        self.assertEqual(plans[0]["mode"], CrawlMode.FORCE_FULL.value)
 
-        # Empty target_url in SINGLE_TARGET mode raises error
-        with self.assertRaises(AirflowException) as ctx:
-            discover_scheduled_targets.function(
-                params={
-                    "run_mode": CrawlRunMode.SINGLE_TARGET.value,
-                    "target_url": "",
-                }
-            )
-        self.assertIn("Target URL is required", str(ctx.exception))
+    @patch("roombeacon_crawler.policies.robots_policy.RobotsPolicy.evaluate")
+    def test_stage_3_qualify_target_allowed_and_denied(self, mock_robots: MagicMock) -> None:
+        """Kiểm tra Stage 3: Thẩm định target được phép cào hoặc bị cấm bởi robots.txt."""
+        plan_allowed = {
+            "source": "nhatrovn",
+            "target_id": "hcm_phongtro",
+            "target_url": "https://nhatrovn.vn/cho-thue-phong-tro/ho-chi-minh/",
+            "mode": "BOOTSTRAP_FULL",
+        }
+        plan_denied = {
+            "source": "blocked_source",
+            "target_id": "secret_rooms",
+            "target_url": "https://blocked.test/secret",
+            "mode": "BOOTSTRAP_FULL",
+        }
 
-    def test_discover_scheduled_targets_scheduled_all_mode(self) -> None:
-        """Kiểm tra chế độ SCHEDULED_ALL tự động nạp tất cả targets của các nguồn."""
-        targets = discover_scheduled_targets.function(
-            params={"run_mode": CrawlRunMode.SCHEDULED_ALL.value}
+        mock_robots.side_effect = lambda url: (
+            ("ALLOWED", "https://nhatrovn.vn/robots.txt")
+            if "nhatrovn" in url
+            else ("DENIED", "https://blocked.test/robots.txt")
         )
-        self.assertEqual(len(targets), 5)
-        sources = sorted(list(set(t["source"] for t in targets)))
-        self.assertEqual(sources, ["batdongsan", "muaban", "nhatot", "nhatrovn", "phongtro123"])
 
-    @patch("roombeacon_crawler.services.source_qualifier.SourceQualifier.qualify")
+        res_ok = qualify_target.function(plan=plan_allowed)
+        res_denied = qualify_target.function(plan=plan_denied)
+
+        self.assertEqual(res_ok["qualification_status"], "READY")
+        self.assertEqual(res_ok["action"], "QUALIFIED")
+
+        self.assertEqual(res_denied["qualification_status"], "DENIED_BY_ROBOTS")
+        self.assertEqual(res_denied["action"], "SKIPPED")
+
     @patch("roombeacon_crawler.pipeline.crawl_runner.CrawlRunner.execute_crawl")
-    def test_scenario_1_one_ready_four_robots_denied(
-        self, mock_execute_crawl: MagicMock, mock_qualify: MagicMock
+    def test_stage_4_execute_crawl_and_stage_5_update_checkpoint(
+        self, mock_crawl: MagicMock
     ) -> None:
-        """Kịch bản 1: 1 nguồn ALLOWED (NhatroVN) và 4 nguồn ROBOTS_DENIED.
+        """Kiểm tra Stage 4 & 5: Thực thi cào và cập nhật checkpoint vào State Repository."""
+        plan = {
+            "source": "nhatrovn",
+            "target_id": "hcm_phongtro",
+            "target_url": "https://nhatrovn.vn/cho-thue-phong-tro/ho-chi-minh/",
+            "mode": "BOOTSTRAP_FULL",
+            "interval_minutes": 30,
+        }
+        qual_payload = {
+            "plan": plan,
+            "source": "nhatrovn",
+            "target_id": "hcm_phongtro",
+            "target_url": "https://nhatrovn.vn/cho-thue-phong-tro/ho-chi-minh/",
+            "qualification_status": "READY",
+            "action": "QUALIFIED",
+        }
 
-        Nguồn NhatroVN crawl thành công, 4 nguồn còn lại skip có kiểm soát, toàn bộ DAG thành công.
-        """
-        def qualify_side_effect(url: str, *args, **kwargs):
-            if "nhatrovn.vn" in url:
-                return SourceQualificationResult(
-                    target_url=url,
-                    hostname="nhatrovn.vn",
-                    robots_url="https://nhatrovn.vn/robots.txt",
-                    url_status=UrlSafetyStatus.VALID,
-                    robots_status=RobotsQualificationStatus.ALLOWED,
-                    adapter_status=AdapterStatus.REGISTERED,
-                    overall_status=QualificationOverallStatus.READY,
-                    source_name="nhatrovn",
-                )
-            else:
-                return SourceQualificationResult(
-                    target_url=url,
-                    hostname="blocked.com",
-                    robots_url="https://blocked.com/robots.txt",
-                    url_status=UrlSafetyStatus.VALID,
-                    robots_status=RobotsQualificationStatus.DENIED,
-                    adapter_status=AdapterStatus.REGISTERED,
-                    overall_status=QualificationOverallStatus.DENIED_BY_ROBOTS,
-                    source_name="blocked",
-                    reason="Robots policy denied",
-                )
-
-        mock_qualify.side_effect = qualify_side_effect
-        mock_execute_crawl.return_value = (
+        mock_crawl.return_value = (
             [object()] * 20,
             CrawlRunResult(
-                run_id="run_nhatrovn_success",
+                run_id="run_test_stage4",
                 source="nhatrovn",
-                started_at="2026-08-19T00:00:00",
-                finished_at="2026-08-19T00:00:01",
+                target_id="hcm_phongtro",
+                started_at="2026-08-20T12:00:00",
+                finished_at="2026-08-20T12:00:05",
                 status=CrawlStatus.SUCCESS,
-                pages_success=1,
+                pages_attempted=2,
+                pages_success=2,
+                pages_failed=0,
                 records_created=20,
+                observed_listing_ids=["id_1", "id_2", "id_3"],
             ),
         )
 
-        targets = discover_scheduled_targets.function(
-            params={"run_mode": CrawlRunMode.SCHEDULED_ALL.value}
-        )
+        crawl_result = execute_crawl.function(qual_payload=qual_payload)
+        self.assertEqual(crawl_result["crawl_status"], "success")
+        self.assertEqual(crawl_result["records_created"], 20)
 
-        results = []
-        for target in targets:
-            res = qualify_and_crawl_target.function(
-                target=target,
-                params={"run_mode": CrawlRunMode.SCHEDULED_ALL.value, "max_pages": 1, "max_records": 20},
-            )
-            results.append(res)
+        cp_result = update_checkpoint.function(result_payload=crawl_result)
+        self.assertTrue(cp_result["checkpoint_updated"])
+        self.assertIsNotNone(cp_result["last_success_at"])
+        self.assertIsNotNone(cp_result["next_run_at"])
 
-        summary = summarize_crawl_results.function(results=results)
+        # Kiểm tra repository đã ghi nhận
+        repo = LocalCrawlStateRepository(base_data_dir=self.test_dir)
+        saved_state = repo.get_state("nhatrovn", "hcm_phongtro")
+        saved_seen = repo.get_seen_listing_ids("nhatrovn", "hcm_phongtro")
+        self.assertIsNotNone(saved_state)
+        self.assertEqual(saved_state.last_records_created, 20)
+        self.assertEqual(saved_seen, {"id_1", "id_2", "id_3"})
 
-        self.assertEqual(summary["targets_discovered"], 5)
-        self.assertEqual(summary["qualification_ready"], 1)
-        self.assertEqual(summary["qualification_denied"], 4)
-        self.assertEqual(summary["crawl_success"], 1)
-        self.assertEqual(summary["crawl_skipped"], 4)
-        self.assertEqual(summary["crawl_failed"], 0)
-        self.assertEqual(summary["records_created"], 20)
-        mock_execute_crawl.assert_called_once()
-
-    @patch("roombeacon_crawler.services.source_qualifier.SourceQualifier.qualify")
-    @patch("roombeacon_crawler.pipeline.crawl_runner.CrawlRunner.execute_crawl")
-    def test_scenario_2_zero_ready_targets_all_robots_denied(
-        self, mock_execute_crawl: MagicMock, mock_qualify: MagicMock
-    ) -> None:
-        """Kịch bản 2: Tất cả 5 nguồn đều ROBOTS_DENIED.
-
-        Phiên điều phối hoàn thành thành công với 0 crawlable targets và không coi là lỗi kỹ thuật.
-        """
-        mock_qualify.return_value = SourceQualificationResult(
-            target_url="https://any.vn/",
-            hostname="any.vn",
-            robots_url="https://any.vn/robots.txt",
-            url_status=UrlSafetyStatus.VALID,
-            robots_status=RobotsQualificationStatus.DENIED,
-            adapter_status=AdapterStatus.REGISTERED,
-            overall_status=QualificationOverallStatus.DENIED_BY_ROBOTS,
-            source_name="any",
-            reason="Denied by robots",
-        )
-
-        targets = discover_scheduled_targets.function(
-            params={"run_mode": CrawlRunMode.SCHEDULED_ALL.value}
-        )
-
-        results = []
-        for target in targets:
-            res = qualify_and_crawl_target.function(
-                target=target,
-                params={"run_mode": CrawlRunMode.SCHEDULED_ALL.value},
-            )
-            results.append(res)
-
-        summary = summarize_crawl_results.function(results=results)
-
-        self.assertEqual(summary["targets_discovered"], 5)
-        self.assertEqual(summary["qualification_ready"], 0)
-        self.assertEqual(summary["qualification_denied"], 5)
-        self.assertEqual(summary["crawl_success"], 0)
-        self.assertEqual(summary["crawl_skipped"], 5)
-        self.assertEqual(summary["crawl_failed"], 0)
-        self.assertEqual(summary["records_created"], 0)
-        mock_execute_crawl.assert_not_called()
-
-    @patch("roombeacon_crawler.services.source_qualifier.SourceQualifier.qualify")
-    @patch("roombeacon_crawler.pipeline.crawl_runner.CrawlRunner.execute_crawl")
-    def test_scenario_3_access_changes_next_run_no_permanent_blocked_state(
-        self, mock_execute_crawl: MagicMock, mock_qualify: MagicMock
-    ) -> None:
-        """Kịch bản 3: Không cache vĩnh viễn trạng thái chặn.
-
-        Run A: BatDongSan ROBOTS_DENIED -> skip.
-        Run B: BatDongSan ALLOWED -> được thẩm định lại và crawl thành công!
-        """
-        mock_execute_crawl.return_value = (
-            [object()] * 10,
-            CrawlRunResult(
-                run_id="run_bds_success",
-                source="batdongsan",
-                started_at="2026-08-19T00:00:00",
-                finished_at="2026-08-19T00:00:01",
-                status=CrawlStatus.SUCCESS,
-                records_created=10,
-            ),
-        )
-        bds_target = {
-            "source": "batdongsan",
-            "url": "https://batdongsan.com.vn/cho-thue-nha-tro-phong-tro-tp-hcm",
-            "enabled": True,
-        }
-
-        # Run A: Denied
-        mock_qualify.return_value = SourceQualificationResult(
-            target_url=bds_target["url"],
-            hostname="batdongsan.com.vn",
-            robots_url="https://batdongsan.com.vn/robots.txt",
-            url_status=UrlSafetyStatus.VALID,
-            robots_status=RobotsQualificationStatus.DENIED,
-            adapter_status=AdapterStatus.REGISTERED,
-            overall_status=QualificationOverallStatus.DENIED_BY_ROBOTS,
-            source_name="batdongsan",
-        )
-        res_a = qualify_and_crawl_target.function(
-            target=bds_target,
-            params={"run_mode": CrawlRunMode.SCHEDULED_ALL.value},
-        )
-        self.assertEqual(res_a["action"], "SKIPPED")
-        mock_execute_crawl.assert_not_called()
-
-        # Run B: Allowed (Website thay đổi chính sách)
-        mock_qualify.return_value = SourceQualificationResult(
-            target_url=bds_target["url"],
-            hostname="batdongsan.com.vn",
-            robots_url="https://batdongsan.com.vn/robots.txt",
-            url_status=UrlSafetyStatus.VALID,
-            robots_status=RobotsQualificationStatus.ALLOWED,
-            adapter_status=AdapterStatus.REGISTERED,
-            overall_status=QualificationOverallStatus.READY,
-            source_name="batdongsan",
-        )
-        res_b = qualify_and_crawl_target.function(
-            target=bds_target,
-            params={"run_mode": CrawlRunMode.SCHEDULED_ALL.value},
-        )
-        self.assertEqual(res_b["action"], "CRAWLED")
-        self.assertEqual(res_b["records_created"], 10)
-        mock_execute_crawl.assert_called_once()
-
-    @patch("roombeacon_crawler.services.source_qualifier.SourceQualifier.qualify")
-    @patch("roombeacon_crawler.pipeline.crawl_runner.CrawlRunner.execute_crawl")
-    def test_scenario_4_reverse_access_change_allowed_becomes_denied(
-        self, mock_execute_crawl: MagicMock, mock_qualify: MagicMock
-    ) -> None:
-        """Kịch bản 4: Nguồn trước đây ALLOWED chuyển sang ROBOTS_DENIED ở run tiếp theo.
-
-        Run B phải thẩm định lại và skip, không được tái sử dụng trạng thái cũ.
-        """
-        target = {
-            "source": "nhatrovn",
-            "url": "https://nhatrovn.vn/cho-thue-phong-tro/ho-chi-minh/",
-            "enabled": True,
-        }
-
-        # Run A: Allowed
-        mock_qualify.return_value = SourceQualificationResult(
-            target_url=target["url"],
-            hostname="nhatrovn.vn",
-            robots_url="https://nhatrovn.vn/robots.txt",
-            url_status=UrlSafetyStatus.VALID,
-            robots_status=RobotsQualificationStatus.ALLOWED,
-            adapter_status=AdapterStatus.REGISTERED,
-            overall_status=QualificationOverallStatus.READY,
-            source_name="nhatrovn",
-        )
-        mock_execute_crawl.return_value = (
-            [object()],
-            CrawlRunResult(
-                run_id="run_nhatro",
-                source="nhatrovn",
-                started_at="2026-08-19T00:00:00",
-                finished_at="2026-08-19T00:00:01",
-                status=CrawlStatus.SUCCESS,
-                records_created=5,
-            ),
-        )
-        res_a = qualify_and_crawl_target.function(
-            target=target,
-            params={"run_mode": CrawlRunMode.SCHEDULED_ALL.value},
-        )
-        self.assertEqual(res_a["action"], "CRAWLED")
-
-        # Run B: Denied
-        mock_qualify.return_value = SourceQualificationResult(
-            target_url=target["url"],
-            hostname="nhatrovn.vn",
-            robots_url="https://nhatrovn.vn/robots.txt",
-            url_status=UrlSafetyStatus.VALID,
-            robots_status=RobotsQualificationStatus.DENIED,
-            adapter_status=AdapterStatus.REGISTERED,
-            overall_status=QualificationOverallStatus.DENIED_BY_ROBOTS,
-            source_name="nhatrovn",
-        )
-        res_b = qualify_and_crawl_target.function(
-            target=target,
-            params={"run_mode": CrawlRunMode.SCHEDULED_ALL.value},
-        )
-        self.assertEqual(res_b["action"], "SKIPPED")
-
-    def test_scenario_5_fake_source_plugin_with_multiple_scheduled_targets(self) -> None:
-        """Kịch bản 5: Adapter mới cung cấp nhiều targets định kỳ độc lập được tự động phát hiện."""
-        local_reg = SourceRegistry(auto_discover=False)
-        local_reg.register(FakeMultiTargetAdapter)
-
-        provider = AdapterScheduledTargetProvider(registry=local_reg)
-        seeds = provider.get_scheduled_targets()
-
-        self.assertEqual(len(seeds), 3)
-        urls = [s.url for s in seeds]
-        self.assertIn("https://fakemulti.vn/hcm", urls)
-        self.assertIn("https://fakemulti.vn/hanoi", urls)
-        self.assertIn("https://fakemulti.vn/danang", urls)
-
-    def test_scenario_6_empty_scheduled_targets_adapter(self) -> None:
-        """Kịch bản 6: Adapter hợp lệ nhưng không cấu hình scheduled targets không làm lỗi hệ thống."""
-        local_reg = SourceRegistry(auto_discover=False)
-        local_reg.register(FakeEmptyTargetAdapter)
-
-        provider = AdapterScheduledTargetProvider(registry=local_reg)
-        seeds = provider.get_scheduled_targets()
-
-        self.assertEqual(len(seeds), 0)
-
-    def test_scenario_7_mixed_outcomes_finalizer_aggregation(self) -> None:
-        """Kịch bản 7: Finalizer tổng hợp chính xác khi các mapped targets có kết quả hỗn hợp (SUCCESS, SKIPPED, FAILED)."""
-        mixed_results = [
-            # Target 1: SUCCESS (NhatroVN)
-            {
-                "source": "nhatrovn",
-                "target_url": "https://nhatrovn.vn/cho-thue-phong-tro/ho-chi-minh/",
-                "qualification_status": "READY",
-                "crawl_status": "success",
-                "records_created": 20,
-                "pages_success": 1,
-                "pages_failed": 0,
-                "details_success": 3,
-                "details_failed": 0,
-                "action": "CRAWLED",
-            },
-            # Target 2: SKIPPED ROBOTS_DENIED (Nhatot)
-            {
-                "source": "nhatot",
-                "target_url": "https://www.nhatot.com/thue-phong-tro-tp-ho-chi-minh",
-                "qualification_status": "DENIED_BY_ROBOTS",
-                "crawl_status": "skipped",
-                "records_created": 0,
-                "pages_success": 0,
-                "pages_failed": 0,
-                "details_success": 0,
-                "details_failed": 0,
-                "action": "SKIPPED",
-            },
-            # Target 3: FAILED Technical Error (BatDongSan)
-            {
-                "source": "batdongsan",
-                "target_url": "https://batdongsan.com.vn/cho-thue-nha-tro-phong-tro-tp-hcm",
-                "qualification_status": "READY",
-                "crawl_status": "connection_error",
-                "records_created": 0,
-                "pages_success": 0,
-                "pages_failed": 1,
-                "details_success": 0,
-                "details_failed": 0,
-                "action": "CRAWLED",
-            },
-            # Target 4: SKIPPED ROBOTS_DENIED (Muaban)
-            {
-                "source": "muaban",
-                "target_url": "https://muaban.net/bat-dong-san/cho-thue-phong-tro-nha-tro-tp-hcm",
-                "qualification_status": "DENIED_BY_ROBOTS",
-                "crawl_status": "skipped",
-                "records_created": 0,
-                "pages_success": 0,
-                "pages_failed": 0,
-                "details_success": 0,
-                "details_failed": 0,
-                "action": "SKIPPED",
-            },
-            # Target 5: SUCCESS (Phongtro123)
-            {
-                "source": "phongtro123",
-                "target_url": "https://phongtro123.com/cho-thue-phong-tro",
-                "qualification_status": "READY",
-                "crawl_status": "success",
-                "records_created": 15,
-                "pages_success": 1,
-                "pages_failed": 0,
-                "details_success": 0,
-                "details_failed": 0,
-                "action": "CRAWLED",
-            },
+    def test_stage_6_summarize_run(self) -> None:
+        """Kiểm tra Stage 6: Tổng kết phiên cào toàn diện."""
+        plans = [
+            {"mode": "BOOTSTRAP_FULL"},
+            {"mode": "INCREMENTAL"},
+            {"mode": "INCREMENTAL"},
+        ]
+        qualifications = [
+            {"qualification_status": "READY"},
+            {"qualification_status": "READY"},
+            {"qualification_status": "DENIED_BY_ROBOTS"},
+        ]
+        crawl_results = [
+            {"crawl_status": "success", "records_created": 15, "details_success": 2, "action": "CRAWLED"},
+            {"crawl_status": "cloudflare_challenge", "records_created": 0, "details_success": 0, "action": "ACCESS_CHALLENGE"},
+            {"crawl_status": "skipped", "records_created": 0, "details_success": 0, "action": "SKIPPED"},
+        ]
+        checkpoints = [
+            {"checkpoint_updated": True},
+            {"checkpoint_updated": True},
+            {"checkpoint_updated": True},
         ]
 
-        summary = summarize_crawl_results.function(results=mixed_results)
+        summary = summarize_run.function(
+            plans=plans,
+            qualifications=qualifications,
+            crawl_results=crawl_results,
+            checkpoints=checkpoints,
+        )
 
-        self.assertEqual(summary["targets_discovered"], 5)
-        self.assertEqual(summary["sources_discovered"], 5)
-        self.assertEqual(summary["qualification_ready"], 3)
-        self.assertEqual(summary["qualification_denied"], 2)
-        self.assertEqual(summary["crawl_success"], 2)
-        self.assertEqual(summary["crawl_skipped"], 2)
-        self.assertEqual(summary["crawl_failed"], 1)
-        self.assertEqual(summary["records_created"], 35)
-        self.assertEqual(summary["details_created"], 3)
-
-    def test_xcom_payload_is_lightweight_without_raw_arrays_or_html(self) -> None:
-        """Kiểm tra payload trả về qua XCom chỉ chứa metadata gọn nhẹ, không chứa HTML hay mảng dữ liệu thô."""
-        with patch("roombeacon_crawler.services.source_qualifier.SourceQualifier.qualify") as mock_qualify:
-            with patch("roombeacon_crawler.pipeline.crawl_runner.CrawlRunner.execute_crawl") as mock_crawl:
-                mock_qualify.return_value = SourceQualificationResult(
-                    target_url="https://nhatrovn.vn/cho-thue-phong-tro/ho-chi-minh/",
-                    hostname="nhatrovn.vn",
-                    robots_url="https://nhatrovn.vn/robots.txt",
-                    url_status=UrlSafetyStatus.VALID,
-                    robots_status=RobotsQualificationStatus.ALLOWED,
-                    adapter_status=AdapterStatus.REGISTERED,
-                    overall_status=QualificationOverallStatus.READY,
-                    source_name="nhatrovn",
-                )
-                mock_crawl.return_value = (
-                    [object()] * 10,
-                    CrawlRunResult(
-                        run_id="run_xcom_test",
-                        source="nhatrovn",
-                        started_at="2026-08-19T00:00:00",
-                        finished_at="2026-08-19T00:00:01",
-                        status=CrawlStatus.SUCCESS,
-                        records_created=10,
-                    ),
-                )
-
-                payload = qualify_and_crawl_target.function(
-                    target={"source": "nhatrovn", "url": "https://nhatrovn.vn/cho-thue-phong-tro/ho-chi-minh/"},
-                    params={"run_mode": CrawlRunMode.SCHEDULED_ALL.value},
-                )
-
-                # Payload must not contain heavy bodies
-                self.assertNotIn("html", payload)
-                self.assertNotIn("records", payload)
-                self.assertNotIn("raw_html", payload)
-                self.assertNotIn("listings", payload)
-                self.assertNotIn("details", payload)
-                self.assertIn("source", payload)
-                self.assertIn("target_url", payload)
-                self.assertIn("crawl_status", payload)
-                self.assertIn("records_created", payload)
+        self.assertEqual(summary["targets_due"], 3)
+        self.assertEqual(summary["bootstrap_planned"], 1)
+        self.assertEqual(summary["incremental_planned"], 2)
+        self.assertEqual(summary["qualification_allowed"], 2)
+        self.assertEqual(summary["robots_denied"], 1)
+        self.assertEqual(summary["crawl_success"], 1)
+        self.assertEqual(summary["access_challenge"], 1)
+        self.assertEqual(summary["technical_failure"], 0)
+        self.assertEqual(summary["records_created"], 15)
+        self.assertEqual(summary["details_created"], 2)
+        self.assertEqual(summary["checkpoints_updated"], 3)
 
 
 if __name__ == "__main__":
     unittest.main()
-

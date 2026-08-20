@@ -86,24 +86,39 @@ class FetchCoordinator:
 
             try:
                 if strategy == FetchStrategy.BROWSER:
-                    response = await self.browser_fetcher.fetch(
-                        url=target_obj.url,
-                        wait_selector=wait_selector,
-                        wait_timeout_ms=wait_timeout_ms,
-                    )
+                    try:
+                        response = await self.browser_fetcher.fetch(
+                            url=target_obj.url,
+                            wait_selector=wait_selector,
+                            wait_timeout_ms=wait_timeout_ms,
+                        )
+                    except RuntimeError as re:
+                        if "Playwright" in str(re):
+                            logger.error(
+                                "FetchCoordinator: Playwright không khả dụng (%s) khi fetch %s với chiến lược BROWSER",
+                                re,
+                                target_obj.url,
+                            )
+                            crawl_status = CrawlStatus.BROWSER_UNAVAILABLE
+                            break
+                        else:
+                            raise
                 else:
                     response = await self.http_fetcher.fetch(url=target_obj.url)
 
-                crawl_status = self.response_classifier.classify(
-                    status_code=response.status_code,
-                    html=response.html,
-                )
-                logger.info(
-                    "FetchCoordinator: HTTP %d | Status: %s | Time: %.2fms",
-                    response.status_code,
-                    crawl_status.value,
-                    response.elapsed_ms,
-                )
+                if response is not None:
+                    crawl_status = self.response_classifier.classify(
+                        status_code=response.status_code,
+                        html=response.html,
+                    )
+                    logger.info(
+                        "FetchCoordinator: HTTP %d | Status: %s | Time: %.2fms",
+                        response.status_code,
+                        crawl_status.value,
+                        response.elapsed_ms,
+                    )
+                else:
+                    crawl_status = CrawlStatus.CONNECTION_ERROR
             except Exception as exc:
                 logger.warning(
                     "FetchCoordinator: Lỗi fetch %s (lần thử %d): %s",

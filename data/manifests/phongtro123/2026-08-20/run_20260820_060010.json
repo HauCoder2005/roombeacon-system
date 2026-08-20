@@ -1,0 +1,29 @@
+{
+  "run_id": "run_20260820_060010",
+  "source": "phongtro123",
+  "started_at": "2026-08-20T06:00:10.387099+00:00",
+  "finished_at": "2026-08-20T06:00:21.705136+00:00",
+  "target_id": "toanquoc_phongtro",
+  "mode": "BOOTSTRAP_FULL",
+  "target_url": "https://phongtro123.com/cho-thue-phong-tro",
+  "status": "connection_error",
+  "stop_reason": null,
+  "failure_reason": "Lỗi fetch listing page: connection_error",
+  "max_pages": 500,
+  "max_records": 20000,
+  "crawl_details": true,
+  "pages_attempted": 1,
+  "pages_success": 0,
+  "pages_failed": 1,
+  "details_success": 0,
+  "details_failed": 0,
+  "records_created": 0,
+  "duplicates_skipped": 0,
+  "observed_listing_ids": [],
+  "new_listing_ids": [],
+  "errors": [
+    "Lỗi fetch listing page: connection_error"
+  ],
+  "manifest_path": "/data/manifests/phongtro123/2026-08-20/run_20260820_060010.json",
+  "bronze_path": null
+}

@@ -1,0 +1,14 @@
+{
+  "source": "nhatot",
+  "target_id": "hcm_phongtro",
+  "last_started_at": "2026-08-20T16:45:09.095981+00:00",
+  "last_finished_at": "2026-08-20T16:45:09.095981+00:00",
+  "last_success_at": "2026-08-20T16:45:09.095981+00:00",
+  "last_full_crawl_at": "2026-08-20T16:45:09.095981+00:00",
+  "last_watermark_at": "2026-08-20T16:45:09.095981+00:00",
+  "last_status": "success",
+  "last_stop_reason": "success",
+  "last_records_created": 0,
+  "consecutive_failures": 0,
+  "next_run_at": "2026-08-20T17:45:09.095981+00:00"
+}

@@ -25,10 +25,12 @@ class BrowserFetcher:
         timeout: float = 30.0,
         headless: bool = True,
         user_agent: str = "RoomBeaconCrawler/0.1",
+        viewport: dict | None = None,
     ) -> None:
         self.timeout = timeout
         self.headless = headless
         self.user_agent = user_agent
+        self.viewport = viewport or {"width": 1280, "height": 800}
 
     async def fetch(
         self,
@@ -44,18 +46,25 @@ class BrowserFetcher:
                 "  playwright install chromium"
             )
 
-        timeout_ms = int(self.timeout * 1000)
-        start_time = time.monotonic()
-        fetched_at = datetime.now(timezone.utc).isoformat()
+        start_time = time.perf_counter()
+        request_time = datetime.now(timezone.utc)
 
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=self.headless)
-            try:
-                page = await browser.new_page(user_agent=self.user_agent)
+        try:
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(
+                    headless=self.headless,
+                    args=["--no-sandbox", "--disable-dev-shm-usage"],
+                )
+                context = await browser.new_context(
+                    user_agent=self.user_agent,
+                    viewport=self.viewport,
+                )
+                page = await context.new_page()
+
                 response = await page.goto(
                     url,
+                    timeout=int(self.timeout * 1000),
                     wait_until="domcontentloaded",
-                    timeout=timeout_ms,
                 )
 
                 if wait_selector:
@@ -64,29 +73,55 @@ class BrowserFetcher:
                             wait_selector,
                             timeout=wait_timeout_ms,
                         )
-                    except Exception as exc:
-                        logger.debug(
-                            "Hết thời gian chờ selector %s trên %s: %s",
+                    except PlaywrightTimeoutError:
+                        logger.warning(
+                            "Hết thời gian đợi selector '%s' trên %s",
                             wait_selector,
                             url,
-                            exc,
                         )
 
                 html = await page.content()
                 final_url = page.url
                 status_code = response.status if response else 200
                 headers = await response.all_headers() if response else {}
-                elapsed_ms = (time.monotonic() - start_time) * 1000.0
-            finally:
-                await browser.close()
 
-        return CapturedResponse(
-            request_url=url,
-            final_url=final_url,
-            status_code=status_code,
-            html=html,
-            headers=headers,
-            fetch_strategy=FetchStrategy.BROWSER,
-            fetched_at=fetched_at,
-            elapsed_ms=elapsed_ms,
-        )
+                await browser.close()
+                elapsed = time.perf_counter() - start_time
+
+                return CapturedResponse(
+                    request_url=url,
+                    final_url=final_url,
+                    status_code=status_code,
+                    html=html,
+                    headers=headers,
+                    fetch_strategy=FetchStrategy.BROWSER,
+                    fetched_at=request_time.isoformat(),
+                    elapsed_ms=elapsed * 1000.0,
+                )
+
+        except PlaywrightTimeoutError as exc:
+            elapsed = time.perf_counter() - start_time
+            logger.error("Timeout khi render URL bằng Browser: %s", exc)
+            return CapturedResponse(
+                request_url=url,
+                final_url=url,
+                status_code=408,
+                html="",
+                headers={},
+                fetch_strategy=FetchStrategy.BROWSER,
+                fetched_at=request_time.isoformat(),
+                elapsed_ms=elapsed * 1000.0,
+            )
+        except Exception as exc:
+            elapsed = time.perf_counter() - start_time
+            logger.error("Lỗi ngoại lệ khi fetch qua Browser: %s", exc)
+            return CapturedResponse(
+                request_url=url,
+                final_url=url,
+                status_code=500,
+                html="",
+                headers={},
+                fetch_strategy=FetchStrategy.BROWSER,
+                fetched_at=request_time.isoformat(),
+                elapsed_ms=elapsed * 1000.0,
+            )

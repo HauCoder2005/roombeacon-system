@@ -34,8 +34,13 @@ class CrawlerSettings:
     max_total_records: int = field(
         default_factory=lambda: env.crawler.max_total_records
     )
+    max_details_per_run: int = 20
     crawl_date_mode: CrawlDateMode = field(
         default_factory=lambda: CrawlDateMode.from_str(env.crawler.date_mode)
     )
     date_from: str | None = field(default_factory=lambda: env.crawler.date_from)
     date_to: str | None = field(default_factory=lambda: env.crawler.date_to)
+
+    @property
+    def http_timeout_seconds(self) -> float:
+        return self.request_timeout

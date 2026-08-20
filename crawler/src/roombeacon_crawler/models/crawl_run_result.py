@@ -11,6 +11,8 @@ class CrawlRunResult:
     source: str
     started_at: str
     finished_at: str
+    target_id: str = "default"
+    mode: str = "BOOTSTRAP_FULL"
     target_url: str | None = None
     status: CrawlStatus = CrawlStatus.SUCCESS
     stop_reason: CrawlStatus | None = None
@@ -25,6 +27,8 @@ class CrawlRunResult:
     details_failed: int = 0
     records_created: int = 0
     duplicates_skipped: int = 0
+    observed_listing_ids: list[str] = field(default_factory=list)
+    new_listing_ids: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     manifest_path: str | None = None
     bronze_path: str | None = None

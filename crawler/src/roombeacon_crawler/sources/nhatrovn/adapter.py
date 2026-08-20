@@ -80,8 +80,10 @@ class NhatroVNSourceAdapter(BaseSourceAdapter):
         return (
             CrawlSeed(
                 source=self.SOURCE_NAME,
+                target_id="hcm_phongtro",
                 url="https://nhatrovn.vn/cho-thue-phong-tro/ho-chi-minh/",
                 enabled=True,
+                interval_minutes=30,
                 target_type_hint=CrawlTargetType.LISTING_PAGE,
                 label="nhatrovn_hcm_phongtro",
             ),

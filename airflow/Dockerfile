@@ -5,27 +5,13 @@ FROM ${AIRFLOW_IMAGE}:${AIRFLOW_VERSION}
 
 USER root
 
-# Cài đặt các gói hệ thống tối thiểu cần thiết để biên dịch mysqlclient và chạy Chromium Playwright
+# Cài đặt các gói hệ thống cần thiết để biên dịch mysqlclient
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         default-libmysqlclient-dev \
         gcc \
         pkg-config \
         curl \
-        libnss3 \
-        libnspr4 \
-        libatk1.0-0 \
-        libatk-bridge2.0-0 \
-        libcups2 \
-        libdrm2 \
-        libxkbcommon0 \
-        libxcomposite1 \
-        libxdamage1 \
-        libxfixes3 \
-        libxrandr2 \
-        libgbm1 \
-        libasound2t64 \
-        libpango-1.0-0 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -40,5 +26,16 @@ RUN pip install --no-cache-dir \
     httpx \
     beautifulsoup4 \
     pydantic \
-    python-dotenv \
-    && playwright install chromium
+    python-dotenv
+
+USER root
+
+# Cài đặt toàn bộ system dependencies cần thiết của Chromium
+RUN playwright install-deps chromium \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+USER airflow
+
+# Cài đặt trình duyệt Chromium cho user airflow
+RUN playwright install chromium

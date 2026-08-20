@@ -1,0 +1,23 @@
+{
+  "run_id": "run_20260820_051140",
+  "source": "batdongsan",
+  "started_at": "2026-08-20T05:11:40.273679+00:00",
+  "finished_at": "2026-08-20T05:11:40.516093+00:00",
+  "target_url": "https://batdongsan.com.vn/cho-thue-nha-tro-phong-tro-tp-hcm",
+  "status": "cloudflare_challenge",
+  "stop_reason": "cloudflare_challenge",
+  "failure_reason": null,
+  "max_pages": 1,
+  "max_records": 20,
+  "crawl_details": false,
+  "pages_attempted": 1,
+  "pages_success": 0,
+  "pages_failed": 1,
+  "details_success": 0,
+  "details_failed": 0,
+  "records_created": 0,
+  "duplicates_skipped": 0,
+  "errors": [],
+  "manifest_path": "/data/manifests/batdongsan/2026-08-20/run_20260820_051140.json",
+  "bronze_path": null
+}

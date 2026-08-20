@@ -1,0 +1,14 @@
+{
+  "source": "muaban",
+  "target_id": "hcm_phongtro",
+  "last_started_at": null,
+  "last_finished_at": "2026-08-20T17:00:50.589330+00:00",
+  "last_success_at": null,
+  "last_full_crawl_at": null,
+  "last_watermark_at": null,
+  "last_status": "check_failed",
+  "last_stop_reason": "check_failed",
+  "last_records_created": 0,
+  "consecutive_failures": 0,
+  "next_run_at": "2026-08-20T18:00:50.589330+00:00"
+}

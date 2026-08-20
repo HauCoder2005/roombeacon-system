@@ -26,10 +26,11 @@ from roombeacon_crawler.sources.batdongsan.adapter import (
     BatDongSanSourceAdapter,
 )
 from airflow.dags.crawler.roombeacon_crawler import (
-    qualify_and_crawl_target,
-    summarize_crawl_results,
+    execute_crawl,
+    qualify_target,
+    summarize_run,
 )
-from roombeacon_crawler.enums.crawl_run_mode import CrawlRunMode
+from roombeacon_crawler.enums.crawl_mode import CrawlMode
 from roombeacon_crawler.models.source_qualification_result import (
     AdapterStatus,
     QualificationOverallStatus,
@@ -166,30 +167,18 @@ class TestAccessChallengeHandling(unittest.TestCase):
         self.assertEqual(manifest["pages_success"], 0)
         self.assertEqual(manifest["records_created"], 0)
 
-    @patch("roombeacon_crawler.services.source_qualifier.SourceQualifier.qualify")
     @patch("roombeacon_crawler.pipeline.crawl_runner.CrawlRunner.execute_crawl")
     def test_scheduled_isolation_challenge_does_not_block_normal_target(
-        self, mock_crawl: MagicMock, mock_qualify: MagicMock
+        self, mock_crawl: MagicMock
     ) -> None:
         """Kiểm tra trong scheduled execution: Target gặp Cloudflare Challenge không chặn các target bình thường khác."""
-        mock_qualify.return_value = SourceQualificationResult(
-            target_url="https://any.com/",
-            hostname="any.com",
-            robots_url="https://any.com/robots.txt",
-            url_status=UrlSafetyStatus.VALID,
-            robots_status=RobotsQualificationStatus.ALLOWED,
-            adapter_status=AdapterStatus.REGISTERED,
-            overall_status=QualificationOverallStatus.READY,
-            source_name="any",
-        )
-
-        # Target 1: BatDongSan -> Cloudflare challenge
-        # Target 2: NhatroVN -> Success
-        def crawl_side_effect(url: str, *args, **kwargs):
+        def crawl_side_effect(plan, *args, **kwargs):
+            url = plan.get("target_url", "") if isinstance(plan, dict) else plan.target_url
             if "batdongsan" in url:
                 return [], CrawlRunResult(
                     run_id="run_bds_cf",
                     source="batdongsan",
+                    target_id="hcm_phongtro",
                     started_at="2026-08-20T00:00:00",
                     finished_at="2026-08-20T00:00:01",
                     status=CrawlStatus.CLOUDFLARE_CHALLENGE,
@@ -203,6 +192,7 @@ class TestAccessChallengeHandling(unittest.TestCase):
                 return [object()] * 15, CrawlRunResult(
                     run_id="run_nhatrovn_ok",
                     source="nhatrovn",
+                    target_id="hcm_phongtro",
                     started_at="2026-08-20T00:00:00",
                     finished_at="2026-08-20T00:00:01",
                     status=CrawlStatus.SUCCESS,
@@ -214,17 +204,25 @@ class TestAccessChallengeHandling(unittest.TestCase):
 
         mock_crawl.side_effect = crawl_side_effect
 
-        target_bds = {"source": "batdongsan", "url": "https://batdongsan.com.vn/cho-thue-nha-tro-phong-tro-tp-hcm"}
-        target_nhatrovn = {"source": "nhatrovn", "url": "https://nhatrovn.vn/cho-thue-phong-tro/ho-chi-minh/"}
+        qual_bds = {
+            "plan": {"source": "batdongsan", "target_id": "hcm_phongtro", "target_url": "https://batdongsan.com.vn/cho-thue-nha-tro-phong-tro-tp-hcm"},
+            "source": "batdongsan",
+            "target_id": "hcm_phongtro",
+            "target_url": "https://batdongsan.com.vn/cho-thue-nha-tro-phong-tro-tp-hcm",
+            "qualification_status": "READY",
+            "action": "QUALIFIED",
+        }
+        qual_nhatro = {
+            "plan": {"source": "nhatrovn", "target_id": "hcm_phongtro", "target_url": "https://nhatrovn.vn/cho-thue-phong-tro/ho-chi-minh/"},
+            "source": "nhatrovn",
+            "target_id": "hcm_phongtro",
+            "target_url": "https://nhatrovn.vn/cho-thue-phong-tro/ho-chi-minh/",
+            "qualification_status": "READY",
+            "action": "QUALIFIED",
+        }
 
-        res_bds = qualify_and_crawl_target.function(
-            target=target_bds,
-            params={"run_mode": CrawlRunMode.SCHEDULED_ALL.value},
-        )
-        res_nhatro = qualify_and_crawl_target.function(
-            target=target_nhatrovn,
-            params={"run_mode": CrawlRunMode.SCHEDULED_ALL.value},
-        )
+        res_bds = execute_crawl.function(qual_payload=qual_bds)
+        res_nhatro = execute_crawl.function(qual_payload=qual_nhatro)
 
         self.assertEqual(res_bds["crawl_status"], "cloudflare_challenge")
         self.assertEqual(res_bds["action"], "ACCESS_CHALLENGE")
@@ -235,12 +233,16 @@ class TestAccessChallengeHandling(unittest.TestCase):
         self.assertEqual(res_nhatro["action"], "CRAWLED")
         self.assertEqual(res_nhatro["records_created"], 15)
 
-        summary = summarize_crawl_results.function(results=[res_bds, res_nhatro])
+        summary = summarize_run.function(
+            plans=[qual_bds["plan"], qual_nhatro["plan"]],
+            qualifications=[qual_bds, qual_nhatro],
+            crawl_results=[res_bds, res_nhatro],
+            checkpoints=[{"checkpoint_updated": True}, {"checkpoint_updated": True}],
+        )
 
-        self.assertEqual(summary["targets_discovered"], 2)
+        self.assertEqual(summary["targets_due"], 2)
         self.assertEqual(summary["crawl_success"], 1)
         self.assertEqual(summary["access_challenge"], 1)
-        self.assertEqual(summary["crawl_failed"], 0)
         self.assertEqual(summary["records_created"], 15)
 
     def test_mixed_fleet_five_targets_summary(self) -> None:
@@ -251,6 +253,20 @@ class TestAccessChallengeHandling(unittest.TestCase):
         D: Technical FAILED (0 records)
         E: SUCCESS (15 records)
         """
+        plans = [
+            {"source": "source_a", "mode": "BOOTSTRAP_FULL"},
+            {"source": "source_b", "mode": "BOOTSTRAP_FULL"},
+            {"source": "source_c", "mode": "INCREMENTAL"},
+            {"source": "source_d", "mode": "INCREMENTAL"},
+            {"source": "source_e", "mode": "INCREMENTAL"},
+        ]
+        qualifications = [
+            {"source": "source_a", "qualification_status": "READY"},
+            {"source": "source_b", "qualification_status": "READY"},
+            {"source": "source_c", "qualification_status": "DENIED_BY_ROBOTS"},
+            {"source": "source_d", "qualification_status": "READY"},
+            {"source": "source_e", "qualification_status": "READY"},
+        ]
         results = [
             {
                 "source": "source_a",
@@ -308,20 +324,27 @@ class TestAccessChallengeHandling(unittest.TestCase):
                 "action": "CRAWLED",
             },
         ]
+        checkpoints = [{"checkpoint_updated": True}] * 5
 
-        summary = summarize_crawl_results.function(results=results)
+        summary = summarize_run.function(
+            plans=plans,
+            qualifications=qualifications,
+            crawl_results=results,
+            checkpoints=checkpoints,
+        )
 
-        self.assertEqual(summary["targets_discovered"], 5)
-        self.assertEqual(summary["sources_discovered"], 5)
-        self.assertEqual(summary["qualification_ready"], 4)
-        self.assertEqual(summary["qualification_denied"], 1)
+        self.assertEqual(summary["targets_due"], 5)
+        self.assertEqual(summary["bootstrap_planned"], 2)
+        self.assertEqual(summary["incremental_planned"], 3)
+        self.assertEqual(summary["qualification_allowed"], 4)
+        self.assertEqual(summary["robots_denied"], 1)
         self.assertEqual(summary["crawl_success"], 2)
         self.assertEqual(summary["access_challenge"], 1)
-        self.assertEqual(summary["crawl_skipped"], 1)
-        self.assertEqual(summary["crawl_failed"], 1)
+        self.assertEqual(summary["technical_failure"], 1)
         self.assertEqual(summary["records_created"], 35)
 
 
 if __name__ == "__main__":
     unittest.main()
+
 

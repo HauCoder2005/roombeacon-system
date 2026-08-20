@@ -57,6 +57,7 @@ class NhatroVNPagination:
         max_pages: int,
         current_items_count: int,
         html: str | None = None,
+        raw_html: str | None = None,
         **kwargs,
     ) -> bool:
         """Xác định xem trang hiện tại có trang tiếp theo không."""
@@ -69,11 +70,12 @@ class NhatroVNPagination:
             return False
 
         # 3. Không có HTML -> mặc định tiếp tục nếu chưa đạt max_pages
-        if not html:
+        effective_html = html if html is not None else (raw_html or kwargs.get("raw_html"))
+        if not effective_html:
             return current_page < max_pages
 
         try:
-            root = DOMTreeBuilder.parse(html)
+            root = DOMTreeBuilder.parse(effective_html)
 
             # 4. Trích xuất thông tin Trang X / Y từ text: e.g. "(Trang 1 / 42)" hoặc "Trang 5/42"
             text_nodes = root.find_all(

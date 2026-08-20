@@ -86,8 +86,10 @@ class MuabanSourceAdapter(BaseSourceAdapter):
         return (
             CrawlSeed(
                 source=self.SOURCE_NAME,
+                target_id="hcm_phongtro",
                 url="https://muaban.net/bat-dong-san/cho-thue-phong-tro-nha-tro-tp-hcm",
                 enabled=True,
+                interval_minutes=60,
                 target_type_hint=CrawlTargetType.LISTING_PAGE,
                 label="muaban_hcm_phongtro",
             ),

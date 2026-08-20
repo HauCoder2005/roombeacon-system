@@ -1,0 +1,29 @@
+{
+  "run_id": "run_20260820_054505",
+  "source": "nhatrovn",
+  "started_at": "2026-08-20T05:45:05.351339+00:00",
+  "finished_at": "2026-08-20T05:45:11.882685+00:00",
+  "target_id": "hcm_phongtro",
+  "mode": "BOOTSTRAP_FULL",
+  "target_url": "https://nhatrovn.vn/cho-thue-phong-tro/ho-chi-minh/",
+  "status": "connection_error",
+  "stop_reason": null,
+  "failure_reason": "Lỗi fetch listing page: connection_error",
+  "max_pages": 500,
+  "max_records": 20000,
+  "crawl_details": true,
+  "pages_attempted": 1,
+  "pages_success": 0,
+  "pages_failed": 1,
+  "details_success": 0,
+  "details_failed": 0,
+  "records_created": 0,
+  "duplicates_skipped": 0,
+  "observed_listing_ids": [],
+  "new_listing_ids": [],
+  "errors": [
+    "Lỗi fetch listing page: connection_error"
+  ],
+  "manifest_path": "/data/manifests/nhatrovn/2026-08-20/run_20260820_054505.json",
+  "bronze_path": null
+}

@@ -16,10 +16,11 @@ class HttpFetcher:
     def __init__(
         self,
         timeout: float = 30.0,
+        timeout_seconds: float | None = None,
         user_agent: str = "RoomBeaconCrawler/0.1",
         follow_redirects: bool = True,
     ) -> None:
-        self.timeout = timeout
+        self.timeout = timeout_seconds if timeout_seconds is not None else timeout
         self.user_agent = user_agent
         self.follow_redirects = follow_redirects
 
@@ -31,16 +32,16 @@ class HttpFetcher:
             "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
         }
 
-        start_time = time.monotonic()
-        fetched_at = datetime.now(timezone.utc).isoformat()
+        start_time = time.perf_counter()
+        request_time = datetime.now(timezone.utc)
 
         async with httpx.AsyncClient(
             timeout=self.timeout,
             follow_redirects=self.follow_redirects,
-            headers=headers,
+            verify=True,
         ) as client:
-            response = await client.get(url)
-            elapsed_ms = (time.monotonic() - start_time) * 1000.0
+            response = await client.get(url, headers=headers)
+            elapsed = time.perf_counter() - start_time
 
             return CapturedResponse(
                 request_url=url,
@@ -49,6 +50,6 @@ class HttpFetcher:
                 html=response.text,
                 headers=dict(response.headers),
                 fetch_strategy=FetchStrategy.HTTP,
-                fetched_at=fetched_at,
-                elapsed_ms=elapsed_ms,
+                fetched_at=request_time.isoformat(),
+                elapsed_ms=elapsed * 1000.0,
             )

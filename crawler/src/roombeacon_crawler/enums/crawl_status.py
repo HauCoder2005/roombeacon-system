@@ -18,4 +18,5 @@ class CrawlStatus(str, Enum):
     UNSUPPORTED_SOURCE = "unsupported_source"
     UNSUPPORTED_TARGET = "unsupported_target"
     PARSE_ERROR = "parse_error"
+    BROWSER_UNAVAILABLE = "browser_unavailable"
     UNKNOWN = "unknown"

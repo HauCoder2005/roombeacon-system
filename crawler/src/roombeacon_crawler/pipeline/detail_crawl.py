@@ -89,16 +89,16 @@ class DetailCrawlPipeline:
             return bronze, None, meta
 
         # 3. Extract Detail
-        detail: ListingDetailRaw = self.adapter.detail_parser.parse(
+        detail: ListingDetailRaw | None = self.adapter.detail_parser.parse(
             html=response.html,
             detail_url=response.final_url,
             listing_id=target.listing_id,
         )
-        detail.crawl_run_id = run_id
-        detail.crawled_at = datetime.now(timezone.utc).isoformat()
-
-        if not DetailValidator.validate(detail):
-            logger.warning("Trang chi tiết %s không đạt validation cấu trúc", target.url)
+        if detail is not None:
+            detail.crawl_run_id = run_id
+            detail.crawled_at = datetime.now(timezone.utc).isoformat()
+            if not DetailValidator.validate(detail):
+                logger.warning("Trang chi tiết %s không đạt validation cấu trúc", target.url)
 
         # 4. Map to Bronze
         bronze_record = BronzeMapper.map(

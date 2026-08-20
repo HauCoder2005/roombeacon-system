@@ -31,6 +31,17 @@ class LocalStorageWriter:
         raw_dir = base_data_dir or env.crawler.data_dir
         self.base_data_dir = Path(raw_dir).resolve()
 
+    def _ensure_dir(self, directory: Path) -> Path:
+        """Đảm bảo thư mục tồn tại, fallback an toàn sang thư mục cục bộ nếu /data không ghi được."""
+        try:
+            directory.mkdir(parents=True, exist_ok=True)
+            return directory
+        except (OSError, PermissionError):
+            relative_part = directory.relative_to(self.base_data_dir) if self.base_data_dir in directory.parents or directory == self.base_data_dir else Path(str(directory).lstrip("/"))
+            fallback_dir = Path("./data").resolve() / relative_part
+            fallback_dir.mkdir(parents=True, exist_ok=True)
+            return fallback_dir
+
     def save_manifest(self, result: CrawlRunResult) -> str:
         """Lưu Manifest của phiên crawl vào <data_dir>/manifests/<source>/<date>/<run_id>.json.
 
@@ -38,8 +49,8 @@ class LocalStorageWriter:
         Gán result.manifest_path trước khi serialize để JSON file chứa đường dẫn chính xác.
         """
         date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        manifest_dir = self.base_data_dir / "manifests" / result.source / date_str
-        manifest_dir.mkdir(parents=True, exist_ok=True)
+        target_dir = self.base_data_dir / "manifests" / result.source / date_str
+        manifest_dir = self._ensure_dir(target_dir)
         manifest_file = manifest_dir / f"{result.run_id}.json"
 
         orig_manifest_path = result.manifest_path
@@ -87,8 +98,8 @@ class LocalStorageWriter:
             return None
 
         date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        output_dir = self.base_data_dir / "bronze" / source / date_str / run_id
-        output_dir.mkdir(parents=True, exist_ok=True)
+        target_dir = self.base_data_dir / "bronze" / source / date_str / run_id
+        output_dir = self._ensure_dir(target_dir)
 
         listings_path = output_dir / "listings.json"
         metadata_path = output_dir / "metadata.json"
