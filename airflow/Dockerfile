@@ -26,7 +26,8 @@ RUN pip install --no-cache-dir \
     httpx \
     beautifulsoup4 \
     pydantic \
-    python-dotenv
+    python-dotenv \
+    duckdb
 
 USER root
 

@@ -401,6 +401,7 @@ def execute_crawl(qual_payload: dict, **context) -> dict:
         "plan": plan_dict,
         "observed_listing_ids": getattr(result, "observed_listing_ids", []),
         "new_listing_ids": getattr(result, "new_listing_ids", []),
+        "observations_written": getattr(result, "observations_written", len(getattr(result, "observed_listing_ids", []))),
         "bootstrap_completed": getattr(result, "bootstrap_completed", False),
         "bootstrap_start_page": getattr(result, "bootstrap_start_page", 1),
         "bootstrap_next_page": getattr(result, "bootstrap_next_page", None),
@@ -408,20 +409,128 @@ def execute_crawl(qual_payload: dict, **context) -> dict:
 
 
 # --------------------------------------------------------------------------
-# Task 5: Update Checkpoint (Mapped per Result)
+# Task 5: Persist Bronze to MySQL (Mapped per Crawl Result)
 # --------------------------------------------------------------------------
 @task
-def update_checkpoint(result_payload: dict, **context) -> dict:
-    """5. Cập nhật Checkpoint State, Health State và danh sách listing đã thấy."""
+def persist_bronze_mysql(result_payload: dict, **context) -> dict:
+    """5. Đọc Bronze Artifacts (listings.json, details.json) và persist vào MySQL Database qua Use Case."""
     source = result_payload.get("source", "unknown")
     target_id = result_payload.get("target_id", "default")
+    run_id = result_payload.get("run_id") or result_payload.get("crawl_run_id")
+    bronze_path = result_payload.get("bronze_path")
+    action = result_payload.get("action", "UNKNOWN")
+    crawl_status = result_payload.get("crawl_status", "unknown")
+
+    logger.info("=" * 60)
+    logger.info("STAGE 5: PERSIST BRONZE TO MYSQL")
+    logger.info("Source: %s | Target ID: %s | Run ID: %s | Bronze Path: %s", source, target_id, run_id, bronze_path)
+    logger.info("=" * 60)
+
+    # 1. Bỏ qua persist nếu không có dữ liệu Bronze hợp lệ
+    if action == "SKIPPED" or not bronze_path or crawl_status != CrawlStatus.SUCCESS.value:
+        logger.info("Bỏ qua persist MySQL cho %s/%s (action=%s, status=%s, bronze_path=%s)", source, target_id, action, crawl_status, bronze_path)
+        return {
+            "source": source,
+            "target_id": target_id,
+            "run_id": run_id,
+            "status": "SKIPPED_NO_DATA",
+            "posts_created": 0,
+            "posts_existing": 0,
+            "observations_inserted": 0,
+            "technical_duplicates": 0,
+            "crawl_result": result_payload,
+        }
+
+    # 2. Khởi tạo và nạp BronzeObservation
+    from roombeacon_crawler.application.persistence.persist_observations import PersistBronzeObservationsUseCase
+    from roombeacon_crawler.infrastructure.mysql.connection import MySQLConnectionFactory
+    from roombeacon_crawler.infrastructure.mysql.repositories.observation_repository import MySQLObservationRepository
+    from roombeacon_crawler.infrastructure.mysql.repositories.platform_repository import MySQLPlatformRepository
+    from roombeacon_crawler.infrastructure.mysql.repositories.post_children_repository import MySQLPostChildrenRepository
+    from roombeacon_crawler.infrastructure.mysql.repositories.rental_post_repository import MySQLRentalPostRepository
+    from roombeacon_crawler.infrastructure.mysql.schema import ensure_mysql_schema
+    from roombeacon_crawler.infrastructure.mysql.transaction import MySQLTransactionManager
+    from roombeacon_crawler.mappers.bronze_observation_loader import BronzeObservationLoader
+
+    try:
+        ensure_mysql_schema()
+    except Exception as exc:
+        logger.warning("Không thể ensure schema tự động: %s", exc)
+
+    observations = BronzeObservationLoader.load_from_bronze_dir(bronze_path, run_id=run_id)
+    if not observations:
+        logger.info("Không tìm thấy observation nào tại %s -> SKIPPED_NO_DATA", bronze_path)
+        return {
+            "source": source,
+            "target_id": target_id,
+            "run_id": run_id,
+            "status": "SKIPPED_NO_DATA",
+            "posts_created": 0,
+            "posts_existing": 0,
+            "observations_inserted": 0,
+            "technical_duplicates": 0,
+            "crawl_result": result_payload,
+        }
+
+    tx_mgr = MySQLTransactionManager()
+    use_case = PersistBronzeObservationsUseCase(
+        platform_repo=MySQLPlatformRepository(connection=None),
+        rental_post_repo=MySQLRentalPostRepository(connection=None),
+        observation_repo=MySQLObservationRepository(connection=None),
+        children_repo=MySQLPostChildrenRepository(connection=None),
+        transaction_mgr=tx_mgr,
+    )
+
+    try:
+        import_res = use_case.execute(observations)
+        logger.info("=" * 60)
+        logger.info("MYSQL BRONZE PERSISTENCE")
+        logger.info("=" * 60)
+        logger.info("Source                 : %s", source)
+        logger.info("Target                 : %s", target_id)
+        logger.info("Run ID                 : %s", run_id)
+        logger.info("Bronze Path            : %s", bronze_path)
+        logger.info("Observations Read      : %d", len(observations))
+        logger.info("Posts Created          : %d", import_res.posts_created)
+        logger.info("Posts Existing         : %d", import_res.posts_existing)
+        logger.info("Observations Inserted  : %d", import_res.observations_inserted)
+        logger.info("Technical Duplicates   : %d", import_res.technical_duplicates)
+        logger.info("Status                 : SUCCESS")
+        logger.info("=" * 60)
+        return {
+            "source": source,
+            "target_id": target_id,
+            "run_id": run_id,
+            "status": "SUCCESS",
+            "posts_created": import_res.posts_created,
+            "posts_existing": import_res.posts_existing,
+            "observations_inserted": import_res.observations_inserted,
+            "technical_duplicates": import_res.technical_duplicates,
+            "crawl_result": result_payload,
+        }
+    except Exception as exc:
+        logger.exception("LỖI KHI PERSIST BRONZE MYSQL CHO %s/%s: %s", source, target_id, exc)
+        raise AirflowException(f"MySQL persistence failed for {source}/{target_id} (run_id={run_id}): {exc}") from exc
+
+
+# --------------------------------------------------------------------------
+# Task 6: Update Checkpoint (Mapped per Persist Result)
+# --------------------------------------------------------------------------
+@task
+def update_checkpoint(persist_payload: dict = None, result_payload: dict = None, **context) -> dict:
+    """6. Cập nhật Checkpoint State, Health State sau khi đã cào và persist an toàn."""
+    payload = persist_payload or result_payload or {}
+    result_payload = payload.get("crawl_result") or payload
+    source = payload.get("source") or result_payload.get("source", "unknown")
+    target_id = payload.get("target_id") or result_payload.get("target_id", "default")
     crawl_status = result_payload.get("crawl_status", "unknown")
     plan_dict = result_payload.get("plan", {})
     action = result_payload.get("action", "UNKNOWN")
+    persist_status = payload.get("status", "UNKNOWN")
 
     logger.info("=" * 60)
-    logger.info("STAGE 5: UPDATE CHECKPOINT")
-    logger.info("Source: %s | Target ID: %s | Status: %s | Action: %s", source, target_id, crawl_status, action)
+    logger.info("STAGE 6: UPDATE CHECKPOINT")
+    logger.info("Source: %s | Target ID: %s | Status: %s | Action: %s | Persist: %s", source, target_id, crawl_status, action, persist_status)
     logger.info("=" * 60)
 
     repo = LocalCrawlStateRepository()
@@ -617,21 +726,46 @@ def update_checkpoint(result_payload: dict, **context) -> dict:
 
 
 # --------------------------------------------------------------------------
-# Task 6: Summarize Run (Finalization)
+# Task 7: Refresh DuckDB Analytics (Once per DAG Run)
+# --------------------------------------------------------------------------
+@task(trigger_rule=TriggerRule.ALL_DONE, pool="duckdb_analytics_pool")
+def refresh_duckdb_analytics(checkpoints: list[dict], **context) -> dict:
+    """7. Khởi tạo/cập nhật Analytical Views trong DuckDB từ dữ liệu MySQL Bronze (READ_ONLY)."""
+    logger.info("=" * 60)
+    logger.info("STAGE 7: REFRESH DUCKDB ANALYTICS")
+    logger.info("=" * 60)
+
+    from analytics.duckdb.bootstrap import bootstrap_analytics
+
+    try:
+        bootstrap_analytics()
+        logger.info("DuckDB Analytics views refreshed successfully.")
+        return {"status": "SUCCESS"}
+    except Exception as exc:
+        logger.exception("Lỗi khi refresh DuckDB Analytics: %s", exc)
+        return {"status": "FAILED", "error": str(exc)}
+
+
+# --------------------------------------------------------------------------
+# Task 8: Summarize Run (Finalization)
 # --------------------------------------------------------------------------
 @task(trigger_rule=TriggerRule.ALL_DONE)
 def summarize_run(
-    plans: list[dict],
-    qualifications: list[dict],
-    crawl_results: list[dict],
-    checkpoints: list[dict],
+    plans: list[dict] = None,
+    qualifications: list[dict] = None,
+    crawl_results: list[dict] = None,
+    persistence_results: list[dict] = None,
+    checkpoints: list[dict] = None,
+    analytics_summary: dict = None,
     **context,
 ) -> dict:
-    """6. Tổng hợp số liệu thống kê toàn diện của toàn bộ fleet sau phiên cào."""
+    """8. Tổng hợp số liệu thống kê toàn diện của toàn bộ fleet sau phiên cào."""
     plans = plans or []
     qualifications = qualifications or []
     crawl_results = crawl_results or []
+    persistence_results = persistence_results or []
     checkpoints = checkpoints or []
+    analytics_summary = analytics_summary or {}
 
     targets_due = len(plans)
     targets_deferred_cooldown = sum(1 for q in qualifications if q.get("qualification_status") == "COOLDOWN_ACTIVE")
@@ -669,15 +803,21 @@ def summarize_run(
     )
 
     records_created = sum(r.get("records_created", 0) for r in crawl_results)
+    observations_written = sum(r.get("observations_written", 0) for r in crawl_results)
     details_created = sum(r.get("details_success", 0) for r in crawl_results)
+
+    mysql_posts_created = sum(p.get("posts_created", 0) for p in persistence_results)
+    mysql_posts_existing = sum(p.get("posts_existing", 0) for p in persistence_results)
+    mysql_obs_inserted = sum(p.get("observations_inserted", 0) for p in persistence_results)
+    mysql_tech_duplicates = sum(p.get("technical_duplicates", 0) for p in persistence_results)
 
     target_states_persisted = sum(1 for c in checkpoints if c.get("target_state_persisted"))
     success_checkpoints_advanced = sum(1 for c in checkpoints if c.get("success_checkpoint_advanced"))
     health_states_updated = sum(1 for c in checkpoints if c.get("health_state_updated"))
 
     logger.info("=" * 60)
-    logger.info("ROOMBEACON AUTOMATED CRAWL RUN SUMMARY")
-    logger.info("-" * 60)
+    logger.info("ROOMBEACON INGESTION SUMMARY")
+    logger.info("=" * 60)
     logger.info("Targets due                  : %d", targets_due)
     logger.info("Targets executable           : %d", targets_executable)
     logger.info("Targets deferred cooldown    : %d", targets_deferred_cooldown)
@@ -690,8 +830,17 @@ def summarize_run(
     logger.info("Crawl success                : %d", crawl_success)
     logger.info("Access challenge             : %d", access_challenge)
     logger.info("Technical failure            : %d", technical_failure)
-    logger.info("Records created              : %d", records_created)
+    logger.info("Records created (new)        : %d", records_created)
+    logger.info("Observations written (Bronze): %d", observations_written)
     logger.info("Details created              : %d", details_created)
+    logger.info("-" * 60)
+    logger.info("MYSQL PERSISTENCE SUMMARY:")
+    logger.info("Posts Created                : %d", mysql_posts_created)
+    logger.info("Posts Existing               : %d", mysql_posts_existing)
+    logger.info("Observations Inserted        : %d", mysql_obs_inserted)
+    logger.info("Technical Duplicates         : %d", mysql_tech_duplicates)
+    logger.info("-" * 60)
+    logger.info("CHECKPOINT & HEALTH:")
     logger.info("Target states persisted      : %d", target_states_persisted)
     logger.info("Success checkpoints advanced : %d", success_checkpoints_advanced)
     logger.info("Health states updated        : %d", health_states_updated)
@@ -700,31 +849,42 @@ def summarize_run(
     for r in crawl_results:
         src = r.get("source", "unknown")
         recs = r.get("records_created", 0)
+        obs_w = r.get("observations_written", 0)
         seen_cnt = r.get("records_seen", 0)
         new_cnt = r.get("records_new", 0)
         known_cnt = r.get("records_known", 0)
-        b_path = "CREATED" if r.get("bronze_path") else "NONE"
-        if src == "nhatot":
-            logger.info("NhaTot")
-            logger.info("  Mode        : FORWARD_ONLY_INCREMENTAL")
-            logger.info("  Seed Pages  : %d", r.get("pages_attempted", 1))
-            logger.info("  Browser     : SUCCESS")
-            logger.info("  New         : %d", new_cnt)
-            logger.info("  Known       : %d", known_cnt)
-            logger.info("  Bronze      : %s", b_path)
-            logger.info("  Stop        : %s", r.get("stop_reason") or "FORWARD_SCAN_COMPLETE")
-            logger.info("  Historical  : UNAVAILABLE")
-            logger.info("  Forward     : ACTIVE")
-        elif src == "phongtro123":
-            logger.info("PhongTro123")
-            logger.info("  Historical  : IN_PROGRESS")
-            logger.info("  Next Page   : %s", r.get("bootstrap_next_page") or "SOURCE_END")
-            logger.info("  Records     : %d", recs)
-        elif src == "nhatrovn":
-            logger.info("NhaTroVN")
-            logger.info("  Historical  : COMPLETE")
-            logger.info("  Mode        : INCREMENTAL")
-            logger.info("  Records     : %d", recs)
+        b_path = r.get("bronze_path") or "NONE"
+
+        p_res = next((p for p in persistence_results if p.get("source") == src), {})
+        m_status = p_res.get("status", "NONE")
+        m_p_created = p_res.get("posts_created", 0)
+        m_p_exist = p_res.get("posts_existing", 0)
+        m_obs_ins = p_res.get("observations_inserted", 0)
+        m_dups = p_res.get("technical_duplicates", 0)
+
+        logger.info("-" * 40)
+        logger.info("Source: %s", src)
+        logger.info("Crawl")
+        logger.info("  Mode                 : %s", r.get("plan", {}).get("mode", "UNKNOWN"))
+        logger.info("  Status               : %s", r.get("crawl_status", "UNKNOWN"))
+        logger.info("  Seen                 : %d", seen_cnt)
+        logger.info("  New                  : %d", new_cnt)
+        logger.info("  Known                : %d", known_cnt)
+        logger.info("Bronze")
+        logger.info("  Observations Written : %d", obs_w)
+        logger.info("  Path                 : %s", b_path)
+        logger.info("MySQL")
+        logger.info("  Status               : %s", m_status)
+        logger.info("  Posts Created        : %d", m_p_created)
+        logger.info("  Posts Existing       : %d", m_p_exist)
+        logger.info("  Observations Inserted: %d", m_obs_ins)
+        logger.info("  Technical Duplicates : %d", m_dups)
+        logger.info("Checkpoint")
+        logger.info("  Persisted            : YES" if target_states_persisted else "NO")
+
+    logger.info("=" * 60)
+    logger.info("DuckDB")
+    logger.info("  Refresh              : %s", analytics_summary.get("status", "UNKNOWN") if analytics_summary else "UNKNOWN")
     logger.info("=" * 60)
 
     return {
@@ -741,11 +901,17 @@ def summarize_run(
         "access_challenge": access_challenge,
         "technical_failure": technical_failure,
         "records_created": records_created,
+        "observations_written": observations_written,
         "details_created": details_created,
+        "mysql_posts_created": mysql_posts_created,
+        "mysql_posts_existing": mysql_posts_existing,
+        "mysql_observations_inserted": mysql_obs_inserted,
+        "mysql_technical_duplicates": mysql_tech_duplicates,
         "target_states_persisted": target_states_persisted,
         "success_checkpoints_advanced": success_checkpoints_advanced,
         "health_states_updated": health_states_updated,
         "checkpoints_updated": sum(1 for c in checkpoints if c.get("checkpoint_updated") or c.get("target_state_persisted")),
+        "duckdb_refresh": analytics_summary.get("status", "UNKNOWN") if analytics_summary else "UNKNOWN",
     }
 
 
@@ -811,15 +977,23 @@ def roombeacon_crawler():
     # 4. Thực thi cào dữ liệu theo plan đã được thẩm định (Dynamic Mapping)
     crawl_results = execute_crawl.expand(qual_payload=qualifications)
 
-    # 5. Cập nhật Checkpoint State và danh sách tin đã thấy (Dynamic Mapping)
-    checkpoints = update_checkpoint.expand(result_payload=crawl_results)
+    # 5. Persist Bronze Observations vào MySQL Database (Dynamic Mapping)
+    persistence_results = persist_bronze_mysql.expand(result_payload=crawl_results)
 
-    # 6. Tổng kết toàn diện phiên chạy
+    # 6. Cập nhật Checkpoint State và danh sách tin đã thấy (Dynamic Mapping)
+    checkpoints = update_checkpoint.expand(persist_payload=persistence_results)
+
+    # 7. Khởi tạo/cập nhật DuckDB Analytics views một lần cho toàn bộ run
+    analytics_summary = refresh_duckdb_analytics(checkpoints=checkpoints)
+
+    # 8. Tổng kết toàn diện phiên chạy
     summarize_run(
         plans=plans,
         qualifications=qualifications,
         crawl_results=crawl_results,
+        persistence_results=persistence_results,
         checkpoints=checkpoints,
+        analytics_summary=analytics_summary,
     )
 
 

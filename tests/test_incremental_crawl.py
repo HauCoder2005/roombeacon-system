@@ -359,9 +359,9 @@ class TestIncrementalCrawlAndKnownRegionStop(unittest.TestCase):
         self.assertEqual(result_2.pages_attempted, 3)
         self.assertEqual(result_2.stop_reason, "KNOWN_REGION_REACHED")
         self.assertEqual(result_2.records_created, 0)
-        self.assertEqual(len(records_2), 0)
-        self.assertIsNone(result_2.bronze_path)  # Không ghi file rỗng vào Bronze
-        self.assertIsNotNone(result_2.manifest_path)  # Nhưng vẫn lưu Manifest
+        self.assertEqual(result_2.observations_written, 40)
+        self.assertIsNotNone(result_2.bronze_path)
+        self.assertIsNotNone(result_2.manifest_path)
 
     @patch("roombeacon_crawler.pipeline.listing_crawl.ListingCrawlPipeline.execute")
     def test_duplicate_listing_id_within_same_page_or_consecutive_pages(
@@ -523,7 +523,7 @@ class TestIncrementalCrawlAndKnownRegionStop(unittest.TestCase):
         self.assertEqual(result.stop_reason, "KNOWN_REGION_REACHED")
         # Chỉ emit đúng 5 record mới (105, 104, 103, 102, 101)
         self.assertEqual(result.records_created, 5)
-        self.assertEqual(len(records), 5)
+        self.assertEqual(result.observations_written, len(records))
         self.assertEqual(sorted(result.new_listing_ids), ["101", "102", "103", "104", "105"])
         self.assertIsNotNone(result.bronze_path)
 
@@ -736,7 +736,8 @@ class TestIncrementalCrawlAndKnownRegionStop(unittest.TestCase):
         self.assertEqual(result_4.pages_attempted, 2)
         self.assertEqual(result_4.stop_reason, "KNOWN_REGION_REACHED")
         self.assertEqual(result_4.records_created, 0)
-        self.assertIsNone(result_4.bronze_path)
+        self.assertEqual(result_4.observations_written, 20)
+        self.assertIsNotNone(result_4.bronze_path)
 
     @patch("roombeacon_crawler.pipeline.listing_crawl.ListingCrawlPipeline.execute")
     def test_max_records_reached_does_not_mark_bootstrap_completed(

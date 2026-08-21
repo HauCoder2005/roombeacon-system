@@ -26,6 +26,7 @@ class CrawlRunResult:
     details_success: int = 0
     details_failed: int = 0
     records_created: int = 0
+    observations_written: int = 0
     duplicates_skipped: int = 0
     records_seen: int = 0
     records_new: int = 0

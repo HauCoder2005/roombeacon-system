@@ -34,7 +34,7 @@ services:
       - "127.0.0.1:${BRONZE_MYSQL_HOST_PORT}:3306"
 
     volumes:
-      - "${BRONZE_MYSQL_VOLUME}:/var/lib/mysql"
+      - "${ROOMBEACON_DATA_DIR:-./data}/mysql/bronze:/var/lib/mysql"
 
     healthcheck:
       test:
@@ -70,7 +70,7 @@ services:
       - "127.0.0.1:${AIRFLOW_MYSQL_HOST_PORT}:3306"
 
     volumes:
-      - "${AIRFLOW_MYSQL_VOLUME}:/var/lib/mysql"
+      - "${ROOMBEACON_DATA_DIR:-./data}/mysql/airflow:/var/lib/mysql"
 
     healthcheck:
       test:
@@ -103,7 +103,7 @@ services:
       - "127.0.0.1:${MINIO_CONSOLE_PORT}:9001"
 
     volumes:
-      - "${MINIO_VOLUME}:/data"
+      - "${ROOMBEACON_DATA_DIR:-./data}/minio:/data"
 
     healthcheck:
       test:
@@ -275,6 +275,7 @@ services:
       - "-c"
       - >
         airflow db migrate &&
+        airflow pools set duckdb_analytics_pool 1 "Single writer pool for DuckDB analytics" &&
         echo "Airflow metadata database migration completed successfully."
 
     restart: "no"
@@ -545,15 +546,18 @@ networks:
 
 
 # ==============================================================
-# VOLUMES
+# VOLUMES (LEGACY / NOT ACTIVE - PRESERVED FOR ROLLBACK SAFETY)
 # ==============================================================
 
 volumes:
   roombeacon-mysql-bronze-data:
     name: "${BRONZE_MYSQL_VOLUME}"
+    external: true
 
   roombeacon-mysql-airflow-data:
     name: "${AIRFLOW_MYSQL_VOLUME}"
+    external: true
 
   roombeacon-minio-data:
     name: "${MINIO_VOLUME}"
+    external: true

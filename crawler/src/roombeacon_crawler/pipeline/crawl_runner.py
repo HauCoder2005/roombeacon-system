@@ -566,7 +566,6 @@ class CrawlRunner:
             page_records_count = len(cards)
 
             # Phân loại danh sách tin: NEW vs KNOWN (đã thấy trong lịch sử hoặc trong chính run này)
-            page_new_cards: list[ListingCardRaw] = []
             page_new_count = 0
             page_known_count = 0
 
@@ -575,61 +574,65 @@ class CrawlRunner:
                 if lid not in observed_listing_ids:
                     observed_listing_ids.append(lid)
 
-                if lid in known_seen_ids or lid in seen_in_current_run:
+                if lid in seen_in_current_run:
+                    # Trùng lặp kỹ thuật trong cùng một run (ví dụ phân trang gối đầu) -> bỏ qua
                     page_known_count += 1
                     duplicates_skipped += 1
-                else:
-                    page_new_count += 1
-                    seen_in_current_run.add(lid)
-                    new_listing_ids.append(lid)
-                    page_new_cards.append(card)
+                    continue
 
-            # Xử lý các tin cần phát sinh Bronze và Detail Crawl (chỉ emit các tin mới/chưa trùng lặp trong run này)
-            cards_to_emit = page_new_cards
-
-            for card in cards_to_emit:
+                seen_in_current_run.add(lid)
                 card.crawl_run_id = run_id
-                detail_target = CrawlTarget(
-                    url=card.detail_url,
-                    source=self.adapter.SOURCE_NAME,
-                    target_type=CrawlTargetType.DETAIL_PAGE,
-                )
 
-                if crawl_details:
-                    if (
-                        max_details_per_run is not None
-                        and details_crawled_count >= max_details_per_run
-                    ):
-                        logger.info(
-                            "Đã đạt giới hạn max_details_per_run (%d). Bỏ qua các detail còn lại.",
-                            max_details_per_run,
+                if lid not in known_seen_ids:
+                    # Tin mới (NEW)
+                    page_new_count += 1
+                    new_listing_ids.append(lid)
+
+                    if crawl_details:
+                        if (
+                            max_details_per_run is not None
+                            and details_crawled_count >= max_details_per_run
+                        ):
+                            logger.info(
+                                "Đã đạt giới hạn max_details_per_run (%d). Bỏ qua các detail còn lại.",
+                                max_details_per_run,
+                            )
+                            record = BronzeMapper.map(card=card, detail=None, run_id=run_id)
+                            all_bronze_records.append(record)
+                            continue
+
+                        detail_target = CrawlTarget(
+                            url=card.detail_url,
+                            source=self.adapter.SOURCE_NAME,
+                            target_type=CrawlTargetType.DETAIL_PAGE,
                         )
-                        record = BronzeMapper.map(card=card, detail=None, run_id=run_id)
-                        all_bronze_records.append(record)
-                        continue
-
-                    detail_bronze, detail_raw, detail_meta = (
-                        await self.detail_pipeline.execute(
-                            target=detail_target,
-                            card=card,
-                            run_id=run_id,
+                        detail_bronze, detail_raw, detail_meta = (
+                            await self.detail_pipeline.execute(
+                                target=detail_target,
+                                card=card,
+                                run_id=run_id,
+                            )
                         )
-                    )
-                    all_metadata.append(detail_meta)
-                    details_crawled_count += 1
+                        all_metadata.append(detail_meta)
+                        details_crawled_count += 1
 
-                    if detail_raw is not None:
-                        details_success += 1
-                        all_detail_records.append(detail_raw)
-                    else:
-                        details_failed += 1
+                        if detail_raw is not None:
+                            details_success += 1
+                            all_detail_records.append(detail_raw)
+                        else:
+                            details_failed += 1
 
-                    if detail_bronze is not None:
-                        all_bronze_records.append(detail_bronze)
+                        if detail_bronze is not None:
+                            all_bronze_records.append(detail_bronze)
+                        else:
+                            record = BronzeMapper.map(card=card, detail=None, run_id=run_id)
+                            all_bronze_records.append(record)
                     else:
                         record = BronzeMapper.map(card=card, detail=None, run_id=run_id)
                         all_bronze_records.append(record)
                 else:
+                    # Tin đã biết trong lịch sử (KNOWN) -> không cào detail để tiết kiệm mạng nhưng VẪN ghi nhận vào Bronze Observation
+                    page_known_count += 1
                     record = BronzeMapper.map(card=card, detail=None, run_id=run_id)
                     all_bronze_records.append(record)
 
@@ -810,7 +813,8 @@ class CrawlRunner:
             pages_failed=pages_failed,
             details_success=details_success,
             details_failed=details_failed,
-            records_created=len(all_bronze_records),
+            records_created=len(new_listing_ids),
+            observations_written=len(all_bronze_records),
             duplicates_skipped=duplicates_skipped,
             records_seen=records_seen,
             records_new=records_new,
