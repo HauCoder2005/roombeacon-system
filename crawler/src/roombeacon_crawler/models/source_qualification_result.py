@@ -12,6 +12,7 @@ class RobotsQualificationStatus(str, Enum):
     ALLOWED = "ALLOWED"
     DENIED = "DENIED"
     UNAVAILABLE = "UNAVAILABLE"
+    UNREACHABLE = "UNREACHABLE"
     ERROR = "ERROR"
     SKIPPED = "SKIPPED"
 
@@ -41,7 +42,11 @@ class SourceQualificationResult:
     adapter_status: AdapterStatus
     overall_status: QualificationOverallStatus
     source_name: str | None = None
+    access_profile: str | None = None
+    capabilities: dict | None = None
     reason: str | None = None
+    failure_reason: str | None = None
+    http_status: int | None = None
     checked_at: str = ""
 
     def to_dict(self) -> dict:
@@ -61,6 +66,7 @@ class SourceQualificationResult:
             f"URL Safety : {self.url_status.value}",
             f"Robots     : {self.robots_status.value}",
             f"Adapter    : {self.adapter_status.value}" + (f" ({self.source_name})" if self.source_name else ""),
+            f"Access Profile: {self.access_profile or 'STANDARD_PAGINATION'}",
             f"Overall    : {self.overall_status.value}",
         ]
         if self.reason:

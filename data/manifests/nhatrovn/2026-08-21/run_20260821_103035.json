@@ -1,0 +1,41 @@
+{
+  "run_id": "run_20260821_103035",
+  "source": "nhatrovn",
+  "started_at": "2026-08-21T10:30:35.247015+00:00",
+  "finished_at": "2026-08-21T10:30:39.253269+00:00",
+  "target_id": "default",
+  "mode": "BOOTSTRAP_FULL",
+  "target_url": "https://nhatrovn.vn/cho-thue-phong-tro/ho-chi-minh/",
+  "status": "success",
+  "stop_reason": "SOURCE_END",
+  "failure_reason": null,
+  "max_pages": 1,
+  "max_records": 10,
+  "crawl_details": true,
+  "pages_attempted": 1,
+  "pages_success": 1,
+  "pages_failed": 0,
+  "details_success": 2,
+  "details_failed": 0,
+  "records_created": 3,
+  "duplicates_skipped": 0,
+  "records_seen": 3,
+  "records_new": 3,
+  "records_known": 0,
+  "records_changed": 0,
+  "known_pages_streak_at_stop": 0,
+  "observed_listing_ids": [
+    "6a83dc4ccb235d6c3c150348",
+    "7b94ed5ddc346e7d4d261459",
+    "8c05fe6eeb457f8e5e372560"
+  ],
+  "new_listing_ids": [
+    "6a83dc4ccb235d6c3c150348",
+    "7b94ed5ddc346e7d4d261459",
+    "8c05fe6eeb457f8e5e372560"
+  ],
+  "errors": [],
+  "manifest_path": "/home/codeser/Data/projects/roombeacon/data/manifests/nhatrovn/2026-08-21/run_20260821_103035.json",
+  "bronze_path": "/home/codeser/Data/projects/roombeacon/data/bronze/nhatrovn/2026-08-21/run_20260821_103035",
+  "crawl_mode": "BOOTSTRAP_FULL"
+}

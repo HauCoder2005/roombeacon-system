@@ -1,0 +1,13 @@
+{
+  "source": "muaban",
+  "target_id": "hcm_phongtro",
+  "last_outcome": "ACCESS_CHALLENGE",
+  "last_failure_reason": "Cloudflare challenge / Access Denied",
+  "consecutive_failures": 3,
+  "last_checked_at": "2026-08-21T15:31:46.163274+00:00",
+  "last_failure_at": "2026-08-21T15:31:46.163274+00:00",
+  "last_access_success_at": null,
+  "cooldown_until": "2026-08-21T16:31:46.163274+00:00",
+  "last_http_status": 403,
+  "updated_at": "2026-08-21T15:31:46.163274+00:00"
+}

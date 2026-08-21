@@ -1,0 +1,10 @@
+{
+  "source": "batdongsan",
+  "last_discovery_at": "2026-08-21T13:16:53.750778+00:00",
+  "last_discovery_status": "partial_success",
+  "last_discovered_count": 0,
+  "last_new_count": 0,
+  "last_changed_count": 0,
+  "last_sitemap_lastmod": null,
+  "last_error": "Fetch failed (HTTP 403): https://batdongsan.com.vn/sitemap.xml; Fetch failed (HTTP 403): https://batdongsan.com.vn/sitemaps/cho-thue-nha-tro-phong-tro.xml"
+}

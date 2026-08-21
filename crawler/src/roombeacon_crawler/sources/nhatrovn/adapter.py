@@ -19,12 +19,24 @@ from roombeacon_crawler.sources.nhatrovn.parsers.listing_parser import (
 )
 
 
+from roombeacon_crawler.enums.source_access_profile import SourceAccessProfile
+from roombeacon_crawler.models.source_capabilities import SourceCapabilities
+
+
 class NhatroVNSourceAdapter(BaseSourceAdapter):
     """Source Adapter cho website Nhà Trọ Việt Nam (nhatrovn.vn)."""
 
     SOURCE_NAME = "nhatrovn"
     DOMAINS = ("nhatrovn.vn", "www.nhatrovn.vn")
     DEFAULT_BASE_URL = "https://nhatrovn.vn/cho-thue-phong-tro/"
+    CAPABILITIES = SourceCapabilities(
+        access_profile=SourceAccessProfile.STANDARD_PAGINATION,
+        supports_pagination=True,
+        supports_sitemap_discovery=False,
+        preferred_fetch_strategy=FetchStrategy.HTTP,
+        robots_required=True,
+        detail_fetch_supported=True,
+    )
 
     def __init__(
         self,

@@ -117,7 +117,7 @@ class NhatroVNListingParser:
 
     def _extract_listing_id(self, href: str, detail_url: str, element: DOMNode) -> str | None:
         """Trích xuất ID tin đăng từ URL hoặc thuộc tính."""
-        match = re.search(r"/chi-tiet/([a-zA-Z0-9]+)/?", detail_url or href)
+        match = re.search(r"/chi-tiet/([^/?#]+)/?", detail_url or href)
         if match:
             return match.group(1)
 

@@ -13,6 +13,10 @@ from roombeacon_crawler.enums.crawl_status import CrawlStatus
 from roombeacon_crawler.models.crawl_plan import CrawlPlan
 from roombeacon_crawler.models.crawl_seed import CrawlSeed
 from roombeacon_crawler.models.crawl_target_state import CrawlTargetState
+from roombeacon_crawler.models.source_health_state import (
+    SourceHealthOutcome,
+    SourceHealthState,
+)
 from roombeacon_crawler.models.source_qualification_result import (
     QualificationOverallStatus,
     RobotsQualificationStatus,
@@ -22,6 +26,9 @@ from roombeacon_crawler.pipeline.crawl_runner import CrawlRunner
 from roombeacon_crawler.policies.robots_policy import RobotsPolicy
 from roombeacon_crawler.repositories.local_crawl_state_repository import (
     LocalCrawlStateRepository,
+)
+from roombeacon_crawler.repositories.local_source_health_repository import (
+    LocalSourceHealthRepository,
 )
 from roombeacon_crawler.services.crawl_planner import CrawlPlanner
 from roombeacon_crawler.services.source_qualifier import SourceQualifier
@@ -116,15 +123,51 @@ def qualify_target(plan: dict, **context) -> dict:
     source = plan.get("source", "unknown")
     target_id = plan.get("target_id", "default")
     url = plan.get("target_url", "")
+    now = datetime.now(timezone.utc)
 
     logger.info("=" * 60)
     logger.info("STAGE 3: QUALIFY TARGET")
     logger.info("Source: %s | Target ID: %s", source, target_id)
     logger.info("URL   : %s", url)
     logger.info("Mode  : %s | Reason: %s", plan.get("mode"), plan.get("reason"))
+
+    adapter_cls = source_registry.resolve_adapter_class_for_url(url)
+    access_profile = (
+        adapter_cls.CAPABILITIES.access_profile.value
+        if (adapter_cls and hasattr(adapter_cls, "CAPABILITIES"))
+        else "STANDARD_PAGINATION"
+    )
+    logger.info("Access Profile : %s", access_profile)
     logger.info("=" * 60)
 
-    # 1. URL Safety & SSRF Check
+    # 1. Source Health Gate: Kiểm tra Cooldown trước khi gửi bất kỳ request mạng nào
+    health_repo = LocalSourceHealthRepository()
+    health_state = health_repo.get_health(source, target_id)
+    if health_state and health_state.is_in_cooldown(now):
+        logger.info("=" * 60)
+        logger.info("SOURCE HEALTH GATE")
+        logger.info("Source               : %s", source)
+        logger.info("Target               : %s", target_id)
+        logger.info("Last outcome         : %s", health_state.last_outcome.value)
+        logger.info("Consecutive failures : %d", health_state.consecutive_failures)
+        logger.info("Cooldown until       : %s", health_state.cooldown_until)
+        logger.info("Decision             : DEFER")
+        logger.info("Reason               : COOLDOWN_ACTIVE")
+        logger.info("=" * 60)
+        return {
+            "plan": plan,
+            "source": source,
+            "target_id": target_id,
+            "target_url": url,
+            "access_profile": access_profile,
+            "qualification_status": "COOLDOWN_ACTIVE",
+            "robots_status": "SKIPPED",
+            "action": "DEFERRED",
+            "reason": f"Target in cooldown until {health_state.cooldown_until}",
+            "is_cooldown": True,
+        }
+
+    # 2. URL Safety & SSRF Check
     is_valid, error_reason = URLValidator.validate(url)
     if not is_valid:
         logger.error("URL KHÔNG HỢP LỆ HOẶC BỊ TỪ CHỐI BẢO MẬT: %s", error_reason)
@@ -133,42 +176,94 @@ def qualify_target(plan: dict, **context) -> dict:
             "source": source,
             "target_id": target_id,
             "target_url": url,
+            "access_profile": access_profile,
             "qualification_status": "INVALID_URL",
             "robots_status": "SKIPPED",
             "action": "SKIPPED",
             "reason": f"Invalid URL: {error_reason}",
         }
 
-    # 2. Robots.txt Preflight Check
+    # 3. Robots.txt Preflight Check
     robots_policy = RobotsPolicy()
-    decision, robots_url = robots_policy.evaluate(url)
-    logger.info("Robots URL     : %s", robots_url)
-    logger.info("Robots Decision: %s", decision)
+    eval_res = robots_policy.evaluate(url)
+    if isinstance(eval_res, tuple) and not hasattr(eval_res, "decision"):
+        decision = eval_res[0]
+        robots_url = eval_res[1] if len(eval_res) > 1 else ""
+        http_status = None
+        matched_rule = "None"
+    else:
+        decision = getattr(eval_res, "decision", "ALLOWED")
+        robots_url = getattr(eval_res, "robots_url", "")
+        http_status = getattr(eval_res, "http_status", None)
+        matched_rule = getattr(eval_res, "matched_rule", "None")
 
     if decision == "DENIED":
-        logger.warning("CRAWL SKIP: Robots policy từ chối URL: %s", url)
+        logger.warning("CRAWL SKIP: Robots policy từ chối URL: %s (%s)", url, matched_rule)
         return {
             "plan": plan,
             "source": source,
             "target_id": target_id,
             "target_url": url,
+            "access_profile": access_profile,
             "qualification_status": "DENIED_BY_ROBOTS",
             "robots_status": "DENIED",
             "action": "SKIPPED",
-            "reason": "Robots.txt Disallow rule matched",
+            "failure_reason": "ROBOTS_DENIED",
+            "reason": f"Robots.txt Disallow rule matched: {matched_rule}",
         }
 
-    if decision == "ERROR":
-        logger.warning("Robots check trả về lỗi mạng cho %s", url)
+    if decision in ("UNREACHABLE", "ERROR"):
+        domain = ""
+        try:
+            from urllib.parse import urlparse
+            domain = (urlparse(url).hostname or "").lower()
+        except Exception:
+            pass
+        err_details = robots_policy.get_error_details(domain) if domain and hasattr(robots_policy, "get_error_details") else None
+        if err_details:
+            failure_reason = err_details.get("failure_type") or ("ROBOTS_UNREACHABLE" if decision == "UNREACHABLE" else "ROBOTS_FETCH_ERROR")
+            http_status = err_details.get("status_code", http_status)
+        else:
+            failure_reason = "ROBOTS_UNREACHABLE" if decision == "UNREACHABLE" else "ROBOTS_FETCH_ERROR"
+
+        logger.warning(
+            "Robots check trả về lỗi (%s, HTTP %s) cho %s",
+            failure_reason,
+            http_status,
+            url,
+        )
         return {
             "plan": plan,
             "source": source,
             "target_id": target_id,
             "target_url": url,
+            "access_profile": access_profile,
             "qualification_status": "CHECK_FAILED",
-            "robots_status": "ERROR",
+            "failure_reason": failure_reason,
+            "http_status": http_status,
+            "robots_status": "UNREACHABLE" if decision == "UNREACHABLE" else "ERROR",
             "action": "SKIPPED",
-            "reason": "Robots check network failure",
+            "reason": f"Robots check failed: {failure_reason} (HTTP {http_status})",
+        }
+
+    if decision == "UNAVAILABLE":
+        # RFC 9309 Section 2.3.1.2: Client Error (4xx) trên robots.txt -> không có luật cấm (Explicit Denial: NO)
+        # Tiếp tục chuyển tiếp sang bước cào nội dung
+        logger.info(
+            "Robots endpoint UNAVAILABLE (HTTP %s) cho %s. RFC 9309: Coi như không có hạn chế robots.",
+            http_status or 404,
+            url,
+        )
+        return {
+            "plan": plan,
+            "source": source,
+            "target_id": target_id,
+            "target_url": url,
+            "access_profile": access_profile,
+            "qualification_status": "READY",
+            "robots_status": "UNAVAILABLE",
+            "action": "QUALIFIED",
+            "reason": f"robots.txt UNAVAILABLE (HTTP {http_status or 404}) - RFC 9309 no restrictions assumed",
         }
 
     return {
@@ -176,6 +271,7 @@ def qualify_target(plan: dict, **context) -> dict:
         "source": source,
         "target_id": target_id,
         "target_url": url,
+        "access_profile": access_profile,
         "qualification_status": "READY",
         "robots_status": "ALLOWED",
         "action": "QUALIFIED",
@@ -194,6 +290,33 @@ def execute_crawl(qual_payload: dict, **context) -> dict:
     target_id = qual_payload.get("target_id", "default")
     url = qual_payload.get("target_url", "")
     qual_status = qual_payload.get("qualification_status", "UNKNOWN")
+
+    # Trường hợp target bị DEFER bởi Health Gate
+    if qual_payload.get("action") == "DEFERRED" or qual_status == "COOLDOWN_ACTIVE":
+        logger.info("Bỏ qua thực thi crawl cho %s/%s do COOLDOWN_ACTIVE", source, target_id)
+        return {
+            "source": source,
+            "target_id": target_id,
+            "target_url": url,
+            "crawl_run_id": None,
+            "crawl_status": "cooldown_active",
+            "stop_reason": "cooldown_active",
+            "records_created": 0,
+            "pages_attempted": 0,
+            "pages_success": 0,
+            "pages_failed": 0,
+            "details_success": 0,
+            "details_failed": 0,
+            "manifest_path": None,
+            "bronze_path": None,
+            "technical_failure": False,
+            "failure_reason": qual_payload.get("reason"),
+            "action": "DEFERRED",
+            "plan": plan_dict,
+            "observed_listing_ids": [],
+            "new_listing_ids": [],
+            "is_cooldown": True,
+        }
 
     # Nếu target bị skip ở bước qualification -> Chuyển tiếp payload an toàn
     if qual_payload.get("action") == "SKIPPED" or qual_status != "READY":
@@ -214,7 +337,8 @@ def execute_crawl(qual_payload: dict, **context) -> dict:
             "manifest_path": None,
             "bronze_path": None,
             "technical_failure": False,
-            "failure_reason": qual_payload.get("reason"),
+            "failure_reason": qual_payload.get("failure_reason") or qual_payload.get("reason"),
+            "http_status": qual_payload.get("http_status"),
             "action": "SKIPPED",
             "plan": plan_dict,
             "observed_listing_ids": [],
@@ -261,6 +385,9 @@ def execute_crawl(qual_payload: dict, **context) -> dict:
         "crawl_status": result.status.value,
         "stop_reason": stop_reason_val,
         "records_created": result.records_created,
+        "records_seen": getattr(result, "records_seen", 0),
+        "records_new": getattr(result, "records_new", 0),
+        "records_known": getattr(result, "records_known", 0),
         "pages_attempted": getattr(result, "pages_attempted", 0),
         "pages_success": result.pages_success,
         "pages_failed": result.pages_failed,
@@ -274,6 +401,9 @@ def execute_crawl(qual_payload: dict, **context) -> dict:
         "plan": plan_dict,
         "observed_listing_ids": getattr(result, "observed_listing_ids", []),
         "new_listing_ids": getattr(result, "new_listing_ids", []),
+        "bootstrap_completed": getattr(result, "bootstrap_completed", False),
+        "bootstrap_start_page": getattr(result, "bootstrap_start_page", 1),
+        "bootstrap_next_page": getattr(result, "bootstrap_next_page", None),
     }
 
 
@@ -282,7 +412,7 @@ def execute_crawl(qual_payload: dict, **context) -> dict:
 # --------------------------------------------------------------------------
 @task
 def update_checkpoint(result_payload: dict, **context) -> dict:
-    """5. Cập nhật Checkpoint State và danh sách listing đã thấy vào State Repository."""
+    """5. Cập nhật Checkpoint State, Health State và danh sách listing đã thấy."""
     source = result_payload.get("source", "unknown")
     target_id = result_payload.get("target_id", "default")
     crawl_status = result_payload.get("crawl_status", "unknown")
@@ -291,31 +421,79 @@ def update_checkpoint(result_payload: dict, **context) -> dict:
 
     logger.info("=" * 60)
     logger.info("STAGE 5: UPDATE CHECKPOINT")
-    logger.info("Source: %s | Target ID: %s | Status: %s", source, target_id, crawl_status)
+    logger.info("Source: %s | Target ID: %s | Status: %s | Action: %s", source, target_id, crawl_status, action)
     logger.info("=" * 60)
 
     repo = LocalCrawlStateRepository()
+    health_repo = LocalSourceHealthRepository()
     state = repo.get_state(source, target_id) or CrawlTargetState(source=source, target_id=target_id)
 
     now = datetime.now(timezone.utc)
     now_iso = now.isoformat()
-
     seed_interval = int(plan_dict.get("interval_minutes", 60) or 60)
 
-    # 1. Trường hợp crawl thành công (hoặc kết thúc phân trang hợp lệ)
+    # 1. Trường hợp DEFERRED do Cooldown Active: Không thay đổi state hay health
+    if action == "DEFERRED" or crawl_status == "cooldown_active":
+        logger.info("Target %s/%s đang trong cooldown -> Giữ nguyên state.", source, target_id)
+        return {
+            "source": source,
+            "target_id": target_id,
+            "target_state_persisted": False,
+            "success_checkpoint_advanced": False,
+            "health_state_updated": False,
+            "deferred_cooldown": True,
+            "last_success_at": state.last_success_at,
+            "next_run_at": state.next_run_at,
+        }
+
+    # 2. Trường hợp crawl thành công (hoặc hoàn thành phân trang hợp lệ)
     if crawl_status == CrawlStatus.SUCCESS.value:
         state.last_started_at = result_payload.get("started_at") or now_iso
         state.last_finished_at = now_iso
         state.last_success_at = now_iso
         state.last_watermark_at = now_iso
-        if plan_dict.get("mode") in (CrawlMode.BOOTSTRAP_FULL.value, CrawlMode.FORCE_FULL.value):
-            state.last_full_crawl_at = now_iso
-
         state.last_status = crawl_status
         state.last_stop_reason = result_payload.get("stop_reason") or result_payload.get("failure_reason") or "SUCCESS"
         state.last_records_created = result_payload.get("records_created", 0)
         state.consecutive_failures = 0
         state.next_run_at = (now + timedelta(minutes=seed_interval)).isoformat()
+
+        # Quản lý vòng đời Bootstrap / Forward-Only Acquisition
+        plan_mode = plan_dict.get("mode")
+        stop_reason_str = str(state.last_stop_reason).upper()
+
+        adapter_cls = source_registry.get(source) if source_registry else None
+        caps = getattr(adapter_cls, "CAPABILITIES", None) if adapter_cls else None
+        is_forward_only_source = caps is not None and (
+            not getattr(caps, "historical_backfill_supported", True)
+            or not getattr(caps, "supports_pagination", True)
+        )
+
+        if is_forward_only_source or plan_mode in (
+            CrawlMode.FORWARD_ONLY_INCREMENTAL.value,
+            "FORWARD_ONLY_INCREMENTAL",
+        ):
+            state.bootstrap_completed = False
+            state.bootstrap_completed_at = None
+            state.bootstrap_next_page = None
+            state.last_full_crawl_at = None
+        elif stop_reason_str == "SOURCE_END":
+            state.bootstrap_completed = True
+            state.bootstrap_completed_at = now_iso
+            state.bootstrap_next_page = None
+            state.last_full_crawl_at = now_iso
+        elif plan_mode in (
+            CrawlMode.BOOTSTRAP_FULL.value,
+            CrawlMode.BOOTSTRAP_CONTINUE.value,
+        ):
+            state.bootstrap_completed = False
+            state.bootstrap_next_page = result_payload.get("bootstrap_next_page")
+        elif plan_mode in (
+            CrawlMode.INCREMENTAL.value,
+            CrawlMode.FORCE_INCREMENTAL.value,
+        ):
+            state.bootstrap_completed = True
+            state.bootstrap_next_page = None
 
         # Lưu danh sách listing_ids đã thấy
         observed_ids = result_payload.get("observed_listing_ids", [])
@@ -323,16 +501,31 @@ def update_checkpoint(result_payload: dict, **context) -> dict:
             repo.record_seen_listing_ids(source, target_id, observed_ids)
 
         repo.save_state(state)
-        logger.info("Đã cập nhật thành công checkpoint state cho %s/%s", source, target_id)
+        # Thành công: Reset Health State về HEALTHY
+        health_repo.record_success(source, target_id, current_time=now)
+
+        logger.info(
+            "Đã cập nhật thành công checkpoint state cho %s/%s (bootstrap_completed=%s, next_page=%s)",
+            source,
+            target_id,
+            state.bootstrap_completed,
+            state.bootstrap_next_page,
+        )
         return {
             "source": source,
             "target_id": target_id,
             "checkpoint_updated": True,
+            "target_state_persisted": True,
+            "success_checkpoint_advanced": True,
+            "health_state_updated": True,
+            "deferred_cooldown": False,
             "last_success_at": state.last_success_at,
             "next_run_at": state.next_run_at,
+            "bootstrap_completed": state.bootstrap_completed,
+            "bootstrap_next_page": state.bootstrap_next_page,
         }
 
-    # 2. Trường hợp rào cản truy cập (Access Challenge) hoặc Robots Denied
+    # 3. Trường hợp rào cản truy cập (Access Challenge), Robots Denied hoặc Robots Error
     if crawl_status in (
         CrawlStatus.CLOUDFLARE_CHALLENGE.value,
         CrawlStatus.ACCESS_DENIED.value,
@@ -345,41 +538,79 @@ def update_checkpoint(result_payload: dict, **context) -> dict:
         state.last_finished_at = now_iso
         state.last_status = crawl_status
         state.last_stop_reason = result_payload.get("stop_reason") or result_payload.get("failure_reason") or "CONTROLLED_STOP"
-        # Không reset consecutive_failures nhưng cũng không tăng backoff sự cố kỹ thuật
         state.next_run_at = (now + timedelta(minutes=seed_interval)).isoformat()
 
         repo.save_state(state)
+
+        # Phân loại SourceHealthOutcome tương ứng
+        if action == "ACCESS_CHALLENGE" or crawl_status in (
+            CrawlStatus.CLOUDFLARE_CHALLENGE.value,
+            CrawlStatus.ACCESS_DENIED.value,
+        ):
+            outcome = SourceHealthOutcome.ACCESS_CHALLENGE
+            http_status = 403
+            reason = result_payload.get("failure_reason") or "Cloudflare challenge / Access Denied"
+        elif result_payload.get("failure_reason") == "ROBOTS_FETCH_ERROR" or crawl_status == "check_failed":
+            outcome = SourceHealthOutcome.ROBOTS_FETCH_ERROR
+            http_status = result_payload.get("http_status") or 403
+            reason = result_payload.get("failure_reason") or "Robots fetch error"
+        elif crawl_status in ("denied_by_robots", "robots_denied"):
+            outcome = SourceHealthOutcome.ROBOTS_DENIED
+            http_status = None
+            reason = "Robots.txt Disallow rule matched"
+        else:
+            outcome = SourceHealthOutcome.UNKNOWN
+            http_status = None
+            reason = result_payload.get("failure_reason") or "Controlled skip"
+
+        health_repo.record_failure(
+            source=source,
+            target_id=target_id,
+            outcome=outcome,
+            reason=reason,
+            http_status=http_status,
+            current_time=now,
+        )
+
         logger.info("Ghi nhận trạng thái kiểm soát (%s) cho %s/%s", crawl_status, source, target_id)
         return {
             "source": source,
             "target_id": target_id,
             "checkpoint_updated": True,
+            "target_state_persisted": True,
+            "success_checkpoint_advanced": False,
+            "health_state_updated": True,
+            "deferred_cooldown": False,
             "last_success_at": state.last_success_at,
             "next_run_at": state.next_run_at,
         }
 
-    # 3. Trường hợp sự cố kỹ thuật (Technical Failure)
+    # 4. Trường hợp sự cố kỹ thuật (Technical Failure)
     state.last_finished_at = now_iso
     state.last_status = crawl_status
     state.last_stop_reason = result_payload.get("stop_reason") or result_payload.get("failure_reason") or "TECHNICAL_FAILURE"
     state.consecutive_failures += 1
 
-    # Bounded backoff
     backoff_minutes = min(seed_interval * (2 ** max(0, state.consecutive_failures - 1)), 1440)
     state.next_run_at = (now + timedelta(minutes=backoff_minutes)).isoformat()
 
     repo.save_state(state)
-    logger.warning(
-        "Ghi nhận failure liên tiếp lần %d cho %s/%s. Next run sau %d phút.",
-        state.consecutive_failures,
-        source,
-        target_id,
-        backoff_minutes,
+    health_repo.record_failure(
+        source=source,
+        target_id=target_id,
+        outcome=SourceHealthOutcome.TECHNICAL_FAILURE,
+        reason=result_payload.get("failure_reason") or "Technical error",
+        current_time=now,
     )
+
     return {
         "source": source,
         "target_id": target_id,
         "checkpoint_updated": True,
+        "target_state_persisted": True,
+        "success_checkpoint_advanced": False,
+        "health_state_updated": True,
+        "deferred_cooldown": False,
         "last_success_at": state.last_success_at,
         "next_run_at": state.next_run_at,
     }
@@ -403,11 +634,20 @@ def summarize_run(
     checkpoints = checkpoints or []
 
     targets_due = len(plans)
-    bootstrap_planned = sum(1 for p in plans if p.get("mode") in (CrawlMode.BOOTSTRAP_FULL.value, CrawlMode.FORCE_FULL.value))
-    incremental_planned = sum(1 for p in plans if p.get("mode") in (CrawlMode.INCREMENTAL.value, CrawlMode.FORCE_INCREMENTAL.value))
+    targets_deferred_cooldown = sum(1 for q in qualifications if q.get("qualification_status") == "COOLDOWN_ACTIVE")
+    targets_executable = targets_due - targets_deferred_cooldown
+
+    bootstrap_planned = sum(1 for p in plans if p.get("mode") == CrawlMode.BOOTSTRAP_FULL.value)
+    bootstrap_continue_planned = sum(1 for p in plans if p.get("mode") == CrawlMode.BOOTSTRAP_CONTINUE.value)
+    incremental_planned = sum(
+        1
+        for p in plans
+        if p.get("mode") in (CrawlMode.INCREMENTAL.value, CrawlMode.FORWARD_ONLY_INCREMENTAL.value)
+    )
 
     qualification_allowed = sum(1 for q in qualifications if q.get("qualification_status") == "READY")
     robots_denied = sum(1 for q in qualifications if q.get("qualification_status") == "DENIED_BY_ROBOTS")
+    robots_unavailable = sum(1 for q in qualifications if q.get("qualification_status") == "CHECK_FAILED")
 
     crawl_success = sum(1 for r in crawl_results if r.get("crawl_status") == CrawlStatus.SUCCESS.value)
     access_challenge = sum(
@@ -430,36 +670,82 @@ def summarize_run(
 
     records_created = sum(r.get("records_created", 0) for r in crawl_results)
     details_created = sum(r.get("details_success", 0) for r in crawl_results)
-    checkpoints_updated = sum(1 for c in checkpoints if c.get("checkpoint_updated"))
+
+    target_states_persisted = sum(1 for c in checkpoints if c.get("target_state_persisted"))
+    success_checkpoints_advanced = sum(1 for c in checkpoints if c.get("success_checkpoint_advanced"))
+    health_states_updated = sum(1 for c in checkpoints if c.get("health_state_updated"))
 
     logger.info("=" * 60)
     logger.info("ROOMBEACON AUTOMATED CRAWL RUN SUMMARY")
     logger.info("-" * 60)
-    logger.info("Targets due          : %d", targets_due)
-    logger.info("Bootstrap planned    : %d", bootstrap_planned)
-    logger.info("Incremental planned  : %d", incremental_planned)
-    logger.info("Qualification allowed: %d", qualification_allowed)
-    logger.info("Robots denied        : %d", robots_denied)
-    logger.info("Crawl success        : %d", crawl_success)
-    logger.info("Access challenge     : %d", access_challenge)
-    logger.info("Technical failure    : %d", technical_failure)
-    logger.info("Records created      : %d", records_created)
-    logger.info("Details created      : %d", details_created)
-    logger.info("Checkpoints updated  : %d", checkpoints_updated)
+    logger.info("Targets due                  : %d", targets_due)
+    logger.info("Targets executable           : %d", targets_executable)
+    logger.info("Targets deferred cooldown    : %d", targets_deferred_cooldown)
+    logger.info("Bootstrap planned            : %d", bootstrap_planned)
+    logger.info("Bootstrap continue planned   : %d", bootstrap_continue_planned)
+    logger.info("Incremental planned          : %d", incremental_planned)
+    logger.info("Qualification allowed        : %d", qualification_allowed)
+    logger.info("Robots denied                : %d", robots_denied)
+    logger.info("Robots unavailable           : %d", robots_unavailable)
+    logger.info("Crawl success                : %d", crawl_success)
+    logger.info("Access challenge             : %d", access_challenge)
+    logger.info("Technical failure            : %d", technical_failure)
+    logger.info("Records created              : %d", records_created)
+    logger.info("Details created              : %d", details_created)
+    logger.info("Target states persisted      : %d", target_states_persisted)
+    logger.info("Success checkpoints advanced : %d", success_checkpoints_advanced)
+    logger.info("Health states updated        : %d", health_states_updated)
+    logger.info("-" * 60)
+    logger.info("SOURCE COVERAGE & ACQUISITION SUMMARY:")
+    for r in crawl_results:
+        src = r.get("source", "unknown")
+        recs = r.get("records_created", 0)
+        seen_cnt = r.get("records_seen", 0)
+        new_cnt = r.get("records_new", 0)
+        known_cnt = r.get("records_known", 0)
+        b_path = "CREATED" if r.get("bronze_path") else "NONE"
+        if src == "nhatot":
+            logger.info("NhaTot")
+            logger.info("  Mode        : FORWARD_ONLY_INCREMENTAL")
+            logger.info("  Seed Pages  : %d", r.get("pages_attempted", 1))
+            logger.info("  Browser     : SUCCESS")
+            logger.info("  New         : %d", new_cnt)
+            logger.info("  Known       : %d", known_cnt)
+            logger.info("  Bronze      : %s", b_path)
+            logger.info("  Stop        : %s", r.get("stop_reason") or "FORWARD_SCAN_COMPLETE")
+            logger.info("  Historical  : UNAVAILABLE")
+            logger.info("  Forward     : ACTIVE")
+        elif src == "phongtro123":
+            logger.info("PhongTro123")
+            logger.info("  Historical  : IN_PROGRESS")
+            logger.info("  Next Page   : %s", r.get("bootstrap_next_page") or "SOURCE_END")
+            logger.info("  Records     : %d", recs)
+        elif src == "nhatrovn":
+            logger.info("NhaTroVN")
+            logger.info("  Historical  : COMPLETE")
+            logger.info("  Mode        : INCREMENTAL")
+            logger.info("  Records     : %d", recs)
     logger.info("=" * 60)
 
     return {
         "targets_due": targets_due,
+        "targets_executable": targets_executable,
+        "targets_deferred_cooldown": targets_deferred_cooldown,
         "bootstrap_planned": bootstrap_planned,
+        "bootstrap_continue_planned": bootstrap_continue_planned,
         "incremental_planned": incremental_planned,
         "qualification_allowed": qualification_allowed,
         "robots_denied": robots_denied,
+        "robots_unavailable": robots_unavailable,
         "crawl_success": crawl_success,
         "access_challenge": access_challenge,
         "technical_failure": technical_failure,
         "records_created": records_created,
         "details_created": details_created,
-        "checkpoints_updated": checkpoints_updated,
+        "target_states_persisted": target_states_persisted,
+        "success_checkpoints_advanced": success_checkpoints_advanced,
+        "health_states_updated": health_states_updated,
+        "checkpoints_updated": sum(1 for c in checkpoints if c.get("checkpoint_updated") or c.get("target_state_persisted")),
     }
 
 

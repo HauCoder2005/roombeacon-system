@@ -4,7 +4,9 @@ from urllib.parse import urlparse
 from roombeacon_crawler.config.source_settings import SourceSettings
 from roombeacon_crawler.enums.crawl_target_type import CrawlTargetType
 from roombeacon_crawler.enums.fetch_strategy import FetchStrategy
+from roombeacon_crawler.enums.source_access_profile import SourceAccessProfile
 from roombeacon_crawler.models.crawl_seed import CrawlSeed
+from roombeacon_crawler.models.source_capabilities import SourceCapabilities
 from roombeacon_crawler.sources.base import BaseSourceAdapter
 from roombeacon_crawler.sources.batdongsan.discovery.date_interpreter import (
     BatDongSanDateInterpreter,
@@ -29,6 +31,15 @@ class BatDongSanSourceAdapter(BaseSourceAdapter):
     SOURCE_NAME = "batdongsan"
     DOMAINS = ("batdongsan.com.vn", "www.batdongsan.com.vn")
     DEFAULT_BASE_URL = "https://batdongsan.com.vn/cho-thue-nha-tro-phong-tro"
+    CAPABILITIES = SourceCapabilities(
+        access_profile=SourceAccessProfile.ACCESS_CHALLENGED,
+        supports_pagination=False,
+        supports_sitemap_discovery=True,
+        preferred_discovery_transport=FetchStrategy.HTTP,
+        preferred_fetch_strategy=FetchStrategy.HTTP,
+        robots_required=True,
+        detail_fetch_supported=False,
+    )
 
     def __init__(
         self,

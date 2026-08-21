@@ -21,6 +21,7 @@ class CrawlPlan:
     incremental_stop_after_known_pages: int = 2
     max_details_per_run: int = 20
     discovery_strategy: DiscoveryStrategy = DiscoveryStrategy.STANDARD
+    start_page: int = 1
 
     def to_dict(self) -> dict:
         return {
@@ -42,6 +43,7 @@ class CrawlPlan:
                 if isinstance(self.discovery_strategy, DiscoveryStrategy)
                 else str(self.discovery_strategy)
             ),
+            "start_page": self.start_page,
         }
 
     @classmethod
@@ -79,4 +81,5 @@ class CrawlPlan:
             incremental_stop_after_known_pages=data.get("incremental_stop_after_known_pages", 2),
             max_details_per_run=data.get("max_details_per_run", 20),
             discovery_strategy=strategy_enum,
+            start_page=int(data.get("start_page", 1) or 1),
         )

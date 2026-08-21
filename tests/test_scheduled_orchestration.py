@@ -115,8 +115,12 @@ class TestScheduledMultiSourceOrchestration(unittest.TestCase):
         plans = plan_crawls.function(targets=raw_targets, params={"execution_mode": "AUTO"})
         self.assertEqual(len(plans), 5)
         for p in plans:
-            self.assertEqual(p["mode"], CrawlMode.BOOTSTRAP_FULL.value)
-            self.assertEqual(p["reason"], "FIRST_SUCCESSFUL_CRAWL_NOT_FOUND")
+            if p["source"] == "nhatot":
+                self.assertEqual(p["mode"], CrawlMode.FORWARD_ONLY_INCREMENTAL.value)
+                self.assertEqual(p["reason"], "FORWARD_ONLY_SEED_ACQUISITION")
+            else:
+                self.assertEqual(p["mode"], CrawlMode.BOOTSTRAP_FULL.value)
+                self.assertEqual(p["reason"], "FIRST_SUCCESSFUL_CRAWL_NOT_FOUND")
 
     def test_stage_2_debug_single_target_mode(self) -> None:
         """Kiểm tra chế độ DEBUG_SINGLE_TARGET chỉ lập kế hoạch cho đúng 1 URL debug."""

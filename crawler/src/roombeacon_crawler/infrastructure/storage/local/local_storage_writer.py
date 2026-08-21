@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from roombeacon_crawler.config.get_env import env
+from roombeacon_crawler.enums.crawl_mode import CrawlMode
 from roombeacon_crawler.models.crawl_metadata import CrawlMetadata
 from roombeacon_crawler.models.crawl_run_result import CrawlRunResult
 from roombeacon_crawler.models.listing_card_raw import ListingCardRaw
@@ -62,8 +63,29 @@ class LocalStorageWriter:
             manifest_data = asdict(result)
             if hasattr(result.status, "value"):
                 manifest_data["status"] = result.status.value
-            if result.stop_reason and hasattr(result.stop_reason, "value"):
-                manifest_data["stop_reason"] = result.stop_reason.value
+            if result.stop_reason is not None:
+                manifest_data["stop_reason"] = (
+                    result.stop_reason.value
+                    if hasattr(result.stop_reason, "value")
+                    else str(result.stop_reason)
+                )
+            manifest_data["crawl_mode"] = manifest_data.get("mode") or result.mode
+            if manifest_data["crawl_mode"] in (
+                CrawlMode.FORWARD_ONLY_INCREMENTAL.value,
+                "FORWARD_ONLY_INCREMENTAL",
+            ):
+                manifest_data["historical_coverage"] = "UNAVAILABLE"
+                manifest_data["forward_acquisition"] = "ACTIVE"
+                manifest_data["bootstrap_completed"] = False
+            elif manifest_data["crawl_mode"] in (
+                CrawlMode.INCREMENTAL.value,
+                CrawlMode.FORCE_INCREMENTAL.value,
+            ):
+                manifest_data["historical_coverage"] = "COMPLETE"
+                manifest_data["forward_acquisition"] = "ACTIVE"
+            else:
+                manifest_data["historical_coverage"] = "IN_PROGRESS" if not result.bootstrap_completed else "COMPLETE"
+                manifest_data["forward_acquisition"] = "ACTIVE"
 
             with open(manifest_file, "w", encoding="utf-8") as f:
                 json.dump(manifest_data, f, ensure_ascii=False, indent=2)

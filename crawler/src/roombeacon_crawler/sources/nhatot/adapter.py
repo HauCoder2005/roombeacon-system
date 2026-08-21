@@ -3,7 +3,9 @@ from urllib.parse import urlparse
 from roombeacon_crawler.config.source_settings import SourceSettings
 from roombeacon_crawler.enums.crawl_target_type import CrawlTargetType
 from roombeacon_crawler.enums.fetch_strategy import FetchStrategy
+from roombeacon_crawler.enums.source_access_profile import SourceAccessProfile
 from roombeacon_crawler.models.crawl_seed import CrawlSeed
+from roombeacon_crawler.models.source_capabilities import SourceCapabilities
 from roombeacon_crawler.sources.base import BaseSourceAdapter
 from roombeacon_crawler.sources.nhatot.discovery.date_interpreter import (
     NhatotDateInterpreter,
@@ -20,6 +22,18 @@ class NhatotSourceAdapter(BaseSourceAdapter):
     SOURCE_NAME = "nhatot"
     DOMAINS = ("nhatot.com", "www.nhatot.com")
     DEFAULT_BASE_URL = "https://www.nhatot.com/thue-phong-tro"
+    CAPABILITIES = SourceCapabilities(
+        access_profile=SourceAccessProfile.DISCOVERY_RESTRICTED,
+        supports_pagination=False,
+        supports_sitemap_discovery=True,
+        historical_backfill_supported=False,
+        forward_incremental_supported=True,
+        seed_page_discovery_supported=True,
+        preferred_seed_transport=FetchStrategy.BROWSER,
+        preferred_fetch_strategy=FetchStrategy.BROWSER,
+        robots_required=True,
+        detail_fetch_supported=True,
+    )
 
     def __init__(
         self,
@@ -54,9 +68,9 @@ class NhatotSourceAdapter(BaseSourceAdapter):
         try:
             parsed = urlparse(url.strip())
             path = parsed.path.lower().rstrip("/")
-            if path.endswith(".htm") and not path.startswith("/thue-phong-tro"):
+            if path.endswith(".htm"):
                 return CrawlTargetType.DETAIL_PAGE
-            if path.startswith("/thue-phong-tro") or path == "":
+            if path.startswith("/thue-") or path.startswith("/phong-tro") or path == "":
                 return CrawlTargetType.LISTING_PAGE
             return CrawlTargetType.UNSUPPORTED
         except Exception:

@@ -45,7 +45,7 @@ class TestSitemapDiscoveryEngine(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             mock_fetcher = MagicMock(spec=SitemapFetcher)
 
-            async def mock_fetch(url: str) -> SitemapFetchResponse:
+            async def mock_fetch(url: str, *args, **kwargs) -> SitemapFetchResponse:
                 if "sitemap_main.xml" in url:
                     return SitemapFetchResponse(url=url, status_code=200, content=SAMPLE_INDEX_XML, is_success=True)
                 elif "sitemap-rent-1.xml" in url:

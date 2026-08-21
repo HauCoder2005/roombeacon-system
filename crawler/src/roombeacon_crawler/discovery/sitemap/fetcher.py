@@ -5,6 +5,7 @@ from typing import ClassVar
 
 import httpx
 
+from roombeacon_crawler.enums.fetch_strategy import FetchStrategy
 from roombeacon_crawler.policies.robots_policy import RobotsPolicy
 
 logger = logging.getLogger(__name__)
@@ -22,11 +23,7 @@ class SitemapFetchResponse:
 
 
 class SitemapFetcher:
-    """HTTP Client chuyên trách tải nội dung tài liệu Sitemap XML/Gzip qua mạng.
-
-    Trách nhiệm duy nhất: Tải dữ liệu thô, giải nén gzip nếu cần, tôn trọng robots.txt.
-    Tuyệt đối không phân tích XML, không lọc URL nghiệp vụ hay bóc tách bài đăng tại đây.
-    """
+    """HTTP/Browser Client chuyên trách tải nội dung tài liệu Sitemap XML/Gzip qua mạng."""
 
     DEFAULT_USER_AGENT: ClassVar[str] = "RoomBeaconCrawler/0.1"
     DEFAULT_TIMEOUT_SECONDS: ClassVar[float] = 20.0
@@ -41,8 +38,12 @@ class SitemapFetcher:
         self.timeout = timeout_seconds or self.DEFAULT_TIMEOUT_SECONDS
         self.robots_policy = robots_policy or RobotsPolicy()
 
-    async def fetch(self, url: str) -> SitemapFetchResponse:
-        """Thực hiện HTTP GET tải tài liệu Sitemap từ URL."""
+    async def fetch(
+        self,
+        url: str,
+        transport: FetchStrategy = FetchStrategy.HTTP,
+    ) -> SitemapFetchResponse:
+        """Tải tài liệu Sitemap từ URL sử dụng chiến lược transport được chỉ định."""
         if not url:
             return SitemapFetchResponse(
                 url="",
@@ -63,6 +64,28 @@ class SitemapFetcher:
                 is_success=False,
                 error=f"Robots policy denied ({robots_url})",
             )
+
+        if transport == FetchStrategy.BROWSER:
+            try:
+                from roombeacon_crawler.fetchers.browser_fetcher import BrowserFetcher
+                bf = BrowserFetcher(user_agent=self.user_agent, timeout=self.timeout)
+                res = await bf.fetch(url)
+                return SitemapFetchResponse(
+                    url=url,
+                    status_code=res.status_code,
+                    content=res.html,
+                    is_success=(res.status_code == 200 and bool(res.html)),
+                    error=res.error,
+                )
+            except Exception as exc:
+                logger.warning("SitemapFetcher: Lỗi tải sitemap qua Browser %s: %s", url, exc)
+                return SitemapFetchResponse(
+                    url=url,
+                    status_code=500,
+                    content=None,
+                    is_success=False,
+                    error=str(exc),
+                )
 
         headers = {
             "User-Agent": self.user_agent,

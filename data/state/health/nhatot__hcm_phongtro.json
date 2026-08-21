@@ -1,0 +1,13 @@
+{
+  "source": "nhatot",
+  "target_id": "hcm_phongtro",
+  "last_outcome": "ROBOTS_DENIED",
+  "last_failure_reason": "Robots.txt Disallow rule matched",
+  "consecutive_failures": 2,
+  "last_checked_at": "2026-08-21T15:31:46.166793+00:00",
+  "last_failure_at": "2026-08-21T15:31:46.166793+00:00",
+  "last_access_success_at": null,
+  "cooldown_until": null,
+  "last_http_status": null,
+  "updated_at": "2026-08-21T15:31:46.166793+00:00"
+}

@@ -39,7 +39,7 @@ class NhatroVNDetailParser:
 
         # 1. Listing ID
         if not listing_id:
-            match = re.search(r"/chi-tiet/([a-zA-Z0-9]+)/?", detail_url)
+            match = re.search(r"/chi-tiet/([^/?#]+)/?", detail_url)
             listing_id = match.group(1) if match else None
 
         # 2. Tiêu đề / Tên phòng

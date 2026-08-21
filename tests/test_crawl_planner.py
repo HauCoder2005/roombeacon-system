@@ -78,18 +78,19 @@ class TestCrawlPlannerAndStateRepository(unittest.TestCase):
         """Target đã có state thành công trước đó -> Chế độ INCREMENTAL và tính toán overlap window chuẩn xác."""
         last_success = self.now - timedelta(minutes=45)
         state = CrawlTargetState(
-            source="nhatot",
+            source="nhatrovn",
             target_id="hcm_phongtro",
             last_success_at=last_success.isoformat(),
             last_watermark_at=last_success.isoformat(),
+            bootstrap_completed=True,
             next_run_at=(last_success + timedelta(minutes=30)).isoformat(),  # Due 15 mins ago
         )
         self.repo.save_state(state)
 
         seed = CrawlSeed(
-            source="nhatot",
+            source="nhatrovn",
             target_id="hcm_phongtro",
-            url="https://www.nhatot.com/thue-phong-tro-tp-ho-chi-minh",
+            url="https://nhatrovn.vn/cho-thue-phong-tro/ho-chi-minh/",
             enabled=True,
             interval_minutes=30,
             incremental_overlap_hours=24,
@@ -104,6 +105,24 @@ class TestCrawlPlannerAndStateRepository(unittest.TestCase):
         self.assertEqual(plan.watermark_from, last_success.isoformat())
         expected_overlap = (last_success - timedelta(hours=24)).isoformat()
         self.assertEqual(plan.overlap_from, expected_overlap)
+
+    def test_nhatot_capability_resolves_forward_only_incremental(self) -> None:
+        """NhaTot không hỗ trợ historical pagination -> CrawlPlanner tự động chọn FORWARD_ONLY_INCREMENTAL."""
+        seed = CrawlSeed(
+            source="nhatot",
+            target_id="hcm_phongtro",
+            url="https://www.nhatot.com/thue-phong-tro-tp-ho-chi-minh",
+            enabled=True,
+            interval_minutes=60,
+        )
+
+        plans = self.planner.plan_all([seed], current_time=self.now)
+        self.assertEqual(len(plans), 1)
+        plan = plans[0]
+        self.assertEqual(plan.mode, CrawlMode.FORWARD_ONLY_INCREMENTAL)
+        self.assertEqual(plan.reason, "FORWARD_ONLY_SEED_ACQUISITION")
+        self.assertEqual(plan.safety_max_pages, 1)
+        self.assertEqual(plan.start_page, 1)
 
     def test_not_due_target_is_skipped(self) -> None:
         """Target chưa đến hạn chạy (next_run_at trong tương lai) -> Không sinh plan."""

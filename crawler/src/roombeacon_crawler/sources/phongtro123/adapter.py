@@ -22,12 +22,24 @@ from roombeacon_crawler.sources.phongtro123.parsers.metadata_parser import (
 )
 
 
+from roombeacon_crawler.enums.source_access_profile import SourceAccessProfile
+from roombeacon_crawler.models.source_capabilities import SourceCapabilities
+
+
 class Phongtro123SourceAdapter(BaseSourceAdapter):
     """Source Adapter cho website Phongtro123 (phongtro123.com)."""
 
     SOURCE_NAME = "phongtro123"
     DOMAINS = ("phongtro123.com", "www.phongtro123.com")
     DEFAULT_BASE_URL = "https://phongtro123.com/cho-thue-phong-tro"
+    CAPABILITIES = SourceCapabilities(
+        access_profile=SourceAccessProfile.STANDARD_PAGINATION,
+        supports_pagination=True,
+        supports_sitemap_discovery=False,
+        preferred_fetch_strategy=FetchStrategy.HTTP,
+        robots_required=True,
+        detail_fetch_supported=True,
+    )
 
     def __init__(
         self,

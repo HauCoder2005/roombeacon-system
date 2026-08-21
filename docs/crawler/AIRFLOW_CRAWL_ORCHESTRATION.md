@@ -366,4 +366,15 @@ MySQL Core (Operational) & ClickHouse (Analytics OLAP)
 ```
 *(Các tầng xử lý Silver và OLAP Analytics sẽ được triển khai trong các phân đoạn kế tiếp).*
 
+---
+
+## 21. Quản lý Sức khỏe Nguồn & Cổng Giãn cách Thích ứng (Source Health & Adaptive Backoff)
+
+Hệ thống bổ sung cơ chế **Health Gate** và **Adaptive Cooldown Policy** trước khi gửi request mạng:
+- Nếu nguồn gặp sự cố liên tiếp hoặc bị WAF chặn (`ACCESS_CHALLENGE`, `ROBOTS_FETCH_ERROR`), thời gian cooldown sẽ tăng dần (15m, 30m, 60m, 6h, 12h, 24h).
+- Health Gate tự động hoãn (DEFER) target mà không gửi request mạng, giữ cho Airflow task luôn xanh (`SUCCESS`) và bảo vệ checkpoint đồng bộ.
+
+> [!TIP]
+> Tài liệu thiết kế chi tiết về Source Health, Backoff và Checkpoint Safety vui lòng xem tại: [SOURCE_HEALTH_AND_BACKOFF.md](file:///home/codeser/Data/projects/roombeacon/docs/crawler/SOURCE_HEALTH_AND_BACKOFF.md).
+
 

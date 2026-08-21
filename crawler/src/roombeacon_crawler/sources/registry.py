@@ -95,6 +95,20 @@ class SourceRegistry:
         """Trả về danh sách tên định danh của các nguồn đã đăng ký."""
         return self.list_sources()
 
+    def get(self, source_name: str) -> Type[BaseSourceAdapter] | None:
+        """Lấy lớp Adapter theo tên định danh source_name."""
+        if not source_name:
+            return None
+        norm_name = source_name.strip().lower()
+        for cls in self._adapters:
+            if getattr(cls, "SOURCE_NAME", "").lower() == norm_name:
+                return cls
+        return None
+
+    def get_adapter_by_name(self, source_name: str) -> Type[BaseSourceAdapter] | None:
+        """Alias tương thích cho get()."""
+        return self.get(source_name)
+
     def resolve_adapter_class_for_url(self, url: str) -> Type[BaseSourceAdapter] | None:
         """Phân giải lớp Adapter tương ứng cho URL dựa trên Domain Index và supports method."""
         if not url:

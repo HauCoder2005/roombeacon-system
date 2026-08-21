@@ -87,14 +87,23 @@ class SitemapDiscoveryEngine:
         all_discovered: list[DiscoveredUrl] = []
         errors: list[str] = []
 
+        # Phân giải discovery transport từ SourceCapabilities
+        transport = getattr(adapter, "preferred_discovery_transport", None)
+        if not transport:
+            from roombeacon_crawler.sources.registry import source_registry
+            reg_adapter = source_registry.get(adapter.SOURCE_NAME)
+            if reg_adapter and hasattr(reg_adapter, "CAPABILITIES"):
+                transport = reg_adapter.CAPABILITIES.preferred_discovery_transport
+        transport = transport or FetchStrategy.HTTP
+
         while sitemap_queue and len(processed_sitemaps) < max_sitemaps:
             sitemap_url, depth = sitemap_queue.pop(0)
             if sitemap_url in processed_sitemaps:
                 continue
             processed_sitemaps.add(sitemap_url)
 
-            logger.info("Đang duyệt sitemap [Depth %d/%d]: %s", depth, max_depth, sitemap_url)
-            resp = await self.fetcher.fetch(sitemap_url)
+            logger.info("Đang duyệt sitemap [Depth %d/%d | Transport: %s]: %s", depth, max_depth, transport.value, sitemap_url)
+            resp = await self.fetcher.fetch(sitemap_url, transport=transport)
             if not resp.is_success or not resp.content:
                 errors.append(f"Fetch failed ({resp.error}): {sitemap_url}")
                 continue
@@ -123,7 +132,26 @@ class SitemapDiscoveryEngine:
                 all_discovered.extend(filtered)
                 logger.info("Đã lọc được %d URL ứng viên hợp lệ từ %s", len(filtered), sitemap_url)
 
-        # 3. Lưu Discovery Artifact xuống file qua DiscoveryStorage
+        # 3. Phân loại danh sách URL theo persistent seen state
+        known_seen_urls = self.storage.get_seen_urls(adapter.SOURCE_NAME)
+        new_urls = [u for u in all_discovered if u.url not in known_seen_urls]
+        known_count = len(all_discovered) - len(new_urls)
+        new_count = len(new_urls)
+
+        logger.info(
+            "DISCOVERY SUMMARY: Total=%d | Known=%d | New=%d",
+            len(all_discovered),
+            known_count,
+            new_count,
+        )
+
+        # Cập nhật seen candidate URLs cho nguồn
+        if new_urls:
+            self.storage.record_seen_urls(
+                adapter.SOURCE_NAME, [u.url for u in new_urls]
+            )
+
+        # 4. Lưu Discovery Artifact xuống file qua DiscoveryStorage
         artifact = self.storage.save_artifact(
             source=adapter.SOURCE_NAME,
             run_id=active_run_id,
@@ -140,12 +168,31 @@ class SitemapDiscoveryEngine:
             status=status,
             discovered_at=now_iso,
             count=len(all_discovered),
-            new_count=len(all_discovered),
+            new_count=new_count,
+            changed_count=0,
             artifact_path=artifact.artifact_path,
             error="; ".join(errors) if errors else None,
         )
 
+        # Lưu DiscoveryTargetState
+        from roombeacon_crawler.discovery.models import DiscoveryTargetState
+        discovery_state = DiscoveryTargetState(
+            source=adapter.SOURCE_NAME,
+            last_discovery_at=now_iso,
+            last_discovery_status=status.value if hasattr(status, "value") else str(status),
+            last_discovered_count=len(all_discovered),
+            last_new_count=new_count,
+            last_changed_count=0,
+            last_error="; ".join(errors) if errors else None,
+        )
+        self.storage.save_target_state(discovery_state)
+
         logger.info("=" * 60)
-        logger.info("HOÀN TẤT DISCOVERY: %s -> %d URLs", adapter.SOURCE_NAME, len(all_discovered))
+        logger.info(
+            "HOÀN TẤT DISCOVERY: %s -> %d URLs (New: %d)",
+            adapter.SOURCE_NAME,
+            len(all_discovered),
+            new_count,
+        )
         logger.info("=" * 60)
         return all_discovered, result, artifact

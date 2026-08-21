@@ -49,15 +49,15 @@ class NhatotPagination:
 
     @staticmethod
     def has_next_page(
-        current_page: int,
-        max_pages: int,
-        current_items_count: int,
+        current_page: int = 1,
+        max_pages: int = 1,
+        current_items_count: int = 0,
         min_items_threshold: int = 1,
         **kwargs,
     ) -> bool:
-        """Xác định có nên tiếp tục chuyển sang trang kế tiếp hay không."""
-        if current_page >= max_pages:
-            return False
-        if current_items_count < min_items_threshold:
-            return False
-        return True
+        """Xác định có nên tiếp tục chuyển sang trang kế tiếp hay không.
+
+        Nhà Tốt cấm phân trang danh mục qua query parameter (?page=) theo chỉ thị robots.txt Disallow: /*page=.
+        Do đó has_next_page luôn trả về False để đảm bảo không sinh URL phân trang cấm.
+        """
+        return False

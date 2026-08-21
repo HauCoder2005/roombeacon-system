@@ -47,6 +47,9 @@ class SourceMetadata:
     capabilities: dict[str, bool] = field(default_factory=dict)
 
 
+from roombeacon_crawler.models.source_capabilities import SourceCapabilities
+
+
 class BaseSourceAdapter(ABC):
     """Lớp cơ sở trừu tượng (Base Contract) cho tất cả Source Adapters trong RoomBeacon.
 
@@ -56,6 +59,7 @@ class BaseSourceAdapter(ABC):
     SOURCE_NAME: str = ""
     DOMAINS: tuple[str, ...] = ()
     DEFAULT_BASE_URL: str = ""
+    CAPABILITIES: SourceCapabilities = SourceCapabilities()
 
     def __init__(
         self,
