@@ -5,13 +5,24 @@ class NhatotPagination:
     """Xử lý cấu trúc phân trang thực tế của website Nhà Tốt (tham số ?page=N)."""
 
     @staticmethod
-    def build_page_url(base_url: str, page_number: int) -> str:
+    def build_page_url(
+        base_url: str = "",
+        page_number: int = 1,
+        *args,
+        **kwargs,
+    ) -> str:
         """Tạo URL hoàn chỉnh cho trang thứ N."""
+        if isinstance(base_url, int):
+            actual_page = base_url
+            actual_url = str(page_number) if isinstance(page_number, str) else kwargs.get("base_url", "")
+            base_url = actual_url
+            page_number = actual_page
+
         if page_number <= 1:
             return base_url
 
         parsed = urlparse(base_url)
-        query_params = parse_qs(parsed.query)
+        query_params = parse_qs(parsed.query, keep_blank_values=True)
         query_params["page"] = [str(page_number)]
         new_query = urlencode(query_params, doseq=True)
 
@@ -38,14 +49,15 @@ class NhatotPagination:
 
     @staticmethod
     def has_next_page(
-        current_page: int,
-        max_pages: int,
-        current_items_count: int,
+        current_page: int = 1,
+        max_pages: int = 1,
+        current_items_count: int = 0,
         min_items_threshold: int = 1,
+        **kwargs,
     ) -> bool:
-        """Xác định có nên tiếp tục chuyển sang trang kế tiếp hay không."""
-        if current_page >= max_pages:
-            return False
-        if current_items_count < min_items_threshold:
-            return False
-        return True
+        """Xác định có nên tiếp tục chuyển sang trang kế tiếp hay không.
+
+        Nhà Tốt cấm phân trang danh mục qua query parameter (?page=) theo chỉ thị robots.txt Disallow: /*page=.
+        Do đó has_next_page luôn trả về False để đảm bảo không sinh URL phân trang cấm.
+        """
+        return False

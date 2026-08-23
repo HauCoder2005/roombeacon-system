@@ -155,12 +155,6 @@ roombeacon/
 │   └── temp/
 │       └── .gitkeep
 │
-├── docker/
-│   ├── airflow/
-│   ├── crawler/
-│   ├── minio/
-│   └── mysql/
-│
 ├── docs/
 │   ├── airflow/
 │   ├── architecture/
@@ -183,10 +177,10 @@ roombeacon/
 Tầng gốc của repository định nghĩa cấu hình chung, orchestration môi trường, scripts tự động hóa và tài liệu dự án:
 
 ### Thư mục cấp Root
-* `crawler/`: Chứa toàn bộ core engine của crawler, bao gồm Domain, Application, Infrastructure, Pipeline và Tests. Hoàn toàn độc lập với Airflow.
-* `airflow/`: Chứa cấu hình, DAGs, plugins và logs cho Apache Airflow dùng cho việc lập lịch và giám sát luồng chạy.
+* `crawler/`: Chứa toàn bộ core engine của crawler (`Dockerfile`, Domain, Application, Infrastructure, Pipeline và Tests). Hoàn toàn độc lập với Airflow.
+* `airflow/`: Chứa cấu hình, `Dockerfile`, DAGs, plugins và logs cho Apache Airflow dùng cho việc lập lịch và giám sát luồng chạy.
+* `processing/`: Chứa `Dockerfile` và runtime môi trường xử lý DuckDB.
 * `data/`: Nơi lưu trữ dữ liệu local theo các tầng dữ liệu (Raw, Bronze, Silver, Gold, Exports, Temp).
-* `docker/`: Chứa cấu hình và Dockerfiles bổ trợ cho từng service cụ thể (airflow, crawler, minio, mysql).
 * `docs/`: Tài liệu kỹ thuật chi tiết của toàn bộ hệ thống (kiến trúc, crawler, airflow, storage, pipeline, database).
 * `scripts/`: Chứa các script tiện ích phục vụ phát triển (dev), quản trị Docker và cơ sở dữ liệu.
 * `.github/`: Chứa cấu hình CI/CD workflows cho GitHub Actions.
@@ -385,15 +379,13 @@ RAW  ──>  BRONZE  ──>  SILVER  ──>  GOLD  ──>  EXPORTS / MYSQL
 
 ---
 
-## Docker & Deployment
+## Docker & Containerization
 
-Đường dẫn: `docker/`
-
-Chứa các cấu hình phục vụ đóng gói và chạy dịch vụ bằng Docker:
-* `docker/airflow/`: Dockerfile và script tùy chỉnh cho Airflow service.
-* `docker/crawler/`: Cấu hình môi trường runtime cho Crawler worker.
-* `docker/minio/`: Script khởi tạo bucket và cấu hình quyền cho MinIO Object Storage.
-* `docker/mysql/`: Script init schema và cấu hình cho MySQL serving database.
+Dockerfiles được đặt trực tiếp bên cạnh từng application tương ứng:
+* `crawler/Dockerfile`: Cấu hình môi trường runtime cho Crawler worker.
+* `airflow/Dockerfile`: Dockerfile tùy chỉnh cho Airflow service với MySQL provider.
+* `processing/Dockerfile`: Dockerfile cho Python + DuckDB analytics runtime.
+* MySQL và MinIO sử dụng official Docker images trực tiếp trong `docker-compose.yml`.
 
 ---
 

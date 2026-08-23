@@ -1,0 +1,166 @@
+import json
+import logging
+import os
+from pathlib import Path
+from typing import Any
+
+from roombeacon_crawler.config.get_env import env
+from roombeacon_crawler.models.crawl_target_state import CrawlTargetState
+from roombeacon_crawler.repositories.crawl_state_repository import (
+    CrawlStateRepository,
+)
+
+logger = logging.getLogger(__name__)
+
+
+class LocalCrawlStateRepository(CrawlStateRepository):
+    """Triển khai lưu vết cục bộ filesystem dưới /data/state (hoặc <CRAWLER_DATA_DIR>/state).
+
+    Cấu trúc thư mục:
+    <base_dir>/state/
+    ├── targets/
+    │   └── {source}__{target_id}.json
+    └── seen/
+        └── {source}__{target_id}.json
+    """
+
+    def __init__(self, base_data_dir: str | Path | None = None) -> None:
+        raw_dir = base_data_dir or env.crawler.data_dir
+        self.base_dir = Path(raw_dir).resolve() / "state"
+        try:
+            self.targets_dir = self.base_dir / "targets"
+            self.seen_dir = self.base_dir / "seen"
+            self.targets_dir.mkdir(parents=True, exist_ok=True)
+            self.seen_dir.mkdir(parents=True, exist_ok=True)
+        except (OSError, PermissionError):
+            fallback_base = Path("./data/state").resolve()
+            self.base_dir = fallback_base
+            self.targets_dir = self.base_dir / "targets"
+            self.seen_dir = self.base_dir / "seen"
+            self.targets_dir.mkdir(parents=True, exist_ok=True)
+            self.seen_dir.mkdir(parents=True, exist_ok=True)
+
+    def _target_file(self, source: str, target_id: str) -> Path:
+        return self.targets_dir / f"{source}__{target_id}.json"
+
+    def _seen_file(self, source: str, target_id: str) -> Path:
+        return self.seen_dir / f"{source}__{target_id}.json"
+
+    def get_state(self, source: str, target_id: str) -> CrawlTargetState | None:
+        path = self._target_file(source, target_id)
+        if not path.is_file():
+            return None
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return CrawlTargetState.from_dict(data)
+        except Exception as exc:
+            logger.warning(
+                "Lỗi khi đọc state từ %s: %s. Khởi tạo trạng thái rỗng.",
+                path,
+                exc,
+            )
+            return None
+
+    def save_state(self, state: CrawlTargetState) -> None:
+        path = self._target_file(state.source, state.target_id)
+        temp_file = path.with_suffix(".tmp")
+        data = state.to_dict()
+        try:
+            with open(temp_file, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            os.replace(temp_file, path)
+            logger.info(
+                "Đã lưu state an toàn cho %s/%s tại %s",
+                state.source,
+                state.target_id,
+                path,
+            )
+        except Exception as exc:
+            if temp_file.is_file():
+                temp_file.unlink(missing_ok=True)
+            logger.error("Lỗi khi lưu state tại %s: %s", path, exc)
+            raise
+
+    def get_seen_listing_ids(self, source: str, target_id: str) -> set[str]:
+        """Lấy danh sách listing_ids đã thấy (hỗ trợ cả schema List và Dict)."""
+        path = self._seen_file(source, target_id)
+        if not path.is_file():
+            return set()
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, list):
+                return set(data)
+            if isinstance(data, dict):
+                return set(data.keys())
+            return set()
+        except Exception as exc:
+            logger.warning("Lỗi khi đọc seen listing ids từ %s: %s", path, exc)
+            return set()
+
+    def get_seen_metadata(self, source: str, target_id: str) -> dict[str, dict[str, Any]]:
+        """Lấy metadata chi tiết (last_detailed_at, card_fingerprint) của các tin đã thấy."""
+        path = self._seen_file(source, target_id)
+        if not path.is_file():
+            return {}
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                return data
+            if isinstance(data, list):
+                # Nâng cấp tương thích ngược từ list sang dict
+                return {lid: {"last_detailed_at": None, "card_fingerprint": None} for lid in data}
+            return {}
+        except Exception as exc:
+            logger.warning("Lỗi khi đọc seen metadata từ %s: %s", path, exc)
+            return {}
+
+    def record_seen_listing_ids(
+        self, source: str, target_id: str, listing_ids: set[str] | list[str]
+    ) -> None:
+        """Lưu thêm các listing_id đã thấy (tương thích ngược)."""
+        if not listing_ids:
+            return
+        meta_map = self.get_seen_metadata(source, target_id)
+        for lid in listing_ids:
+            if lid not in meta_map:
+                meta_map[lid] = {"last_detailed_at": None, "card_fingerprint": None}
+        self.save_seen_metadata(source, target_id, meta_map)
+
+    def record_seen_details(
+        self,
+        source: str,
+        target_id: str,
+        details_map: dict[str, dict[str, Any]],
+    ) -> None:
+        """Cập nhật hoặc thêm metadata chi tiết cho từng listing_id."""
+        if not details_map:
+            return
+        meta_map = self.get_seen_metadata(source, target_id)
+        for lid, info in details_map.items():
+            if lid in meta_map:
+                meta_map[lid].update(info)
+            else:
+                meta_map[lid] = info
+        self.save_seen_metadata(source, target_id, meta_map)
+
+    def save_seen_metadata(
+        self,
+        source: str,
+        target_id: str,
+        meta_map: dict[str, dict[str, Any]],
+    ) -> None:
+        """Lưu bảng metadata seen an toàn xuống filesystem qua atomic rename."""
+        path = self._seen_file(source, target_id)
+        temp_file = path.with_suffix(".tmp")
+        try:
+            with open(temp_file, "w", encoding="utf-8") as f:
+                json.dump(meta_map, f, ensure_ascii=False, indent=2)
+            os.replace(temp_file, path)
+        except Exception as exc:
+            if temp_file.is_file():
+                temp_file.unlink(missing_ok=True)
+            logger.error("Lỗi khi lưu seen metadata tại %s: %s", path, exc)
+            raise

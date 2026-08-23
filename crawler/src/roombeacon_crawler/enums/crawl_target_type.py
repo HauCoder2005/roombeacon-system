@@ -7,3 +7,5 @@ class CrawlTargetType(str, Enum):
     LISTING_PAGE = "listing_page"
     DETAIL_PAGE = "detail_page"
     ASSET = "asset"
+    UNSUPPORTED = "unsupported"
+    UNKNOWN = "unknown"

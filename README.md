@@ -316,20 +316,18 @@ roombeacon/
 │   └── tests/                         # Unit & Integration Tests
 │
 ├── airflow/                           # Apache Airflow Orchestration
+│   ├── Dockerfile                     # Custom Airflow image with MySQL provider
 │   ├── dags/                          # Crawling & Processing DAGs
 │   └── plugins/                       # Airflow custom plugins
+│
+├── processing/                        # Data Processing & Analytics Runtime
+│   └── Dockerfile                     # Python + DuckDB analytics container
 │
 ├── data/                              # Medallion Storage Directory
 │   ├── raw/                           # Raw crawls / snapshots
 │   ├── bronze/                        # Parsed common schema
 │   ├── silver/                        # Cleaned & deduplicated
 │   └── gold/                          # Aggregated & serving datasets
-│
-├── docker/                            # Service-specific Docker definitions
-│   ├── airflow/
-│   ├── crawler/
-│   ├── minio/
-│   └── mysql/
 │
 ├── docs/                              # Project Technical Documentation
 │   └── source-structure.md            # Detailed Architecture & Source Guide

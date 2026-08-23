@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+from roombeacon_crawler.config.get_env import env
 from roombeacon_crawler.enums.fetch_strategy import FetchStrategy
 
 
@@ -11,7 +12,7 @@ class SourceSettings:
     domain: str
     base_url: str
     default_strategy: FetchStrategy
-    request_delay_seconds: float = 1.5
-    max_concurrency: int = 1
-    timeout: float = 30.0
+    request_delay_seconds: float = env.crawler.request_delay_seconds
+    max_concurrency: int = env.crawler.max_concurrency
+    timeout: float = env.crawler.request_timeout_seconds
     robots_url: str | None = None
