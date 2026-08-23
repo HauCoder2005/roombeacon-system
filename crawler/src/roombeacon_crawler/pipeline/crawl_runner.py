@@ -1,6 +1,8 @@
 import asyncio
 from datetime import datetime, timezone
+import hashlib
 import logging
+import os
 from pathlib import Path
 import time
 from typing import Any
@@ -27,6 +29,7 @@ from roombeacon_crawler.models.rental_bronze_record import RentalBronzeRecord
 from roombeacon_crawler.pipeline.detail_crawl import DetailCrawlPipeline
 from roombeacon_crawler.pipeline.listing_crawl import ListingCrawlPipeline
 from roombeacon_crawler.policies.date_cutoff_policy import DateCutoffPolicy
+from roombeacon_crawler.policies.detail_refresh_policy import DetailRefreshPolicy
 from roombeacon_crawler.policies.fetch_policy import FetchPolicy
 from roombeacon_crawler.policies.rate_limit_policy import RateLimitPolicy
 from roombeacon_crawler.policies.retry_policy import RetryPolicy
@@ -36,6 +39,16 @@ from roombeacon_crawler.repositories.crawl_state_repository import (
 )
 from roombeacon_crawler.repositories.local_crawl_state_repository import (
     LocalCrawlStateRepository,
+)
+from roombeacon_crawler.models.deferred_detail_item import DeferredDetailItem
+from roombeacon_crawler.repositories.deferred_detail_repository import (
+    DeferredDetailRepository,
+)
+from roombeacon_crawler.repositories.local_deferred_detail_repository import (
+    LocalDeferredDetailRepository,
+)
+from roombeacon_crawler.policies.deferred_budget_scheduler import (
+    DeferredBudgetScheduler,
 )
 from roombeacon_crawler.services.fetch_coordinator import FetchCoordinator
 from roombeacon_crawler.services.response_classifier import ResponseClassifier
@@ -56,10 +69,13 @@ class CrawlRunner:
         settings: CrawlerSettings | None = None,
         storage_writer: LocalStorageWriter | None = None,
         state_repository: CrawlStateRepository | None = None,
+        deferred_repository: DeferredDetailRepository | None = None,
     ) -> None:
         self.settings = settings or CrawlerSettings()
-        self.storage_writer = storage_writer or LocalStorageWriter()
-        self.state_repository = state_repository or LocalCrawlStateRepository()
+        self.storage_writer = storage_writer or LocalStorageWriter(base_data_dir=self.settings.data_dir)
+        self.state_repository = state_repository or LocalCrawlStateRepository(base_data_dir=self.settings.data_dir)
+        self.deferred_repository = deferred_repository or LocalDeferredDetailRepository(base_data_dir=self.settings.data_dir)
+        self.deferred_scheduler = DeferredBudgetScheduler()
 
         # Phân giải Adapter từ URL nếu chưa được truyền vào
         if adapter is not None:
@@ -98,6 +114,9 @@ class CrawlRunner:
             user_agent=self.settings.user_agent,
         )
         self.fetch_policy = FetchPolicy()
+        self.detail_refresh_policy = DetailRefreshPolicy(
+            default_ttl_hours=int(os.environ.get("DETAIL_REFRESH_TTL_HOURS", "24"))
+        )
 
         date_from_dt = (
             datetime.fromisoformat(self.settings.date_from)
@@ -367,6 +386,7 @@ class CrawlRunner:
         start_page: int = 1,
     ) -> tuple[list[RentalBronzeRecord], CrawlRunResult]:
         """Thực thi chu trình crawl bất đồng bộ với cơ chế phân trang gia tăng và tiếp diễn bootstrap."""
+        now = datetime.now(timezone.utc)
         all_bronze_records: list[RentalBronzeRecord] = []
         all_detail_records: list[ListingDetailRaw] = []
         all_metadata: list[CrawlMetadata] = []
@@ -376,11 +396,34 @@ class CrawlRunner:
         seen_in_current_run: set[str] = set()
 
         # Tải danh sách listing_id đã từng thấy cho target này từ State Repository
-        known_seen_ids = set(
-            self.state_repository.get_seen_listing_ids(
+        if hasattr(self.state_repository, "get_seen_metadata"):
+            known_seen_meta = self.state_repository.get_seen_metadata(
                 self.adapter.SOURCE_NAME, target_id
             )
-        )
+        else:
+            known_seen_meta = {
+                lid: {"last_detailed_at": None, "card_fingerprint": None}
+                for lid in self.state_repository.get_seen_listing_ids(
+                    self.adapter.SOURCE_NAME, target_id
+                )
+            }
+        known_seen_ids = set(known_seen_meta.keys())
+        updated_seen_meta: dict[str, dict] = {}
+        records_changed = 0
+        detail_requests_forced_by_change = 0
+
+        detail_required = 0
+        detail_requested = 0
+        detail_succeeded = 0
+        detail_failed = 0
+        detail_skipped = 0
+
+        skipped_known_unchanged_ttl = 0
+        skipped_no_detail_url = 0
+        skipped_request_budget = 0
+        skipped_source_policy = 0
+        skipped_other = 0
+
         logger.info(
             "State Repository: Đã nạp %d known listing_ids cho %s/%s",
             len(known_seen_ids),
@@ -440,6 +483,96 @@ class CrawlRunner:
         stop_reason: str | CrawlStatus | None = None
         failure_reason: str | None = None
         errors: list[str] = []
+
+        # Khởi tạo metrics cho Deferred Detail Backlog
+        deferred_backlog_before = (
+            self.deferred_repository.count_backlog(self.adapter.SOURCE_NAME, target_id)
+            if hasattr(self.deferred_repository, "count_backlog")
+            else 0
+        )
+        deferred_added = 0
+        deferred_attempted = 0
+        deferred_succeeded = 0
+        deferred_failed = 0
+        deferred_terminal = 0
+
+        # Phase 1: Xử lý Deferred Detail Backlog theo hạn ngạch Fair Budget Scheduling
+        if (
+            crawl_details
+            and max_details_per_run is not None
+            and max_details_per_run > 0
+            and deferred_backlog_before > 0
+            and hasattr(self.deferred_repository, "get_backlog")
+        ):
+            allocation = self.deferred_scheduler.allocate(
+                total_budget=max_details_per_run,
+                deferred_pending_count=deferred_backlog_before,
+            )
+            deferred_quota = allocation.deferred_quota
+            logger.info(
+                "Fair Budget Scheduling: Total=%d | Deferred Quota=%d (Backlog: %d) | Immediate Quota=%d",
+                max_details_per_run,
+                deferred_quota,
+                deferred_backlog_before,
+                allocation.immediate_quota,
+            )
+
+            backlog_items = self.deferred_repository.get_backlog(
+                self.adapter.SOURCE_NAME, target_id
+            )[:deferred_quota]
+
+            for b_item in backlog_items:
+                deferred_attempted += 1
+                det_target = CrawlTarget(
+                    url=b_item.detail_url,
+                    source=self.adapter.SOURCE_NAME,
+                    target_type=CrawlTargetType.DETAIL_PAGE,
+                )
+                fake_card = ListingCardRaw(
+                    source=self.adapter.SOURCE_NAME,
+                    listing_id=b_item.platform_post_id,
+                    detail_url=b_item.detail_url,
+                    title_raw=b_item.card_title or "",
+                    price_raw=b_item.card_price,
+                    area_raw=b_item.card_area,
+                    location_raw=b_item.card_location,
+                    posted_at_raw=None,
+                    crawl_run_id=run_id,
+                )
+                det_bronze, det_raw, det_meta = await self.detail_pipeline.execute(
+                    target=det_target,
+                    card=fake_card,
+                    run_id=run_id,
+                )
+                all_metadata.append(det_meta)
+
+                if det_raw is not None:
+                    deferred_succeeded += 1
+                    all_detail_records.append(det_raw)
+                    self.deferred_repository.record_success(
+                        self.adapter.SOURCE_NAME, target_id, b_item.platform_post_id
+                    )
+                    updated_seen_meta[b_item.platform_post_id] = {
+                        "last_detailed_at": now.isoformat(),
+                        "card_fingerprint": b_item.card_fingerprint,
+                    }
+                    if det_bronze is not None:
+                        all_bronze_records.append(det_bronze)
+                else:
+                    deferred_failed += 1
+                    status_code = getattr(det_meta, "status_code", None)
+                    is_term = status_code in (404, 410)
+                    self.deferred_repository.record_failure(
+                        self.adapter.SOURCE_NAME,
+                        target_id,
+                        b_item.platform_post_id,
+                        error=f"HTTP status {status_code}",
+                        is_terminal=is_term,
+                    )
+                    if is_term:
+                        deferred_terminal += 1
+
+            details_crawled_count += deferred_attempted
 
         while current_page <= effective_end_page:
             if is_forward_only:
@@ -583,58 +716,145 @@ class CrawlRunner:
                 seen_in_current_run.add(lid)
                 card.crawl_run_id = run_id
 
-                if lid not in known_seen_ids:
-                    # Tin mới (NEW)
+                # Tính toán fingerprint từ các trường nhẹ của Listing Card
+                raw_fp_str = f"{card.title_raw or ''}|{card.price_raw or ''}|{card.area_raw or ''}|{card.location_raw or ''}"
+                card_fp = hashlib.sha256(raw_fp_str.encode("utf-8")).hexdigest()[:16]
+
+                is_new = (lid not in known_seen_ids)
+                prev_info = known_seen_meta.get(lid, {})
+                prev_fp = prev_info.get("card_fingerprint")
+                last_detailed_at = prev_info.get("last_detailed_at")
+                card_changed = (not is_new and prev_fp is not None and prev_fp != card_fp)
+
+                decision = self.detail_refresh_policy.evaluate(
+                    is_new=is_new,
+                    card_changed=card_changed,
+                    last_detailed_at=last_detailed_at,
+                    current_time=now,
+                )
+
+                if is_new:
                     page_new_count += 1
                     new_listing_ids.append(lid)
+                else:
+                    page_known_count += 1
 
-                    if crawl_details:
-                        if (
-                            max_details_per_run is not None
-                            and details_crawled_count >= max_details_per_run
-                        ):
-                            logger.info(
-                                "Đã đạt giới hạn max_details_per_run (%d). Bỏ qua các detail còn lại.",
-                                max_details_per_run,
-                            )
-                            record = BronzeMapper.map(card=card, detail=None, run_id=run_id)
-                            all_bronze_records.append(record)
-                            continue
+                if card_changed:
+                    records_changed += 1
 
-                        detail_target = CrawlTarget(
-                            url=card.detail_url,
-                            source=self.adapter.SOURCE_NAME,
-                            target_type=CrawlTargetType.DETAIL_PAGE,
+                has_detail_url = bool(card.detail_url and card.detail_url.strip())
+                detail_required += 1
+
+                if not crawl_details:
+                    # Bỏ qua do chính sách nguồn/cấu hình tắt cào detail
+                    detail_skipped += 1
+                    skipped_source_policy += 1
+                    record = BronzeMapper.map(card=card, detail=None, run_id=run_id)
+                    all_bronze_records.append(record)
+                    updated_seen_meta[lid] = {
+                        "last_detailed_at": last_detailed_at,
+                        "card_fingerprint": card_fp,
+                    }
+                elif not has_detail_url:
+                    # Bỏ qua do không có URL chi tiết hợp lệ
+                    detail_skipped += 1
+                    skipped_no_detail_url += 1
+                    record = BronzeMapper.map(card=card, detail=None, run_id=run_id)
+                    all_bronze_records.append(record)
+                    updated_seen_meta[lid] = {
+                        "last_detailed_at": last_detailed_at,
+                        "card_fingerprint": card_fp,
+                    }
+                elif not decision.should_refresh:
+                    # Bỏ qua do tin đã biết và không đổi trong hạn TTL (Lightweight Observation)
+                    detail_skipped += 1
+                    skipped_known_unchanged_ttl += 1
+                    record = BronzeMapper.map(card=card, detail=None, run_id=run_id)
+                    all_bronze_records.append(record)
+                    updated_seen_meta[lid] = {
+                        "last_detailed_at": last_detailed_at,
+                        "card_fingerprint": card_fp,
+                    }
+                elif (
+                    max_details_per_run is not None
+                    and details_crawled_count >= max_details_per_run
+                ):
+                    # Bỏ qua do đã chạm trần ngân sách request detail trong run (Request Budget Cap)
+                    logger.info(
+                        "Đã đạt giới hạn max_details_per_run (%d). Hoãn detail fetch cho %s.",
+                        max_details_per_run,
+                        lid,
+                    )
+                    detail_skipped += 1
+                    skipped_request_budget += 1
+                    record = BronzeMapper.map(card=card, detail=None, run_id=run_id)
+                    all_bronze_records.append(record)
+                    updated_seen_meta[lid] = {
+                        "last_detailed_at": last_detailed_at,
+                        "card_fingerprint": card_fp,
+                    }
+                    # Đưa vào Durable Deferred Detail Backlog để cào làm giàu ở chu kỳ sau
+                    deferred_item = DeferredDetailItem(
+                        source=self.adapter.SOURCE_NAME,
+                        platform_post_id=lid,
+                        detail_url=card.detail_url,
+                        origin_run_id=run_id,
+                        first_deferred_at=now.isoformat(),
+                        reason="REQUEST_BUDGET_EXHAUSTED",
+                        card_title=getattr(card, "title_raw", None) or getattr(card, "title", None),
+                        card_price=getattr(card, "price_raw", None) or getattr(card, "price", None),
+                        card_area=getattr(card, "area_raw", None) or getattr(card, "area", None),
+                        card_location=getattr(card, "location_raw", None) or getattr(card, "location", None),
+                        card_fingerprint=card_fp,
+                    )
+                    if hasattr(self.deferred_repository, "enqueue"):
+                        added = self.deferred_repository.enqueue(
+                            self.adapter.SOURCE_NAME, target_id, [deferred_item]
                         )
-                        detail_bronze, detail_raw, detail_meta = (
-                            await self.detail_pipeline.execute(
-                                target=detail_target,
-                                card=card,
-                                run_id=run_id,
-                            )
+                        deferred_added += added
+                else:
+                    # Thực hiện network request cào trang chi tiết
+                    detail_requested += 1
+                    detail_target = CrawlTarget(
+                        url=card.detail_url,
+                        source=self.adapter.SOURCE_NAME,
+                        target_type=CrawlTargetType.DETAIL_PAGE,
+                    )
+                    detail_bronze, detail_raw, detail_meta = (
+                        await self.detail_pipeline.execute(
+                            target=detail_target,
+                            card=card,
+                            run_id=run_id,
                         )
-                        all_metadata.append(detail_meta)
-                        details_crawled_count += 1
+                    )
+                    all_metadata.append(detail_meta)
+                    details_crawled_count += 1
+                    if card_changed:
+                        detail_requests_forced_by_change += 1
 
-                        if detail_raw is not None:
-                            details_success += 1
-                            all_detail_records.append(detail_raw)
-                        else:
-                            details_failed += 1
+                    if detail_raw is not None:
+                        detail_succeeded += 1
+                        all_detail_records.append(detail_raw)
+                        updated_seen_meta[lid] = {
+                            "last_detailed_at": now.isoformat(),
+                            "card_fingerprint": card_fp,
+                        }
+                        if hasattr(self.deferred_repository, "record_success"):
+                            self.deferred_repository.record_success(
+                                self.adapter.SOURCE_NAME, target_id, lid
+                            )
+                    else:
+                        detail_failed += 1
+                        updated_seen_meta[lid] = {
+                            "last_detailed_at": last_detailed_at,
+                            "card_fingerprint": card_fp,
+                        }
 
-                        if detail_bronze is not None:
-                            all_bronze_records.append(detail_bronze)
-                        else:
-                            record = BronzeMapper.map(card=card, detail=None, run_id=run_id)
-                            all_bronze_records.append(record)
+                    if detail_bronze is not None:
+                        all_bronze_records.append(detail_bronze)
                     else:
                         record = BronzeMapper.map(card=card, detail=None, run_id=run_id)
                         all_bronze_records.append(record)
-                else:
-                    # Tin đã biết trong lịch sử (KNOWN) -> không cào detail để tiết kiệm mạng nhưng VẪN ghi nhận vào Bronze Observation
-                    page_known_count += 1
-                    record = BronzeMapper.map(card=card, detail=None, run_id=run_id)
-                    all_bronze_records.append(record)
 
             if is_forward_only:
                 fetch_strat = getattr(self.adapter.CAPABILITIES, "preferred_fetch_strategy", None)
@@ -788,11 +1008,39 @@ class CrawlRunner:
                 bootstrap_completed = True
                 bootstrap_next_page = None
 
+        if hasattr(self.state_repository, "record_seen_details") and updated_seen_meta:
+            self.state_repository.record_seen_details(
+                self.adapter.SOURCE_NAME, target_id, updated_seen_meta
+            )
+
         elapsed_seconds = time.perf_counter() - start_time
         finished_at = datetime.now(timezone.utc).isoformat()
         records_seen = len(observed_listing_ids)
         records_new = len(new_listing_ids)
         records_known = max(0, records_seen - records_new)
+
+        unique_yield = (
+            (records_new / records_seen * 100.0) if records_seen > 0 else 0.0
+        )
+        change_rate = (
+            (records_changed / records_known * 100.0) if records_known > 0 else 0.0
+        )
+
+        deferred_remaining = (
+            self.deferred_repository.count_backlog(self.adapter.SOURCE_NAME, target_id)
+            if hasattr(self.deferred_repository, "count_backlog")
+            else 0
+        )
+
+        all_seen_meta_combined = {**known_seen_meta, **updated_seen_meta}
+        total_unique_seen = len(all_seen_meta_combined)
+        detailed_count = sum(
+            1 for m in all_seen_meta_combined.values() if m.get("last_detailed_at")
+        )
+        detail_coverage = (
+            (detailed_count / total_unique_seen * 100.0) if total_unique_seen > 0 else 0.0
+        )
+        lightweight_only_listings = max(0, total_unique_seen - detailed_count)
 
         result = CrawlRunResult(
             run_id=run_id,
@@ -811,15 +1059,38 @@ class CrawlRunner:
             pages_attempted=pages_attempted,
             pages_success=pages_success,
             pages_failed=pages_failed,
-            details_success=details_success,
-            details_failed=details_failed,
+            details_success=detail_succeeded + deferred_succeeded,
+            details_failed=detail_failed + deferred_failed,
+            detail_requests_skipped=detail_skipped,
+            detail_requests_forced_by_change=detail_requests_forced_by_change,
+            detail_required=detail_required,
+            detail_requested=detail_requested,
+            detail_succeeded=detail_succeeded,
+            detail_failed=detail_failed,
+            detail_skipped=detail_skipped,
+            skipped_known_unchanged_ttl=skipped_known_unchanged_ttl,
+            skipped_no_detail_url=skipped_no_detail_url,
+            skipped_request_budget=skipped_request_budget,
+            skipped_source_policy=skipped_source_policy,
+            skipped_other=skipped_other,
+            deferred_backlog_before=deferred_backlog_before,
+            deferred_added=deferred_added,
+            deferred_attempted=deferred_attempted,
+            deferred_succeeded=deferred_succeeded,
+            deferred_failed=deferred_failed,
+            deferred_terminal=deferred_terminal,
+            deferred_remaining=deferred_remaining,
+            detail_coverage=round(detail_coverage, 2),
+            lightweight_only_listings=lightweight_only_listings,
+            unique_yield=round(unique_yield, 2),
+            change_rate=round(change_rate, 2),
             records_created=len(new_listing_ids),
             observations_written=len(all_bronze_records),
             duplicates_skipped=duplicates_skipped,
             records_seen=records_seen,
             records_new=records_new,
             records_known=records_known,
-            records_changed=0,
+            records_changed=records_changed,
             known_pages_streak_at_stop=known_page_streak,
             bootstrap_completed=bootstrap_completed,
             bootstrap_start_page=start_page if is_bootstrap else 1,

@@ -23,6 +23,12 @@ services:
     command:
       - "--character-set-server=${MYSQL_CHARSET}"
       - "--collation-server=${MYSQL_COLLATION}"
+      - "--server-id=101"
+      - "--gtid-mode=ON"
+      - "--enforce-gtid-consistency=ON"
+      - "--log-bin=mysql-bin"
+      - "--binlog-format=ROW"
+      - "--binlog-do-db=${BRONZE_MYSQL_DATABASE:-roombeacon_bronze}"
 
     environment:
       MYSQL_ROOT_PASSWORD: "${BRONZE_MYSQL_ROOT_PASSWORD}"

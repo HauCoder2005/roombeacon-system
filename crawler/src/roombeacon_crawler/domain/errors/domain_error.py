@@ -43,3 +43,12 @@ class AnalyticsError(DomainError):
 
 class DuckDBAttachError(AnalyticsError):
     """Lỗi khi gắn (attach) database nguồn vào DuckDB analytical engine."""
+
+
+class ConfigurationError(DomainError):
+    """Lỗi cấu hình hệ thống hoặc môi trường không hợp lệ."""
+
+
+class TestEnvironmentIsolationError(ConfigurationError):
+    """Lỗi vi phạm cô lập môi trường test khi test cố gắng trỏ tới production database."""
+

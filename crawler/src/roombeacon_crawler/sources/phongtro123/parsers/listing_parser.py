@@ -12,7 +12,7 @@ PRICE_REGEX = re.compile(
     r"(\d+(?:[.,]\d+)?\s*(?:triệu|tr|nghìn|k|tỷ|đ|đồng|vnđ)(?:\s*/\s*(?:tháng|m[²2]))?|\d{1,3}(?:\.\d{3})+\s*(?:đ|vnđ|đồng)(?:\s*/\s*tháng)?|thỏa\s+thuận)",
     re.IGNORECASE,
 )
-AREA_REGEX = re.compile(r"(\d+(?:[.,]\d+)?\s*m\s*(?:²|2)?)", re.IGNORECASE)
+AREA_REGEX = re.compile(r"\b(\d{1,4}(?:[.,]\d+)?)\s*(?:m²|m2|mét vuông|m\b)", re.IGNORECASE)
 
 
 class DOMNode:
@@ -200,7 +200,13 @@ class Phongtro123ListingParser:
                 posted_at_raw = time_node.get_text() if time_node else None
 
                 # Author
-                author_node = item.find(class_contains="post-author") or item.find(class_contains="author") or item.find(class_contains="user-name") or item.find(class_contains="line-clamp-1")
+                author_node = (
+                    item.find(class_contains="post-author")
+                    or item.find(class_contains="author-name")
+                    or item.find(class_contains="author")
+                    or item.find(class_contains="user-name")
+                    or item.find(class_contains="post__author")
+                )
                 seller_name_raw = author_node.get_text() if author_node else None
 
                 # Thumbnail image

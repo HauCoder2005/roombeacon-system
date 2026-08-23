@@ -57,71 +57,88 @@ class PersistBronzeObservationsUseCase:
 
     def execute(self, observations: Sequence[BronzeObservation]) -> BronzeImportResult:
         """Thực thi persist danh sách BronzeObservation."""
-        result = BronzeImportResult(total_observations=len(observations))
         if not observations:
-            return result
+            return BronzeImportResult(total_observations=0)
 
-        try:
-            self.transaction_mgr.begin()
-            conn = getattr(self.transaction_mgr, "connection", None)
-            if conn is not None:
-                if hasattr(self.platform_repo, "connection"):
-                    self.platform_repo.connection = conn
-                if hasattr(self.rental_post_repo, "connection"):
-                    self.rental_post_repo.connection = conn
-                if hasattr(self.observation_repo, "connection"):
-                    self.observation_repo.connection = conn
-                if hasattr(self.children_repo, "connection"):
-                    self.children_repo.connection = conn
+        max_retries = 3
+        for attempt in range(1, max_retries + 1):
+            result = BronzeImportResult(total_observations=len(observations))
+            try:
+                self.transaction_mgr.begin()
+                conn = getattr(self.transaction_mgr, "connection", None)
+                if conn is not None:
+                    if hasattr(self.platform_repo, "connection"):
+                        self.platform_repo.connection = conn
+                    if hasattr(self.rental_post_repo, "connection"):
+                        self.rental_post_repo.connection = conn
+                    if hasattr(self.observation_repo, "connection"):
+                        self.observation_repo.connection = conn
+                    if hasattr(self.children_repo, "connection"):
+                        self.children_repo.connection = conn
 
-            for obs in observations:
-                # 1. Quản lý Platform
-                platform_id = self.platform_repo.get_or_create_platform(
-                    source_code=obs.source,
-                    display_name=obs.source.capitalize(),
-                    base_url=obs.url,
-                )
-
-                # 2. Quản lý Rental Post Identity (Stable entity)
-                post_id, is_new_post = self.rental_post_repo.upsert_post(
-                    obs, platform_id=platform_id
-                )
-                if is_new_post:
-                    result.posts_created += 1
-                else:
-                    result.posts_existing += 1
-
-                # 3. Quản lý Phiên bản Quan sát (rental_post_versions)
-                version_id, is_inserted = self.observation_repo.insert_observation(
-                    obs, post_id=post_id
-                )
-
-                # 4. Quản lý dữ liệu con liên kết (chỉ khi là observation mới)
-                if is_inserted:
-                    result.observations_inserted += 1
-                    self.children_repo.persist_children(
-                        obs, post_id=post_id, observation_id=version_id
+                for obs in observations:
+                    # 1. Quản lý Platform
+                    platform_id = self.platform_repo.get_or_create_platform(
+                        source_code=obs.source,
+                        display_name=obs.source.capitalize(),
+                        base_url=obs.url,
                     )
-                else:
-                    result.technical_duplicates += 1
 
-            self.transaction_mgr.commit()
-            logger.info(
-                "Persist Bronze hoàn tất: %d observations (Mới: %d, Trùng lặp kỹ thuật: %d, Posts mới: %d, Posts cũ: %d)",
-                len(observations),
-                result.observations_inserted,
-                result.technical_duplicates,
-                result.posts_created,
-                result.posts_existing,
-            )
-        except Exception as exc:
-            self.transaction_mgr.rollback()
-            err_msg = f"Lỗi transaction khi persist Bronze observations: {exc}"
-            logger.exception(err_msg)
-            raise PersistenceError(err_msg) from exc
-        finally:
-            for repo in (self.platform_repo, self.rental_post_repo, self.observation_repo, self.children_repo):
-                if hasattr(repo, "connection"):
-                    repo.connection = None
+                    # 2. Quản lý Rental Post Identity (Stable entity)
+                    post_id, is_new_post = self.rental_post_repo.upsert_post(
+                        obs, platform_id=platform_id
+                    )
+                    if is_new_post:
+                        result.posts_created += 1
+                    else:
+                        result.posts_existing += 1
+
+                    # 3. Quản lý Phiên bản Quan sát (rental_post_versions)
+                    version_id, is_inserted = self.observation_repo.insert_observation(
+                        obs, post_id=post_id
+                    )
+
+                    # 4. Quản lý dữ liệu con liên kết (chỉ khi là observation mới)
+                    if is_inserted:
+                        result.observations_inserted += 1
+                        self.children_repo.persist_children(
+                            obs, post_id=post_id, observation_id=version_id
+                        )
+                    else:
+                        result.technical_duplicates += 1
+
+                self.transaction_mgr.commit()
+                logger.info(
+                    "Persist Bronze hoàn tất: %d observations (Mới: %d, Trùng lặp kỹ thuật: %d, Posts mới: %d, Posts cũ: %d)",
+                    len(observations),
+                    result.observations_inserted,
+                    result.technical_duplicates,
+                    result.posts_created,
+                    result.posts_existing,
+                )
+                return result
+            except Exception as exc:
+                self.transaction_mgr.rollback()
+                is_deadlock = "1213" in str(exc) or "deadlock" in str(exc).lower()
+                if is_deadlock and attempt < max_retries:
+                    import random
+                    import time
+                    sleep_time = (0.2 * (2 ** attempt)) + random.uniform(0.05, 0.15)
+                    logger.warning(
+                        "Gặp MySQL deadlock (attempt %d/%d). Thử lại sau %.2fs: %s",
+                        attempt, max_retries, sleep_time, exc
+                    )
+                    time.sleep(sleep_time)
+                    # Reset result counters before retry
+                    result = PersistResult()
+                    continue
+
+                err_msg = f"Lỗi transaction khi persist Bronze observations: {exc}"
+                logger.exception(err_msg)
+                raise PersistenceError(err_msg) from exc
+            finally:
+                for repo in (self.platform_repo, self.rental_post_repo, self.observation_repo, self.children_repo):
+                    if hasattr(repo, "connection"):
+                        repo.connection = None
 
         return result

@@ -89,18 +89,30 @@ def plan_crawls(targets: list[dict], **context) -> list[dict]:
             )
         resolved_adapter = SourceResolver.resolve(debug_url)
         source_name = resolved_adapter.SOURCE_NAME if resolved_adapter else "unknown"
+        state = repo.get_state(source_name, "debug_single_target")
+        start_page = (
+            state.bootstrap_next_page
+            if (state and not getattr(state, "bootstrap_completed", False) and state.bootstrap_next_page)
+            else 1
+        )
+        plan_mode = (
+            CrawlMode.BOOTSTRAP_CONTINUE
+            if (state and not getattr(state, "bootstrap_completed", False) and state.bootstrap_next_page)
+            else CrawlMode.FORCE_FULL
+        )
         plan = CrawlPlan(
             source=source_name,
             target_id="debug_single_target",
             target_url=debug_url,
-            mode=CrawlMode.FORCE_FULL,
+            mode=plan_mode,
             reason="DEBUG_SINGLE_TARGET_MANUAL_TRIGGER",
             planned_at=now.isoformat(),
             crawl_details=debug_crawl_details,
             safety_max_pages=debug_max_pages if debug_max_pages > 0 else 10,
             safety_max_records=debug_max_records if debug_max_records > 0 else 200,
+            start_page=start_page,
         )
-        logger.info("Tạo 1 CrawlPlan DEBUG cho URL: %s", debug_url)
+        logger.info("Tạo 1 CrawlPlan DEBUG cho URL: %s (start_page=%d, mode=%s)", debug_url, start_page, plan_mode.value if hasattr(plan_mode, "value") else str(plan_mode))
         return [plan.to_dict()]
 
     # 2. Chế độ sản xuất tự động (AUTO, FORCE_FULL, FORCE_INCREMENTAL)
@@ -402,6 +414,30 @@ def execute_crawl(qual_payload: dict, **context) -> dict:
         "observed_listing_ids": getattr(result, "observed_listing_ids", []),
         "new_listing_ids": getattr(result, "new_listing_ids", []),
         "observations_written": getattr(result, "observations_written", len(getattr(result, "observed_listing_ids", []))),
+        "records_changed": getattr(result, "records_changed", 0),
+        "detail_requests_skipped": getattr(result, "detail_requests_skipped", 0),
+        "detail_requests_forced_by_change": getattr(result, "detail_requests_forced_by_change", 0),
+        "detail_required": getattr(result, "detail_required", 0),
+        "detail_requested": getattr(result, "detail_requested", 0),
+        "detail_succeeded": getattr(result, "detail_succeeded", 0),
+        "detail_failed": getattr(result, "detail_failed", 0),
+        "detail_skipped": getattr(result, "detail_skipped", 0),
+        "skipped_known_unchanged_ttl": getattr(result, "skipped_known_unchanged_ttl", 0),
+        "skipped_no_detail_url": getattr(result, "skipped_no_detail_url", 0),
+        "skipped_request_budget": getattr(result, "skipped_request_budget", 0),
+        "skipped_source_policy": getattr(result, "skipped_source_policy", 0),
+        "skipped_other": getattr(result, "skipped_other", 0),
+        "deferred_backlog_before": getattr(result, "deferred_backlog_before", 0),
+        "deferred_added": getattr(result, "deferred_added", 0),
+        "deferred_attempted": getattr(result, "deferred_attempted", 0),
+        "deferred_succeeded": getattr(result, "deferred_succeeded", 0),
+        "deferred_failed": getattr(result, "deferred_failed", 0),
+        "deferred_terminal": getattr(result, "deferred_terminal", 0),
+        "deferred_remaining": getattr(result, "deferred_remaining", 0),
+        "detail_coverage": getattr(result, "detail_coverage", 0.0),
+        "lightweight_only_listings": getattr(result, "lightweight_only_listings", 0),
+        "unique_yield": getattr(result, "unique_yield", 0.0),
+        "change_rate": getattr(result, "change_rate", 0.0),
         "bootstrap_completed": getattr(result, "bootstrap_completed", False),
         "bootstrap_start_page": getattr(result, "bootstrap_start_page", 1),
         "bootstrap_next_page": getattr(result, "bootstrap_next_page", None),
@@ -594,12 +630,20 @@ def update_checkpoint(persist_payload: dict = None, result_payload: dict = None,
         elif plan_mode in (
             CrawlMode.BOOTSTRAP_FULL.value,
             CrawlMode.BOOTSTRAP_CONTINUE.value,
+            CrawlMode.FORCE_FULL.value,
+            "BOOTSTRAP_FULL",
+            "BOOTSTRAP_CONTINUE",
+            "FORCE_FULL",
         ):
-            state.bootstrap_completed = False
-            state.bootstrap_next_page = result_payload.get("bootstrap_next_page")
+            b_next = result_payload.get("bootstrap_next_page")
+            b_comp = result_payload.get("bootstrap_completed", False)
+            state.bootstrap_completed = b_comp
+            state.bootstrap_next_page = b_next
         elif plan_mode in (
             CrawlMode.INCREMENTAL.value,
             CrawlMode.FORCE_INCREMENTAL.value,
+            "INCREMENTAL",
+            "FORCE_INCREMENTAL",
         ):
             state.bootstrap_completed = True
             state.bootstrap_next_page = None
@@ -844,7 +888,7 @@ def summarize_run(
     logger.info("Target states persisted      : %d", target_states_persisted)
     logger.info("Success checkpoints advanced : %d", success_checkpoints_advanced)
     logger.info("Health states updated        : %d", health_states_updated)
-    logger.info("-" * 60)
+    logger.info("=" * 60)
     logger.info("SOURCE COVERAGE & ACQUISITION SUMMARY:")
     for r in crawl_results:
         src = r.get("source", "unknown")
@@ -853,8 +897,18 @@ def summarize_run(
         seen_cnt = r.get("records_seen", 0)
         new_cnt = r.get("records_new", 0)
         known_cnt = r.get("records_known", 0)
-        b_path = r.get("bronze_path") or "NONE"
+        changed_cnt = r.get("records_changed", 0)
+        det_succ = r.get("details_success", 0)
+        det_skip = r.get("detail_requests_skipped", 0)
+        det_force = r.get("detail_requests_forced_by_change", 0)
+        u_yield = r.get("unique_yield", 0.0)
+        c_rate = r.get("change_rate", 0.0)
+        b_start = r.get("bootstrap_start_page", 1)
+        b_next = r.get("bootstrap_next_page")
+        b_comp = r.get("bootstrap_completed", False)
+        h_status = "COMPLETE" if b_comp else "IN_PROGRESS"
 
+        b_path = r.get("bronze_path") or "NONE"
         p_res = next((p for p in persistence_results if p.get("source") == src), {})
         m_status = p_res.get("status", "NONE")
         m_p_created = p_res.get("posts_created", 0)
@@ -862,25 +916,70 @@ def summarize_run(
         m_obs_ins = p_res.get("observations_inserted", 0)
         m_dups = p_res.get("technical_duplicates", 0)
 
-        logger.info("-" * 40)
-        logger.info("Source: %s", src)
-        logger.info("Crawl")
-        logger.info("  Mode                 : %s", r.get("plan", {}).get("mode", "UNKNOWN"))
-        logger.info("  Status               : %s", r.get("crawl_status", "UNKNOWN"))
-        logger.info("  Seen                 : %d", seen_cnt)
-        logger.info("  New                  : %d", new_cnt)
-        logger.info("  Known                : %d", known_cnt)
-        logger.info("Bronze")
-        logger.info("  Observations Written : %d", obs_w)
-        logger.info("  Path                 : %s", b_path)
-        logger.info("MySQL")
-        logger.info("  Status               : %s", m_status)
-        logger.info("  Posts Created        : %d", m_p_created)
-        logger.info("  Posts Existing       : %d", m_p_exist)
-        logger.info("  Observations Inserted: %d", m_obs_ins)
-        logger.info("  Technical Duplicates : %d", m_dups)
-        logger.info("Checkpoint")
-        logger.info("  Persisted            : YES" if target_states_persisted else "NO")
+        det_req = r.get("detail_required", seen_cnt)
+        det_exec = r.get("detail_requested", det_succ + r.get("details_failed", 0))
+        det_succ = r.get("detail_succeeded", r.get("details_success", 0))
+        det_fail = r.get("detail_failed", r.get("details_failed", 0))
+        det_skip = r.get("detail_skipped", r.get("detail_requests_skipped", 0))
+
+        skip_ttl = r.get("skipped_known_unchanged_ttl", 0)
+        skip_nourl = r.get("skipped_no_detail_url", 0)
+        skip_budget = r.get("skipped_request_budget", 0)
+        skip_policy = r.get("skipped_source_policy", 0)
+        skip_other = r.get("skipped_other", 0)
+
+        def_before = r.get("deferred_backlog_before", 0)
+        def_added = r.get("deferred_added", 0)
+        def_att = r.get("deferred_attempted", 0)
+        def_succ = r.get("deferred_succeeded", 0)
+        def_fail = r.get("deferred_failed", 0)
+        def_term = r.get("deferred_terminal", 0)
+        def_rem = r.get("deferred_remaining", 0)
+        cov = r.get("detail_coverage", 0.0)
+        light_only = r.get("lightweight_only_listings", 0)
+
+        logger.info("=" * 60)
+        logger.info("ROOMBEACON ACQUISITION SUMMARY")
+        logger.info("=" * 60)
+        logger.info("Source                    : %s", src)
+        logger.info("Candidates Seen           : %d", seen_cnt)
+        logger.info("New Unique Posts          : %d", new_cnt)
+        logger.info("Known Posts               : %d", known_cnt)
+        logger.info("Changed Listings          : %d", changed_cnt)
+        logger.info("------------------------------------------------------------")
+        logger.info("Detail Required           : %d", det_req)
+        logger.info("Detail Requested          : %d", det_exec)
+        logger.info("Detail Succeeded          : %d", det_succ)
+        logger.info("Detail Failed             : %d", det_fail)
+        logger.info("Detail Skipped            : %d", det_skip)
+        logger.info("------------------------------------------------------------")
+        logger.info("Skip — TTL                : %d", skip_ttl)
+        logger.info("Skip — No Detail URL      : %d", skip_nourl)
+        logger.info("Skip — Request Budget     : %d", skip_budget)
+        logger.info("Skip — Source Policy      : %d", skip_policy)
+        logger.info("Skip — Other              : %d", skip_other)
+        logger.info("------------------------------------------------------------")
+        logger.info("Deferred Backlog Before   : %d", def_before)
+        logger.info("Deferred Added            : %d", def_added)
+        logger.info("Deferred Attempted        : %d", def_att)
+        logger.info("Deferred Succeeded        : %d", def_succ)
+        logger.info("Deferred Failed           : %d", def_fail)
+        logger.info("Deferred Terminal         : %d", def_term)
+        logger.info("Deferred Remaining        : %d", def_rem)
+        logger.info("------------------------------------------------------------")
+        logger.info("Detail Coverage           : %.1f%%", cov)
+        logger.info("Lightweight-only Listings : %d", light_only)
+        logger.info("------------------------------------------------------------")
+        logger.info("Forced Detail Refresh     : %d", det_force)
+        logger.info("Unique Yield              : %.1f%%", u_yield)
+        logger.info("Change Rate               : %.1f%%", c_rate)
+        logger.info("Observations Written      : %d", obs_w)
+        logger.info("Historical Frontier Before: %d", b_start)
+        logger.info("Historical Frontier After : %s", str(b_next) if b_next else "N/A")
+        logger.info("Historical Status         : %s", h_status)
+        logger.info("Bronze Path               : %s", b_path)
+        logger.info("MySQL Status              : %s (Ins: %d, Dups: %d)", m_status, m_obs_ins, m_dups)
+        logger.info("=" * 60)
 
     logger.info("=" * 60)
     logger.info("DuckDB")

@@ -1,5 +1,6 @@
 import json
 import logging
+import math
 from sqlalchemy import text
 from roombeacon_crawler.domain.models.bronze_observation import BronzeObservation
 from roombeacon_crawler.domain.ports.persistence_port import PostChildrenRepositoryPort
@@ -26,6 +27,17 @@ class MySQLPostChildrenRepository(PostChildrenRepositoryPort):
         # 1. Bảng giá (post_prices)
         if observation.price_raw:
             num_price = MySQLBronzeMapper.parse_numeric_price(observation.price_raw)
+            # Defensive guard: ensure price_amount fits within DECIMAL(15,2)
+            if num_price is not None:
+                if not isinstance(num_price, (int, float)) or not math.isfinite(num_price) or num_price <= 0 or num_price > 999_999_999_999.99:
+                    logger.warning(
+                        "Defensive guard: invalid price_amount %s rejected before insert, setting to NULL (price_raw=%s, post_id=%s)",
+                        num_price,
+                        str(observation.price_raw)[:50] if observation.price_raw else "",
+                        post_id,
+                    )
+                    num_price = None
+
             query_price = text(
                 """
                 INSERT INTO post_prices (rental_post_id, rental_post_version_id, price_raw, price_amount, currency, period, created_at)
@@ -57,6 +69,17 @@ class MySQLPostChildrenRepository(PostChildrenRepositoryPort):
 
         # 3. Bảng chi tiết (post_details)
         num_area = MySQLBronzeMapper.parse_numeric_area(observation.area_raw)
+        # Defensive guard: ensure area_value fits within DECIMAL(10,2)
+        if num_area is not None:
+            if not isinstance(num_area, (int, float)) or not math.isfinite(num_area) or num_area <= 0 or num_area > 99_999_999.99:
+                logger.warning(
+                    "Defensive guard: invalid area_value %s rejected before insert, setting to NULL (area_raw=%s, post_id=%s)",
+                    num_area,
+                    str(observation.area_raw)[:50] if observation.area_raw else "",
+                    post_id,
+                )
+                num_area = None
+
         query_details = text(
             """
             INSERT INTO post_details (

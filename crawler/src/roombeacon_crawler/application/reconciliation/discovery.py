@@ -40,7 +40,7 @@ class BronzeRunDiscoveryService:
 
         # Quét cấu trúc: /data/bronze/<source>/<date>/<run_id>/
         for source_dir in sorted(root.iterdir()):
-            if not source_dir.is_dir() or source_dir.name.startswith("."):
+            if not source_dir.is_dir() or source_dir.name.startswith(".") or source_dir.name.startswith("fake_") or source_dir.name.startswith("test_"):
                 continue
             source = source_dir.name
 

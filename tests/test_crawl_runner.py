@@ -22,6 +22,9 @@ from roombeacon_crawler.infrastructure.storage.local.local_storage_writer import
 from roombeacon_crawler.models.captured_response import CapturedResponse
 from roombeacon_crawler.models.crawl_run_result import CrawlRunResult
 from roombeacon_crawler.pipeline.crawl_runner import CrawlRunner
+from roombeacon_crawler.repositories.local_crawl_state_repository import (
+    LocalCrawlStateRepository,
+)
 from roombeacon_crawler.validators.url_validator import URLValidator
 
 
@@ -32,10 +35,16 @@ class TestCrawlRunnerExecution(unittest.TestCase):
             "roombeacon_crawler.pipeline.crawl_runner.LocalStorageWriter",
             lambda *args, **kwargs: LocalStorageWriter(base_data_dir=self.test_dir),
         )
+        self.state_repo_patcher = patch(
+            "roombeacon_crawler.pipeline.crawl_runner.LocalCrawlStateRepository",
+            lambda *args, **kwargs: LocalCrawlStateRepository(base_data_dir=self.test_dir),
+        )
         self.writer_patcher.start()
+        self.state_repo_patcher.start()
 
     def tearDown(self) -> None:
         self.writer_patcher.stop()
+        self.state_repo_patcher.stop()
         shutil.rmtree(self.test_dir, ignore_errors=True)
 
     def test_dag_structure(self) -> None:
