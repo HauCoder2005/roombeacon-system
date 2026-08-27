@@ -1,4 +1,4 @@
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from roombeacon_crawler.enums.crawl_target_type import CrawlTargetType
 
 
@@ -21,6 +21,7 @@ class CrawlSeed:
     label: str | None = None
 
     def to_dict(self) -> dict:
+        """Serialize source configuration for planning and task mapping."""
         return {
             "source": self.source,
             "target_id": self.target_id,
@@ -43,6 +44,7 @@ class CrawlSeed:
 
     @classmethod
     def from_dict(cls, data: dict) -> "CrawlSeed":
+        """Restore a seed with backward-compatible target defaults."""
         type_hint = data.get("target_type_hint")
         if isinstance(type_hint, str):
             try:

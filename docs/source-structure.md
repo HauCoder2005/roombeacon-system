@@ -1,5 +1,7 @@
 # RoomBeacon Crawler — Source Structure
 
+> **Trạng thái: LEGACY STRUCTURE GUIDE.** Cây thư mục chi tiết có thể không phản ánh refactor Phase 1.2E. Xem [Current Architecture](architecture/CURRENT_ARCHITECTURE.md) và source code cho cấu trúc hiện hành.
+
 Dự án **RoomBeacon Crawler** được tổ chức theo các nguyên lý kiến trúc hiện đại:
 * **Clean Architecture** (phân tách ranh giới các tầng theo chiều phụ thuộc hướng vào trung tâm);
 * **Hexagonal Architecture (Ports & Adapters)** (tách biệt core business khỏi protocol vào/ra và các hệ thống phụ trợ);

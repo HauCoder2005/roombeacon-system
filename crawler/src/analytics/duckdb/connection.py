@@ -71,7 +71,6 @@ class DuckDBConnectionFactory:
                         seen_candidates.add((h, p))
                         unique_candidates.append((h, p))
 
-                last_exc = None
                 for host, port in unique_candidates:
                     try:
                         attach_sql = (
@@ -87,19 +86,21 @@ class DuckDBConnectionFactory:
                         )
                         attached = True
                         break
-                    except Exception as e:
-                        last_exc = e
+                    except Exception:
+                        # DuckDB may echo the credential-bearing ATTACH SQL.
+                        continue
 
                 if not attached:
                     logger.warning(
-                        "DuckDB: Không thể tự động ATTACH MySQL (%s). DuckDB chạy ở chế độ standalone.",
-                        last_exc,
+                        "DuckDB MySQL attachment failed; continuing in standalone mode "
+                        "(event=duckdb_mysql_attach_failed, alias=mysql_db)"
                     )
 
             except Exception as exc:
                 logger.warning(
-                    "DuckDB: Không thể tải extension mysql (%s). DuckDB chạy ở chế độ standalone.",
-                    exc,
+                    "DuckDB MySQL extension initialization failed; continuing in standalone mode "
+                    "(event=duckdb_mysql_extension_failed, error_class=%s)",
+                    type(exc).__name__,
                 )
 
             if create_views:
@@ -107,7 +108,8 @@ class DuckDBConnectionFactory:
                     DuckDBViewManager.create_views(conn)
                 except Exception as exc:
                     logger.warning(
-                        "DuckDB: Không thể tự động tạo analytical views (%s).", exc
+                        "DuckDB analytical view initialization failed (error_class=%s)",
+                        type(exc).__name__,
                     )
 
             cls._connection = conn
@@ -115,6 +117,7 @@ class DuckDBConnectionFactory:
 
     @classmethod
     def close(cls) -> None:
+        """Release the cached catalog handle so the next call opens a fresh one."""
         if cls._connection is not None:
             cls._connection.close()
             cls._connection = None

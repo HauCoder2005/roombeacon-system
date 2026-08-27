@@ -1,3 +1,5 @@
+"""Command-line bootstrap for the DuckDB analytical catalog and views."""
+
 import logging
 from analytics.duckdb.connection import DuckDBConnectionFactory
 from analytics.duckdb.views import DuckDBViewManager
@@ -7,7 +9,7 @@ logger = logging.getLogger("DUCKDB_BOOTSTRAP")
 
 
 def bootstrap_analytics() -> None:
-    """Khởi tạo toàn bộ tầng DuckDB Analytics."""
+    """Open the analytics connection and ensure all configured views exist."""
     logger.info("=" * 60)
     logger.info("ROOMBEACON DUCKDB ANALYTICS BOOTSTRAP")
     logger.info("=" * 60)

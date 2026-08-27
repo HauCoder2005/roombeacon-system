@@ -1,3 +1,5 @@
+"""Allocate a fair portion of each detail budget to deferred backlog work."""
+
 import math
 from dataclasses import dataclass
 
@@ -22,7 +24,7 @@ class DeferredBudgetScheduler:
 
     def __init__(
         self,
-        deferred_share_ratio: float = 0.5,
+        deferred_share_ratio: float = 1.0,
         min_deferred_slots: int = 1,
     ) -> None:
         self.deferred_share_ratio = max(0.0, min(1.0, float(deferred_share_ratio)))
@@ -33,6 +35,7 @@ class DeferredBudgetScheduler:
         total_budget: int,
         deferred_pending_count: int,
     ) -> BudgetAllocation:
+        """Split a bounded detail budget between backlog and immediate work."""
         if total_budget <= 0:
             return BudgetAllocation(total_budget=0, deferred_quota=0, immediate_quota=0)
 
@@ -43,7 +46,9 @@ class DeferredBudgetScheduler:
                 immediate_quota=total_budget,
             )
 
-        # Tính toán số slot phân bổ cho deferred
+        # Budgets are already isolated per source. Draining durable, never-enriched
+        # work first cannot starve another source and prevents repeated page-front
+        # listings from consuming first-pass enrichment capacity.
         desired_deferred = max(
             self.min_deferred_slots,
             int(math.ceil(total_budget * self.deferred_share_ratio)),

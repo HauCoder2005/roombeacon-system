@@ -1,3 +1,5 @@
+"""Extract BatDongSan detail fields without persistence side effects."""
+
 import logging
 import re
 from urllib.parse import urljoin
@@ -20,6 +22,7 @@ class BatDongSanDetailParser:
         detail_url: str,
         listing_id: str | None = None,
     ) -> ListingDetailRaw:
+        """Extract one source-near detail record from the supplied response."""
         if not html:
             return ListingDetailRaw(
                 source=self.source_name,

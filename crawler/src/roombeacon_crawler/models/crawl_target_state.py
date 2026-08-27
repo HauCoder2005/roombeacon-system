@@ -22,10 +22,12 @@ class CrawlTargetState:
     bootstrap_next_page: int | None = None
 
     def to_dict(self) -> dict:
+        """Serialize checkpoint state for atomic filesystem persistence."""
         return asdict(self)
 
     @classmethod
     def from_dict(cls, data: dict) -> "CrawlTargetState":
+        """Restore state while migrating legacy bootstrap semantics safely."""
         # Hỗ trợ tương thích ngược cho state file cũ chưa có trường bootstrap_completed
         bootstrap_completed_raw = data.get("bootstrap_completed")
         if bootstrap_completed_raw is not None:

@@ -1,6 +1,12 @@
+"""Persist and fairly retrieve deferred detail jobs from local JSON state.
+
+The adapter owns backlog durability and retry status, not detail acquisition or
+request-budget decisions.
+"""
+
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -49,7 +55,7 @@ class LocalDeferredDetailRepository(DeferredDetailRepository):
                 return {item.get("platform_post_id"): item for item in data if isinstance(item, dict) and "platform_post_id" in item}
             return {}
         except Exception as exc:
-            logger.warning("Lỗi đọc deferred backlog từ %s: %s. Khởi tạo rỗng.", path, exc)
+            logger.warning("Deferred backlog read failed; using empty state (path=%s, error_class=%s)", path, type(exc).__name__)
             return {}
 
     def _save(self, source: str, target_id: str, data: dict[str, dict[str, Any]]) -> None:
@@ -60,28 +66,59 @@ class LocalDeferredDetailRepository(DeferredDetailRepository):
                 json.dump(data, f, indent=2, ensure_ascii=False)
             temp_file.replace(path)
         except Exception as exc:
-            logger.error("Lỗi khi ghi deferred backlog vào %s: %s", path, exc)
+            logger.error("Deferred backlog write failed (path=%s, error_class=%s)", path, type(exc).__name__)
             if temp_file.exists():
                 temp_file.unlink(missing_ok=True)
 
-    def get_backlog(self, source: str, target_id: str) -> list[DeferredDetailItem]:
+    def get_backlog(
+        self,
+        source: str,
+        target_id: str,
+        *,
+        now: datetime | None = None,
+    ) -> list[DeferredDetailItem]:
+        """Return retry-eligible detail jobs in fair FIFO order."""
         data = self._load(source, target_id)
+        current_time = now or datetime.now(timezone.utc)
+        if current_time.tzinfo is None:
+            current_time = current_time.replace(tzinfo=timezone.utc)
         pending_items = [
             DeferredDetailItem.from_dict(v)
             for v in data.values()
             if v.get("status") == "PENDING"
         ]
-        # Sắp xếp FIFO theo thời gian đầu tiên bị hoãn
-        pending_items.sort(key=lambda x: x.first_deferred_at)
-        return pending_items
+        eligible_items = []
+        for item in pending_items:
+            if item.next_attempt_at:
+                try:
+                    eligible_at = datetime.fromisoformat(item.next_attempt_at)
+                    if eligible_at.tzinfo is None:
+                        eligible_at = eligible_at.replace(tzinfo=timezone.utc)
+                    if eligible_at > current_time:
+                        continue
+                except (TypeError, ValueError):
+                    pass
+            eligible_items.append(item)
+        # Never-attempted FIFO items precede retries. A transiently failing item
+        # therefore cannot monopolize the head of a large enrichment queue.
+        eligible_items.sort(
+            key=lambda item: (
+                item.attempt_count > 0,
+                item.first_deferred_at,
+                item.last_attempt_at or "",
+            )
+        )
+        return eligible_items
 
     def count_backlog(self, source: str, target_id: str) -> int:
+        """Count pending jobs without applying retry-time eligibility."""
         data = self._load(source, target_id)
         return sum(1 for v in data.values() if v.get("status") == "PENDING")
 
     def enqueue(
         self, source: str, target_id: str, items: list[DeferredDetailItem]
     ) -> int:
+        """Add new detail jobs idempotently and return the number accepted."""
         if not items:
             return 0
         data = self._load(source, target_id)
@@ -106,6 +143,7 @@ class LocalDeferredDetailRepository(DeferredDetailRepository):
     def record_success(
         self, source: str, target_id: str, platform_post_id: str
     ) -> None:
+        """Remove a completed job so the durable backlog remains compact."""
         data = self._load(source, target_id)
         if platform_post_id in data:
             # Xóa khỏi danh sách chờ để giữ file gọn gàng
@@ -121,23 +159,35 @@ class LocalDeferredDetailRepository(DeferredDetailRepository):
         error: str,
         is_terminal: bool = False,
         max_retries: int = 3,
+        now: datetime | None = None,
+        retry_backoff_seconds: int = 900,
     ) -> None:
+        """Record retry metadata or make an exhausted job terminal."""
         data = self._load(source, target_id)
         if platform_post_id in data:
             item_dict = data[platform_post_id]
             attempt_count = int(item_dict.get("attempt_count", 0)) + 1
             item_dict["attempt_count"] = attempt_count
-            item_dict["last_attempt_at"] = datetime.now(timezone.utc).isoformat()
+            attempted_at = now or datetime.now(timezone.utc)
+            if attempted_at.tzinfo is None:
+                attempted_at = attempted_at.replace(tzinfo=timezone.utc)
+            item_dict["last_attempt_at"] = attempted_at.isoformat()
             item_dict["last_error"] = str(error)
 
             if is_terminal or attempt_count >= max_retries:
                 item_dict["status"] = "TERMINAL_FAILED"
                 logger.warning(
-                    "Deferred item %s chuyển sang trạng thái TERMINAL_FAILED (attempts=%d, error=%s)",
-                    platform_post_id, attempt_count, error
+                    "Deferred item became terminal (post_id=%s, attempts=%d, error_class=%s)",
+                    platform_post_id,
+                    attempt_count,
+                    type(error).__name__,
                 )
             else:
                 item_dict["status"] = "PENDING"
+                delay = max(0, int(retry_backoff_seconds)) * (2 ** (attempt_count - 1))
+                item_dict["next_attempt_at"] = (
+                    attempted_at + timedelta(seconds=delay)
+                ).isoformat()
 
             data[platform_post_id] = item_dict
             self._save(source, target_id, data)

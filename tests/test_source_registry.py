@@ -23,16 +23,22 @@ class FakeTestAdapter(BaseSourceAdapter):
 
 
 class TestSourceRegistryAndAutoDiscovery(unittest.TestCase):
-    def test_global_registry_auto_discovers_all_five_default_sources(self) -> None:
-        """Kiểm tra SourceRegistry tự động phát hiện đầy đủ 5 nguồn thông qua auto-discovery."""
+    EXPECTED_SOURCES = [
+        "batdongsan", "cafeland", "chothuenha", "chothuephongtro", "guland",
+        "mogi", "muaban", "nhatot", "nhatrovn", "phongtro123",
+        "phongtrotoanquoc", "tromoi",
+    ]
+
+    def test_global_registry_auto_discovers_all_default_sources(self) -> None:
+        """Kiểm tra SourceRegistry tự động phát hiện đầy đủ 12 nguồn."""
         supported = source_registry.get_supported_sources()
         self.assertEqual(
             supported,
-            ["batdongsan", "muaban", "nhatot", "nhatrovn", "phongtro123"],
+            self.EXPECTED_SOURCES,
         )
         self.assertEqual(
             source_registry.list_sources(),
-            ["batdongsan", "muaban", "nhatot", "nhatrovn", "phongtro123"],
+            self.EXPECTED_SOURCES,
         )
 
     def test_source_discovery_utility(self) -> None:
@@ -41,7 +47,7 @@ class TestSourceRegistryAndAutoDiscovery(unittest.TestCase):
         discovered_names = sorted([cls.SOURCE_NAME for cls in adapters])
         self.assertEqual(
             discovered_names,
-            ["batdongsan", "muaban", "nhatot", "nhatrovn", "phongtro123"],
+            self.EXPECTED_SOURCES,
         )
 
     def test_resolve_batdongsan(self) -> None:
@@ -98,7 +104,7 @@ class TestSourceRegistryAndAutoDiscovery(unittest.TestCase):
             source_registry.resolve(url)
 
         self.assertIn("arbitrary-safe-domain.com", str(ctx.exception))
-        self.assertIn("batdongsan, muaban, nhatot, nhatrovn, phongtro123", str(ctx.exception))
+        self.assertIn(", ".join(self.EXPECTED_SOURCES), str(ctx.exception))
 
     def test_duplicate_domain_detection_raises_error(self) -> None:
         """Kiểm tra phát hiện và ngăn chặn trùng lặp domain giữa các adapter."""
@@ -164,7 +170,7 @@ class TestSourceRegistryAndAutoDiscovery(unittest.TestCase):
         )
         self.assertEqual(
             SourceResolver.get_supported_sources(),
-            ["batdongsan", "muaban", "nhatot", "nhatrovn", "phongtro123"],
+            self.EXPECTED_SOURCES,
         )
 
 

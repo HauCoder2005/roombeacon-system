@@ -1,8 +1,12 @@
+"""Persist local asset reconciliation status with atomic JSON updates.
+
+The repository records outcomes only; URL validation, downloads and MinIO writes
+belong to the asset reconciliation service.
+"""
+
 import json
 import logging
 from pathlib import Path
-from typing import Any
-
 from roombeacon_crawler.models.asset_item import AssetItem, AssetStatus
 
 logger = logging.getLogger(__name__)
@@ -40,7 +44,7 @@ class LocalAssetStateRepository:
                 data = json.load(f)
             return AssetItem.from_dict(data)
         except Exception as exc:
-            logger.warning("Không thể đọc asset state tại %s: %s", item_path, exc)
+            logger.warning("Asset state read failed (path=%s, error_class=%s)", item_path, type(exc).__name__)
             return None
 
     def save_asset(self, item: AssetItem) -> None:
@@ -52,7 +56,7 @@ class LocalAssetStateRepository:
                 json.dump(item.to_dict(), f, indent=2, ensure_ascii=False)
             tmp_path.replace(item_path)
         except Exception as exc:
-            logger.error("Không thể ghi asset state tại %s: %s", item_path, exc)
+            logger.error("Asset state write failed (path=%s, error_class=%s)", item_path, type(exc).__name__)
             if tmp_path.exists():
                 tmp_path.unlink()
 

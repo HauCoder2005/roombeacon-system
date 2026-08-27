@@ -1,6 +1,16 @@
 # RoomBeacon Data Persistence Architecture (Bronze to MySQL)
 
+> **Trạng thái: CURRENT.** Mô tả persistence Bronze hiện hành; semantics toàn vòng đời nằm tại [Data Lifecycle](../data/DATA_LIFECYCLE.md).
+
 Tài liệu này đặc tả kiến trúc lưu trữ dữ liệu thô Bronze vào hệ quản trị cơ sở dữ liệu quan hệ **MySQL**, đảm bảo tính toàn vẹn giao dịch và mô hình dữ liệu quan sát bất biến.
+
+### Semantics địa chỉ
+
+- `location_raw` trên listing card có thể chỉ là district/city.
+- `address_raw` từ detail page giữ full source-near address khi nguồn cung cấp.
+- `BronzeMapper` ưu tiên detail address; persistence ghi `address_raw or location_raw` vào `post_addresses.full_address_text`.
+- Các cột province/district/ward/street/house number giữ `NULL` nếu không thể tách chắc chắn; không suy đoán component.
+- Đây là Bronze technical representation, không phải Silver address cleaning.
 
 ---
 

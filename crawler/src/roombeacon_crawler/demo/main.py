@@ -39,6 +39,7 @@ def _get_header(headers: dict[str, str], key: str) -> str:
 
 
 async def main() -> None:
+    """Validate runtime arguments and execute this operational script explicitly."""
     print("=== RoomBeacon Crawler Demo ===")
 
     url = input("Nhập URL cần crawl: ").strip()

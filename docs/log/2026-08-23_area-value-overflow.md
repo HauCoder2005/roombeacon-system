@@ -181,3 +181,24 @@ Hệ thống đã triển khai giải pháp phòng vệ 2 lớp tại ranh giớ
   - `summarize_run`: **SUCCESS**
   - **Lỗi `DataError 1264` tái diễn**: **KHÔNG (NO)**
 - **Trạng thái sự cố**: **RESOLVED**
+
+---
+
+## 17. Xác Minh Lại Airflow UI Ngày 2026-08-24
+
+- **Phân loại**: **HISTORICAL FAILURE**, không phải current regression. Airflow UI vẫn giữ task instance lỗi cũ trong lịch sử dù các run sau đã dùng bản vá.
+- **Task instance lỗi cũ**:
+  - `dag_id`: `roombeacon_crawler`
+  - `run_id`: `scheduled__2026-08-23T07:45:00+00:00`
+  - `logical_date`: `2026-08-23T07:45:00+00:00`
+  - `task_id`: `persist_bronze_mysql`
+  - `map_index`: `4` (`phongtro123`)
+  - `try_number`: `1`
+  - thời gian thực thi lỗi: `2026-08-23T07:46:45.142578Z` đến `2026-08-23T07:46:46.067672Z`
+- Task instance trên chạy **trước** thời điểm triển khai area guard khoảng `2026-08-23T07:49:00Z`.
+- **Run xác minh sau fix**: `manual__2026-08-23T07:58:29.776327+00:00`; `persist_bronze_mysql` map index `0..4`, bao gồm PhongTro123 map index `4`, đều `SUCCESS` và không tái diễn `DataError 1264`.
+- **Run mới nhất được kiểm tra**: `scheduled__2026-08-24T02:30:00+00:00`; mọi mapped instance của `persist_bronze_mysql` trong run đều `SUCCESS`. Run này chỉ có hai target được planner chọn, nên không thay thế bằng chứng PhongTro123 của manual run nêu trên.
+- Checksum SHA-256 của `bronze_mapper.py` và `post_children_repository.py` trong bind mount `/opt/roombeacon/crawler/src` khớp hoàn toàn với host; không có stale runtime source hoặc import-path divergence.
+- Audit chỉ đọc 258.738 object trong Bronze artifacts ghi nhận 68 occurrence của mẫu chính xác `120202748m` và 167 candidate vượt plausibility guard; toàn bộ thuộc PhongTro123. Có 99 occurrence theo pattern khác ngoài mẫu chính xác, không phát hiện source khác. Không sửa artifact hay historical row.
+- Đối chiếu aggregate trong MySQL không được thực hiện vì socket authentication từ CLI bị từ chối; không đọc credential để vượt qua giới hạn an toàn.
+- **Kết luận**: không có bypass path mới và không cần sửa code. Incident tiếp tục ở trạng thái **RESOLVED**.

@@ -1,7 +1,8 @@
+"""Build technical crawl metadata from targets and captured responses."""
+
 from datetime import datetime, timezone
 
 from roombeacon_crawler.enums.crawl_status import CrawlStatus
-from roombeacon_crawler.enums.crawl_target_type import CrawlTargetType
 from roombeacon_crawler.models.captured_response import CapturedResponse
 from roombeacon_crawler.models.crawl_metadata import CrawlMetadata
 from roombeacon_crawler.models.crawl_target import CrawlTarget

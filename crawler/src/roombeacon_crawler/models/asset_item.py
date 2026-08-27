@@ -5,6 +5,7 @@ import hashlib
 
 
 class AssetStatus(str, Enum):
+    """Lifecycle states persisted for each image reconciliation candidate."""
     PENDING = "PENDING"
     SUCCESS = "SUCCESS"
     RETRYABLE_FAILURE = "RETRYABLE_FAILURE"
@@ -13,6 +14,7 @@ class AssetStatus(str, Enum):
 
 
 class AssetErrorCategory(str, Enum):
+    """Stable failure categories used to decide retries and reporting."""
     NONE = "NONE"
     TIMEOUT = "TIMEOUT"
     NETWORK_ERROR = "NETWORK_ERROR"
@@ -22,6 +24,7 @@ class AssetErrorCategory(str, Enum):
     INVALID_MAGIC_BYTES = "INVALID_MAGIC_BYTES"
     UPLOAD_ERROR = "UPLOAD_ERROR"
     INVALID_DATA_URL = "INVALID_DATA_URL"
+    SECURITY_REJECTED = "SECURITY_REJECTED"
 
 
 @dataclass
@@ -64,6 +67,7 @@ class AssetItem:
         return f"{source}/{platform_post_id}/img_{position}_{url_hash}.{clean_ext}"
 
     def to_dict(self) -> dict:
+        """Serialize enum values into JSON-compatible durable state."""
         data = asdict(self)
         data["status"] = self.status.value
         data["last_error_category"] = self.last_error_category.value
@@ -71,6 +75,7 @@ class AssetItem:
 
     @classmethod
     def from_dict(cls, data: dict) -> "AssetItem":
+        """Restore an asset item and its enums from durable JSON state."""
         d = dict(data)
         d["status"] = AssetStatus(d.get("status", AssetStatus.PENDING.value))
         d["last_error_category"] = AssetErrorCategory(
@@ -89,8 +94,13 @@ class SourceAssetMetrics:
     actionable_pending: int = 0
     selected_this_run: int = 0
     attempted: int = 0
+    downloaded_valid: int = 0
     uploaded: int = 0
+    post_upload_verified: int = 0
     already_stored: int = 0
+    terminal_invalid_this_run: int = 0
+    terminal_failed_this_run: int = 0
+    retryable_failed_this_run: int = 0
     retryable_failed: int = 0
     terminal: int = 0
     remaining_actionable: int = 0
@@ -100,7 +110,7 @@ class SourceAssetMetrics:
 class AssetBatchResult:
     """Kết quả định lượng của một chu kỳ reconcile tài nguyên hình ảnh."""
 
-    batch_budget: int = 50
+    batch_budget: int = 100
     batch_used: int = 0
     unused_capacity: int = 0
     candidates_found: int = 0
@@ -108,10 +118,14 @@ class AssetBatchResult:
     attempted: int = 0
     downloaded: int = 0
     uploaded: int = 0
+    post_upload_verified: int = 0
     skipped: int = 0
     retryable_failed: int = 0
     terminal_failed: int = 0
+    invalid_magic: int = 0
+    pending_before: int = 0
     remaining_pending: int = 0
+    duration_seconds: float = 0.0
     minio_objects_before: int = 0
     minio_objects_after: int = 0
     per_source: dict[str, SourceAssetMetrics] = field(default_factory=dict)
@@ -119,4 +133,3 @@ class AssetBatchResult:
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
     finished_at: str | None = None
-

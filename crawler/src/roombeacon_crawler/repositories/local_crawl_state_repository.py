@@ -1,3 +1,9 @@
+"""Persist crawl checkpoints and seen metadata as local JSON state.
+
+Writes are atomic beneath the configured data root. The repository stores state
+only and never parses HTML or performs acquisition.
+"""
+
 import json
 import logging
 import os
@@ -47,6 +53,7 @@ class LocalCrawlStateRepository(CrawlStateRepository):
         return self.seen_dir / f"{source}__{target_id}.json"
 
     def get_state(self, source: str, target_id: str) -> CrawlTargetState | None:
+        """Read the latest crawl checkpoint for one source target."""
         path = self._target_file(source, target_id)
         if not path.is_file():
             return None
@@ -56,13 +63,14 @@ class LocalCrawlStateRepository(CrawlStateRepository):
             return CrawlTargetState.from_dict(data)
         except Exception as exc:
             logger.warning(
-                "Lỗi khi đọc state từ %s: %s. Khởi tạo trạng thái rỗng.",
+                "Crawl state read failed; using empty state (path=%s, error_class=%s)",
                 path,
-                exc,
+                type(exc).__name__,
             )
             return None
 
     def save_state(self, state: CrawlTargetState) -> None:
+        """Publish a crawl checkpoint with atomic file replacement."""
         path = self._target_file(state.source, state.target_id)
         temp_file = path.with_suffix(".tmp")
         data = state.to_dict()
@@ -79,7 +87,7 @@ class LocalCrawlStateRepository(CrawlStateRepository):
         except Exception as exc:
             if temp_file.is_file():
                 temp_file.unlink(missing_ok=True)
-            logger.error("Lỗi khi lưu state tại %s: %s", path, exc)
+            logger.error("Crawl state write failed (path=%s, error_class=%s)", path, type(exc).__name__)
             raise
 
     def get_seen_listing_ids(self, source: str, target_id: str) -> set[str]:
@@ -96,7 +104,7 @@ class LocalCrawlStateRepository(CrawlStateRepository):
                 return set(data.keys())
             return set()
         except Exception as exc:
-            logger.warning("Lỗi khi đọc seen listing ids từ %s: %s", path, exc)
+            logger.warning("Seen-listing state read failed (path=%s, error_class=%s)", path, type(exc).__name__)
             return set()
 
     def get_seen_metadata(self, source: str, target_id: str) -> dict[str, dict[str, Any]]:
@@ -114,7 +122,7 @@ class LocalCrawlStateRepository(CrawlStateRepository):
                 return {lid: {"last_detailed_at": None, "card_fingerprint": None} for lid in data}
             return {}
         except Exception as exc:
-            logger.warning("Lỗi khi đọc seen metadata từ %s: %s", path, exc)
+            logger.warning("Seen-metadata state read failed (path=%s, error_class=%s)", path, type(exc).__name__)
             return {}
 
     def record_seen_listing_ids(
@@ -162,5 +170,5 @@ class LocalCrawlStateRepository(CrawlStateRepository):
         except Exception as exc:
             if temp_file.is_file():
                 temp_file.unlink(missing_ok=True)
-            logger.error("Lỗi khi lưu seen metadata tại %s: %s", path, exc)
+            logger.error("Seen-metadata state write failed (path=%s, error_class=%s)", path, type(exc).__name__)
             raise

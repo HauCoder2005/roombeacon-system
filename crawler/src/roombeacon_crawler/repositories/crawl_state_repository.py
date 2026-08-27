@@ -1,3 +1,5 @@
+"""Define the crawl checkpoint and seen-listing state contract."""
+
 from abc import ABC, abstractmethod
 from roombeacon_crawler.models.crawl_target_state import CrawlTargetState
 

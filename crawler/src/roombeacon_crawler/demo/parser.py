@@ -34,6 +34,7 @@ LOCATION_PREFIX_REGEX = re.compile(
 
 
 def validate_price(price_raw: str | None) -> str | None:
+    """Execute the demo-only validate_price step without affecting production workflows."""
     if not price_raw:
         return None
     m = PRICE_REGEX.search(price_raw)
@@ -47,6 +48,7 @@ def validate_price(price_raw: str | None) -> str | None:
 
 
 def validate_area(area_raw: str | None) -> str | None:
+    """Execute the demo-only validate_area step without affecting production workflows."""
     if not area_raw:
         return None
     m = AREA_REGEX.search(area_raw)
@@ -56,6 +58,7 @@ def validate_area(area_raw: str | None) -> str | None:
 
 
 def clean_title(title_raw: str | None) -> str | None:
+    """Execute the demo-only clean_title step without affecting production workflows."""
     if not title_raw:
         return None
     text = title_raw.strip()
@@ -71,6 +74,7 @@ def clean_title(title_raw: str | None) -> str | None:
 
 
 def clean_location(loc_raw: str | None) -> str | None:
+    """Execute the demo-only clean_location step without affecting production workflows."""
     if not loc_raw:
         return None
     text = loc_raw.strip()
@@ -120,6 +124,7 @@ def clean_location(loc_raw: str | None) -> str | None:
 
 
 class DOMNode:
+    """Represent a minimal dependency-free DOM node for source-specific parsing."""
     def __init__(
         self,
         tag: str,
@@ -133,6 +138,7 @@ class DOMNode:
         self.text_parts: list[str] = []
 
     def get_text(self) -> str:
+        """Return normalized descendant text for field extraction."""
         parts = list(self.text_parts)
         for child in self.children:
             parts.append(child.get_text())
@@ -145,6 +151,7 @@ class DOMNode:
         data_testid: str | None = None,
         attr_has: tuple[str, str] | None = None,
     ) -> list["DOMNode"]:
+        """Traverse this lightweight DOM subtree and return matching nodes."""
         results: list[DOMNode] = []
         match = True
 
@@ -181,11 +188,13 @@ class DOMNode:
         data_testid: str | None = None,
         attr_has: tuple[str, str] | None = None,
     ) -> "DOMNode | None":
+        """Return the first node matching the supplied tag or class constraints."""
         res = self.find_all(tag, class_contains, data_testid, attr_has)
         return res[0] if res else None
 
 
 class DOMTreeBuilder(HTMLParser):
+    """Build the lightweight DOM tree through standard HTML parser callbacks."""
     VOID_TAGS = {
         "area", "base", "br", "col", "embed", "hr",
         "img", "input", "link", "meta", "param",
@@ -202,12 +211,14 @@ class DOMTreeBuilder(HTMLParser):
         tag: str,
         attrs: list[tuple[str, str | None]],
     ) -> None:
+        """Add an opening tag to the lightweight DOM tree."""
         node = DOMNode(tag, attrs, parent=self.current)
         self.current.children.append(node)
         if tag.lower() not in self.VOID_TAGS:
             self.current = node
 
     def handle_endtag(self, tag: str) -> None:
+        """Move the DOM cursor back to the matching parent node."""
         if tag.lower() in self.VOID_TAGS:
             return
         curr = self.current
@@ -218,12 +229,14 @@ class DOMTreeBuilder(HTMLParser):
             curr = curr.parent
 
     def handle_data(self, data: str) -> None:
+        """Attach non-empty text content to the current DOM node."""
         cleaned = data.strip()
         if cleaned:
             self.current.text_parts.append(cleaned)
 
 
 class RentalParser:
+    """Provide the demo-only RentalParser contract used by the isolated example crawler."""
     def __init__(self) -> None:
         self.debug_stats: dict[str, object] = {
             "html_input_size": 0,
@@ -241,6 +254,7 @@ class RentalParser:
         source_url: str,
         limit: int = 50,
     ) -> list[CrawlRecord]:
+        """Parse the supplied response into the module's typed result."""
         self.debug_stats = {
             "html_input_size": len(html) if html else 0,
             "main_container_found": False,

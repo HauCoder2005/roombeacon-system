@@ -105,7 +105,8 @@ class TestDomainEnvLoaders(unittest.TestCase):
         self.assertTrue(isinstance(c_env.request_timeout_seconds, float))
 
     def test_load_bronze_mysql_env(self) -> None:
-        m_env = load_bronze_mysql_env()
+        with patch.dict(os.environ, {}, clear=True):
+            m_env = load_bronze_mysql_env()
         self.assertEqual(m_env.host, "mysql-bronze")
         self.assertEqual(m_env.port, 3306)
         self.assertEqual(m_env.database, "roombeacon_bronze")
@@ -117,7 +118,8 @@ class TestDomainEnvLoaders(unittest.TestCase):
         self.assertEqual(minio_env.bucket_raw, "roombeacon-raw")
 
     def test_load_project_env(self) -> None:
-        p_env = load_project_env()
+        with patch.dict(os.environ, {}, clear=True):
+            p_env = load_project_env()
         self.assertEqual(p_env.project_name, "roombeacon")
         self.assertEqual(p_env.environment, "development")
 

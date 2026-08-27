@@ -1,10 +1,13 @@
+"""Plan due crawl targets from checkpoint, health and source capabilities.
+
+Planning is deterministic for supplied state and does not execute acquisition or
+advance checkpoints.
+"""
+
 from datetime import datetime, timedelta, timezone
 import logging
 
-from roombeacon_crawler.discovery.strategy_resolver import (
-    DiscoveryStrategy,
-    DiscoveryStrategyResolver,
-)
+from roombeacon_crawler.discovery.strategy_resolver import DiscoveryStrategyResolver
 from roombeacon_crawler.enums.crawl_mode import CrawlMode
 from roombeacon_crawler.models.crawl_plan import CrawlPlan
 from roombeacon_crawler.models.crawl_seed import CrawlSeed
@@ -109,7 +112,7 @@ class CrawlPlanner:
                     overlap_dt = wm_dt - timedelta(hours=seed.incremental_overlap_hours)
                     overlap_from = overlap_dt.isoformat()
                 except Exception as exc:
-                    logger.warning("Lỗi tính toán overlap date từ %s: %s", watermark_from, exc)
+                    logger.warning("Overlap-date calculation failed (error_class=%s)", type(exc).__name__)
                     overlap_from = None
 
             plan = CrawlPlan(
@@ -122,6 +125,7 @@ class CrawlPlanner:
                 watermark_from=watermark_from,
                 overlap_from=overlap_from,
                 crawl_details=seed.crawl_details,
+                interval_minutes=seed.interval_minutes,
                 safety_max_pages=safety_max_pages,
                 safety_max_records=seed.bootstrap_safety_max_records,
                 incremental_stop_after_known_pages=seed.incremental_stop_after_known_pages,
@@ -187,17 +191,16 @@ class CrawlPlanner:
         if is_forward_only:
             return CrawlMode.FORWARD_ONLY_INCREMENTAL, "FORWARD_ONLY_SEED_ACQUISITION"
 
-        if state is None or (
-            state.last_success_at is None
-            and not getattr(state, "bootstrap_completed", False)
-            and getattr(state, "bootstrap_next_page", None) is None
-        ):
+        if state is None:
             return CrawlMode.BOOTSTRAP_FULL, "FIRST_SUCCESSFUL_CRAWL_NOT_FOUND"
 
-        if (
-            not getattr(state, "bootstrap_completed", False)
-            and getattr(state, "bootstrap_next_page", None) is not None
-        ):
-            return CrawlMode.BOOTSTRAP_CONTINUE, "BOOTSTRAP_INCOMPLETE_CONTINUATION"
+        bootstrap_completed = bool(getattr(state, "bootstrap_completed", False)) or (
+            getattr(state, "last_stop_reason", None)
+            in ("SOURCE_END", "KNOWN_REGION_REACHED")
+        )
+        if not bootstrap_completed:
+            if getattr(state, "bootstrap_next_page", None) is not None:
+                return CrawlMode.BOOTSTRAP_CONTINUE, "BOOTSTRAP_INCOMPLETE_CONTINUATION"
+            return CrawlMode.BOOTSTRAP_FULL, "HISTORICAL_BOOTSTRAP_REQUIRED"
 
         return CrawlMode.INCREMENTAL, "INCREMENTAL_SCHEDULED_DUE"

@@ -1,3 +1,5 @@
+"""Verify and bootstrap the expected Bronze MySQL schema at runtime."""
+
 import logging
 from sqlalchemy import text
 from roombeacon_crawler.infrastructure.mysql.connection import MySQLConnectionFactory

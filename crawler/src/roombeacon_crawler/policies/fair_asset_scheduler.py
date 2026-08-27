@@ -1,5 +1,7 @@
+"""Select asset candidates fairly across sources within a fixed batch budget."""
+
 import logging
-from typing import TypeVar, Sequence
+from typing import TypeVar
 
 logger = logging.getLogger(__name__)
 

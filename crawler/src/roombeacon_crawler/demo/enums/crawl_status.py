@@ -2,6 +2,7 @@ from enum import Enum
 
 
 class CrawlStatus(str, Enum):
+    """Provide the demo-only CrawlStatus contract used by the isolated example crawler."""
     SUCCESS = "success"
     BAD_REQUEST = "bad_request"
     UNAUTHORIZED = "unauthorized"

@@ -1,5 +1,7 @@
 # BÁO CÁO KIỂM TOÁN TÍNH SẴN SÀNG CỦA DỮ LIỆU TRƯỚC EDA (PRE-EDA DATA READINESS REPORT)
 
+> **Trạng thái: HISTORICAL SNAPSHOT / PARTIAL.** Các số liệu trong báo cáo gắn với thời điểm kiểm toán, không phải runtime metrics hiện tại. Xem [Data Lifecycle](../data/DATA_LIFECYCLE.md) cho semantics authoritative.
+
 Tài liệu này xác lập kết quả kiểm toán toàn diện về chất lượng, độ bao phủ và tính toàn vẹn của dữ liệu trong hệ thống **RoomBeacon** trước khi tiến hành bước Phân tích Dữ liệu Khám phá (Exploratory Data Analysis - EDA).
 
 ---

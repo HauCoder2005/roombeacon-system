@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+from threading import RLock
+from typing import Any
 
 from roombeacon_crawler.config.env.airflow import AirflowEnv, load_airflow_env
 from roombeacon_crawler.config.env.clickhouse import (
@@ -61,11 +63,62 @@ def load_environment() -> Environment:
     )
 
 
-# Singleton configuration instance for application runtime
-env: Environment = load_environment()
+_environment: Environment | None = None
+_environment_lock = RLock()
+
+
+def get_environment() -> Environment:
+    """Load configuration lazily on first runtime access."""
+    global _environment
+    if _environment is None:
+        with _environment_lock:
+            if _environment is None:
+                _environment = load_environment()
+    return _environment
+
+
+def configure_environment(environment: Environment) -> None:
+    """Inject an explicit environment, primarily for isolated tests."""
+    global _environment
+    with _environment_lock:
+        _environment = environment
+
+
+def reset_environment() -> None:
+    """Clear the lazy environment cache without reading runtime configuration."""
+    global _environment
+    with _environment_lock:
+        _environment = None
+
+
+def bootstrap_runtime_environment(*, load_dotenv_file: bool = False) -> Environment:
+    """Explicit runtime bootstrap; optionally load local dotenv before config."""
+    if load_dotenv_file:
+        from roombeacon_crawler.config.env.loader import load_runtime_dotenv
+
+        load_runtime_dotenv()
+    reset_environment()
+    return get_environment()
+
+
+class _LazyEnvironment:
+    """Compatibility proxy: importing `env` does not load configuration."""
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(get_environment(), name)
+
+    def __repr__(self) -> str:
+        return "<LazyEnvironment unloaded>" if _environment is None else repr(_environment)
+
+
+env = _LazyEnvironment()
 
 __all__ = [
     "Environment",
+    "bootstrap_runtime_environment",
+    "configure_environment",
     "env",
+    "get_environment",
     "load_environment",
+    "reset_environment",
 ]

@@ -1,3 +1,5 @@
+"""Declare NhaTot source capabilities and compose its extraction components."""
+
 from urllib.parse import urlparse
 
 from roombeacon_crawler.config.source_settings import SourceSettings
@@ -84,7 +86,8 @@ class NhatotSourceAdapter(BaseSourceAdapter):
                 target_id="hcm_phongtro",
                 url="https://www.nhatot.com/thue-phong-tro-tp-ho-chi-minh",
                 enabled=True,
-                interval_minutes=60,
+                interval_minutes=10,
+                crawl_details=True,
                 target_type_hint=CrawlTargetType.LISTING_PAGE,
                 label="nhatot_hcm_phongtro",
             ),

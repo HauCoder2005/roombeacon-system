@@ -446,7 +446,7 @@ Nhà Tốt là minh chứng điển hình giải thích vì sao RoomBeacon sử 
 ## 24. Liên kết Cơ chế Sức khỏe & Giãn cách Thích ứng (Source Health & Backoff)
 
 Khi một nguồn rơi vào trạng thái `ACCESS_CHALLENGED` hoặc `ROBOTS_FETCH_ERROR`, hệ thống kích hoạt **Source Health State** và **Adaptive Backoff Policy**:
-- Chi tiết cơ chế lưu trữ `/data/state/health/`, thuật toán Cooldown (15m, 30m, 60m, 6h, 12h, 24h) và Health Gate vui lòng xem tại: [SOURCE_HEALTH_AND_BACKOFF.md](file:///home/codeser/Data/projects/roombeacon/docs/crawler/SOURCE_HEALTH_AND_BACKOFF.md).
+- Chi tiết cơ chế lưu trữ `/data/state/health/`, thuật toán Cooldown (15m, 30m, 60m, 6h, 12h, 24h) và Health Gate vui lòng xem tại: [SOURCE_HEALTH_AND_BACKOFF.md](SOURCE_HEALTH_AND_BACKOFF.md).
 
 ---
 

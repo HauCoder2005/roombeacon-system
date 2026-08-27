@@ -1,8 +1,9 @@
+"""Parse sitemap-index XML and return child sitemap locations."""
+
 import logging
 import xml.etree.ElementTree as ET
 
 from roombeacon_crawler.discovery.sitemap.parser import (
-    SitemapDocumentType,
     SitemapEntry,
     SitemapUrlsetParser,
 )
@@ -48,11 +49,11 @@ class SitemapIndexParser:
 
             return entries
 
-        except ET.ParseError as err:
-            logger.warning("Lỗi cú pháp XML khi parse sitemapindex: %s", err)
+        except ET.ParseError:
+            logger.warning("Sitemap index XML is malformed (error_class=ParseError)")
             return []
         except Exception as exc:
-            logger.exception("Ngoại lệ khi parse sitemapindex: %s", exc)
+            logger.error("Sitemap index parse failed (error_class=%s)", type(exc).__name__)
             return []
 
     @classmethod

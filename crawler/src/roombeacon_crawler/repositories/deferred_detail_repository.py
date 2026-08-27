@@ -1,4 +1,7 @@
+"""Define the persistence contract for deferred listing-detail work."""
+
 from abc import ABC, abstractmethod
+from datetime import datetime
 from roombeacon_crawler.models.deferred_detail_item import DeferredDetailItem
 
 
@@ -6,7 +9,9 @@ class DeferredDetailRepository(ABC):
     """Interface trừu tượng quản lý hàng đợi hoãn cào chi tiết (Deferred Detail Backlog)."""
 
     @abstractmethod
-    def get_backlog(self, source: str, target_id: str) -> list[DeferredDetailItem]:
+    def get_backlog(
+        self, source: str, target_id: str, *, now: datetime | None = None
+    ) -> list[DeferredDetailItem]:
         """Lấy danh sách các công việc cào chi tiết đang chờ xử lý (PENDING)."""
         ...
 
@@ -38,6 +43,8 @@ class DeferredDetailRepository(ABC):
         error: str,
         is_terminal: bool = False,
         max_retries: int = 3,
+        now: datetime | None = None,
+        retry_backoff_seconds: int = 900,
     ) -> None:
         """Ghi nhận thất bại cho một công việc; đánh dấu terminal nếu đạt tối đa số lần thử."""
         ...

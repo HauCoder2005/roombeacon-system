@@ -1,8 +1,12 @@
+"""Schedule reconciliation of local Bronze runs into MySQL and analytics.
+
+The DAG maps application reconciliation services and preserves ordering; it does
+not implement artifact comparison or database persistence rules itself.
+"""
+
 import logging
 from datetime import datetime, timezone
-from pathlib import Path
-
-from airflow.decorators import dag, task
+from airflow.sdk import dag, task
 from airflow.task.trigger_rule import TriggerRule
 
 logger = logging.getLogger("airflow.task")
@@ -26,6 +30,7 @@ DEFAULT_ARGS = {
     tags=["roombeacon", "reconciliation", "bronze", "mysql", "duckdb"],
 )
 def roombeacon_bronze_reconciler():
+    """Build the discovery, mapped persistence and verification task graph."""
 
     # --------------------------------------------------------------------------
     # Task 1: Discover Bronze Runs & Capture Initial MySQL Count
@@ -131,8 +136,15 @@ def roombeacon_bronze_reconciler():
             logger.info("DuckDB Refresh thành công: %d v_observations", duck_cnt)
             return {"duckdb_observations_total": duck_cnt, "status": "SUCCESS"}
         except Exception as exc:
-            logger.exception("Lỗi khi refresh DuckDB Analytics: %s", exc)
-            return {"duckdb_observations_total": 0, "status": "FAILED", "error": str(exc)}
+            logger.error(
+                "DuckDB analytics refresh failed (error_class=%s)",
+                type(exc).__name__,
+            )
+            return {
+                "duckdb_observations_total": 0,
+                "status": "FAILED",
+                "error_class": type(exc).__name__,
+            }
 
     # --------------------------------------------------------------------------
     # Task 6: Summarize Reconciliation (Run-Scoped Reporting)

@@ -1,3 +1,5 @@
+"""Fetch sitemap documents under robots, transport and safety policies."""
+
 from dataclasses import dataclass
 import gzip
 import logging
@@ -78,7 +80,7 @@ class SitemapFetcher:
                     error=res.error,
                 )
             except Exception as exc:
-                logger.warning("SitemapFetcher: Lỗi tải sitemap qua Browser %s: %s", url, exc)
+                logger.warning("Sitemap browser fetch failed (error_class=%s)", type(exc).__name__)
                 return SitemapFetchResponse(
                     url=url,
                     status_code=500,
@@ -127,7 +129,7 @@ class SitemapFetcher:
                 )
 
         except httpx.RequestError as exc:
-            logger.warning("SitemapFetcher: Lỗi kết nối khi tải %s: %s", url, exc)
+            logger.warning("Sitemap HTTP request failed (error_class=%s)", type(exc).__name__)
             return SitemapFetchResponse(
                 url=url,
                 status_code=0,
@@ -136,7 +138,7 @@ class SitemapFetcher:
                 error=str(exc),
             )
         except Exception as exc:
-            logger.exception("SitemapFetcher: Ngoại lệ bất ngờ khi tải %s: %s", url, exc)
+            logger.error("Sitemap fetch failed unexpectedly (error_class=%s)", type(exc).__name__)
             return SitemapFetchResponse(
                 url=url,
                 status_code=500,

@@ -1,3 +1,9 @@
+"""Persist crawl manifests and Bronze artifacts beneath a configured data root.
+
+The adapter owns filesystem serialization only; it does not parse sources,
+schedule crawls or write MySQL observations.
+"""
+
 from dataclasses import asdict
 from datetime import datetime, timezone
 import json

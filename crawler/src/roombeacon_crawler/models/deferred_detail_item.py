@@ -16,10 +16,11 @@ class DeferredDetailItem:
     origin_run_id: str
     first_deferred_at: str
     last_attempt_at: str | None = None
+    next_attempt_at: str | None = None
     attempt_count: int = 0
     reason: str = "REQUEST_BUDGET_EXHAUSTED"
     # PENDING, IN_PROGRESS, COMPLETED, TERMINAL_FAILED
-    status: str = "PENDING"  
+    status: str = "PENDING"
     last_error: str | None = None
     card_title: str | None = None
     card_price: str | None = None
@@ -28,9 +29,11 @@ class DeferredDetailItem:
     card_fingerprint: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
+        """Serialize the deferred job for the durable local backlog."""
         return asdict(self)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "DeferredDetailItem":
+        """Restore a job while ignoring fields from newer incompatible schemas."""
         valid_fields = {k: v for k, v in data.items() if k in cls.__dataclass_fields__}
         return cls(**valid_fields)

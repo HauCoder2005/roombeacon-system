@@ -1,3 +1,5 @@
+"""Declare PhongTro123 source capabilities and extraction components."""
+
 from urllib.parse import urlparse
 
 from roombeacon_crawler.config.source_settings import SourceSettings
@@ -94,7 +96,9 @@ class Phongtro123SourceAdapter(BaseSourceAdapter):
                 target_id="hcm_phongtro",
                 url="https://phongtro123.com/tinh-thanh/ho-chi-minh",
                 enabled=True,
-                interval_minutes=45,
+                interval_minutes=5,
+                crawl_details=True,
+                max_details_per_run=40,
                 target_type_hint=CrawlTargetType.LISTING_PAGE,
                 label="phongtro123_hcm_phongtro",
             ),

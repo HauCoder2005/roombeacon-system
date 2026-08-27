@@ -4,7 +4,7 @@ import logging
 import sys
 
 from roombeacon_crawler.config.crawler_settings import CrawlerSettings
-from roombeacon_crawler.config.get_env import env
+from roombeacon_crawler.config.get_env import bootstrap_runtime_environment, env
 from roombeacon_crawler.pipeline.crawl_runner import CrawlRunner
 from roombeacon_crawler.sources.resolver import SourceResolver
 from roombeacon_crawler.validators.url_validator import URLValidator
@@ -19,6 +19,7 @@ logger = logging.getLogger("roombeacon_crawler")
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse local diagnostic overrides without loading runtime state."""
     parser = argparse.ArgumentParser(
         prog="roombeacon-crawler",
         description="RoomBeacon Local Diagnostics & Debug CLI.\n"
@@ -74,6 +75,7 @@ def run_diagnostics() -> None:
 
 
 async def main_async(args: argparse.Namespace) -> None:
+    """Run diagnostics or one local crawl from the validated CLI arguments."""
     if args.diagnostics:
         run_diagnostics()
         return
@@ -115,6 +117,10 @@ async def main_async(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
+    """Bootstrap dotenv for the local CLI and execute its asynchronous flow."""
+    # Local CLI is the only application entrypoint that opts into dotenv.
+    # Library imports and Airflow DAG parsing never do this implicitly.
+    bootstrap_runtime_environment(load_dotenv_file=True)
     args = parse_args()
     asyncio.run(main_async(args))
 

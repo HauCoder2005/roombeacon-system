@@ -8,7 +8,9 @@ from roombeacon_crawler.demo.sources.source_policy import (
 
 
 class StrategySelector:
+    """Provide the demo-only StrategySelector contract used by the isolated example crawler."""
     def select(self, url: str) -> FetchStrategy:
+        """Execute the demo-only select step without affecting production workflows."""
         try:
             parsed = urlparse(url)
             hostname = (parsed.hostname or parsed.netloc or "").lower()

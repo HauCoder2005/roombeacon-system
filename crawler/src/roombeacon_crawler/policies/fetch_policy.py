@@ -1,3 +1,5 @@
+"""Map classified crawl status values to parse, retry or stop actions."""
+
 from roombeacon_crawler.enums.crawl_status import CrawlStatus
 from roombeacon_crawler.enums.fetch_action import FetchAction
 

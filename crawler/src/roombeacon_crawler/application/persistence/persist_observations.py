@@ -1,5 +1,12 @@
+"""Persist a batch of Bronze observations inside one application transaction.
+
+The use case coordinates repository ports, idempotency and bounded deadlock
+retries. It does not parse artifacts or own scheduler error translation.
+"""
+
 from dataclasses import dataclass, field
 import logging
+import time
 from typing import Sequence
 
 from roombeacon_crawler.domain.errors.domain_error import PersistenceError
@@ -25,9 +32,16 @@ class BronzeImportResult:
     observations_inserted: int = 0
     technical_duplicates: int = 0
     errors: list[str] = field(default_factory=list)
+    transaction_begin_seconds: float = 0.0
+    platform_seconds: float = 0.0
+    rental_posts_seconds: float = 0.0
+    rental_post_versions_seconds: float = 0.0
+    children_seconds: float = 0.0
+    commit_seconds: float = 0.0
 
     @property
     def successful_imports(self) -> int:
+        """Count observations that were inserted or already safely persisted."""
         return self.observations_inserted + self.technical_duplicates
 
 
@@ -64,7 +78,9 @@ class PersistBronzeObservationsUseCase:
         for attempt in range(1, max_retries + 1):
             result = BronzeImportResult(total_observations=len(observations))
             try:
+                phase_started = time.perf_counter()
                 self.transaction_mgr.begin()
+                result.transaction_begin_seconds = time.perf_counter() - phase_started
                 conn = getattr(self.transaction_mgr, "connection", None)
                 if conn is not None:
                     if hasattr(self.platform_repo, "connection"):
@@ -76,38 +92,52 @@ class PersistBronzeObservationsUseCase:
                     if hasattr(self.children_repo, "connection"):
                         self.children_repo.connection = conn
 
+                platform_ids: dict[str, int] = {}
                 for obs in observations:
                     # 1. Quản lý Platform
-                    platform_id = self.platform_repo.get_or_create_platform(
-                        source_code=obs.source,
-                        display_name=obs.source.capitalize(),
-                        base_url=obs.url,
-                    )
+                    platform_id = platform_ids.get(obs.source)
+                    if platform_id is None:
+                        phase_started = time.perf_counter()
+                        platform_id = self.platform_repo.get_or_create_platform(
+                            source_code=obs.source,
+                            display_name=obs.source.capitalize(),
+                            base_url=obs.url,
+                        )
+                        result.platform_seconds += time.perf_counter() - phase_started
+                        platform_ids[obs.source] = platform_id
 
                     # 2. Quản lý Rental Post Identity (Stable entity)
+                    phase_started = time.perf_counter()
                     post_id, is_new_post = self.rental_post_repo.upsert_post(
                         obs, platform_id=platform_id
                     )
+                    result.rental_posts_seconds += time.perf_counter() - phase_started
                     if is_new_post:
                         result.posts_created += 1
                     else:
                         result.posts_existing += 1
 
                     # 3. Quản lý Phiên bản Quan sát (rental_post_versions)
+                    phase_started = time.perf_counter()
                     version_id, is_inserted = self.observation_repo.insert_observation(
                         obs, post_id=post_id
                     )
+                    result.rental_post_versions_seconds += time.perf_counter() - phase_started
 
                     # 4. Quản lý dữ liệu con liên kết (chỉ khi là observation mới)
                     if is_inserted:
                         result.observations_inserted += 1
+                        phase_started = time.perf_counter()
                         self.children_repo.persist_children(
                             obs, post_id=post_id, observation_id=version_id
                         )
+                        result.children_seconds += time.perf_counter() - phase_started
                     else:
                         result.technical_duplicates += 1
 
+                phase_started = time.perf_counter()
                 self.transaction_mgr.commit()
+                result.commit_seconds = time.perf_counter() - phase_started
                 logger.info(
                     "Persist Bronze hoàn tất: %d observations (Mới: %d, Trùng lặp kỹ thuật: %d, Posts mới: %d, Posts cũ: %d)",
                     len(observations),
@@ -122,20 +152,27 @@ class PersistBronzeObservationsUseCase:
                 is_deadlock = "1213" in str(exc) or "deadlock" in str(exc).lower()
                 if is_deadlock and attempt < max_retries:
                     import random
-                    import time
                     sleep_time = (0.2 * (2 ** attempt)) + random.uniform(0.05, 0.15)
                     logger.warning(
-                        "Gặp MySQL deadlock (attempt %d/%d). Thử lại sau %.2fs: %s",
-                        attempt, max_retries, sleep_time, exc
+                        "MySQL deadlock; retrying persistence (attempt=%d/%d, delay_seconds=%.2f, error_class=%s)",
+                        attempt,
+                        max_retries,
+                        sleep_time,
+                        type(exc).__name__,
                     )
                     time.sleep(sleep_time)
-                    # Reset result counters before retry
-                    result = PersistResult()
                     continue
 
-                err_msg = f"Lỗi transaction khi persist Bronze observations: {exc}"
-                logger.exception(err_msg)
-                raise PersistenceError(err_msg) from exc
+                logger.error(
+                    "Bronze persistence transaction failed (attempt=%d/%d, error_class=%s, deadlock=%s)",
+                    attempt,
+                    max_retries,
+                    type(exc).__name__,
+                    is_deadlock,
+                )
+                raise PersistenceError(
+                    "Bronze persistence transaction failed"
+                ) from None
             finally:
                 for repo in (self.platform_repo, self.rental_post_repo, self.observation_repo, self.children_repo):
                     if hasattr(repo, "connection"):

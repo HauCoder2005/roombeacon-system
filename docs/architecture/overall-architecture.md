@@ -1,5 +1,7 @@
 # RoomBeacon — Overall System Architecture
 
+> **Trạng thái: FUTURE DESIGN / LEGACY.** Tài liệu này lưu tầm nhìn kiến trúc và có thể chứa thành phần chưa triển khai. Không dùng làm mô tả runtime hiện tại; xem [Current Architecture](CURRENT_ARCHITECTURE.md) và [Data Lifecycle](../data/DATA_LIFECYCLE.md).
+
 > **Architecture Level:** Level 1 — Overall System Architecture  
 > **Project:** RoomBeacon  
 > **System Type:** Location-Aware Rental Discovery & Data Intelligence Platform  

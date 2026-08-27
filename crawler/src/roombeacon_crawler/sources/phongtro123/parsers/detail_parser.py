@@ -1,6 +1,10 @@
+"""Extract PhongTro123 detail fields into the raw detail model."""
+
 from datetime import datetime, timezone
 from html.parser import HTMLParser
+import json
 import logging
+import re
 from urllib.parse import urljoin
 
 from roombeacon_crawler.models.listing_detail_raw import ListingDetailRaw
@@ -94,6 +98,46 @@ class Phongtro123DetailParser:
     def __init__(self, source_name: str = "phongtro123") -> None:
         self.source_name = source_name
 
+    @staticmethod
+    def _extract_full_address(root: DOMNode) -> str | None:
+        """Extract the main listing address from semantic, source-scoped data."""
+        # The production detail table pairs a stable Vietnamese label with its
+        # adjacent value cell; row position and generated CSS are irrelevant.
+        for row in root.find_all(tag="tr"):
+            cells = [child for child in row.children if child.tag in {"td", "th"}]
+            if len(cells) < 2:
+                continue
+            label = cells[0].get_text().strip().rstrip(":").casefold()
+            if label == "địa chỉ":
+                value = cells[1].get_text().strip()
+                return value or None
+
+        # Structured PostalAddress is the controlled fallback for layouts that
+        # omit the visible table while preserving the listing schema payload.
+        for script in root.find_all(tag="script", attr_has=("type", "ld+json")):
+            raw = script.get_text().strip()
+            if not raw:
+                continue
+            try:
+                payload = json.loads(raw)
+            except (TypeError, ValueError, json.JSONDecodeError):
+                continue
+            nodes = payload if isinstance(payload, list) else [payload]
+            for node in nodes:
+                if not isinstance(node, dict):
+                    continue
+                address = node.get("address")
+                if isinstance(address, dict):
+                    value = address.get("streetAddress")
+                    if isinstance(value, str) and value.strip():
+                        return value.strip()
+
+        address_node = root.find(class_contains="post-address") or root.find(
+            class_contains="item-address"
+        )
+        value = address_node.get_text().strip() if address_node else ""
+        return value or None
+
     def parse(
         self,
         html: str,
@@ -125,8 +169,7 @@ class Phongtro123DetailParser:
             area_node = root.find(class_contains="item-acreage") or root.find(class_contains="post-acreage") or root.find(class_contains="acreage")
             area_raw = area_node.get_text() if area_node else None
 
-            addr_node = root.find(class_contains="post-address") or root.find(class_contains="item-address") or root.find(class_contains="address")
-            address_raw = addr_node.get_text() if addr_node else None
+            address_raw = self._extract_full_address(root)
 
             desc_node = root.find(class_contains="section-post-summary") or root.find(class_contains="post-main-content") or root.find(class_contains="post-description")
             description_raw = desc_node.get_text() if desc_node else None
@@ -148,11 +191,12 @@ class Phongtro123DetailParser:
                 price_raw=price_raw,
                 area_raw=area_raw,
                 address_raw=address_raw,
+                location_raw=address_raw,
                 description_raw=description_raw,
                 seller_name_raw=seller_name_raw,
                 image_urls_raw=image_urls,
                 crawled_at=datetime.now(timezone.utc).isoformat(),
             )
         except Exception as exc:
-            logger.warning("Lỗi parse detail phongtro123 (%s): %s", effective_url, exc)
+            logger.warning("PhongTro123 detail parse failed (error_class=%s)", type(exc).__name__)
             return None

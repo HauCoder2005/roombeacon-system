@@ -2,11 +2,13 @@ from roombeacon_crawler.demo.enums.crawl_status import CrawlStatus
 
 
 class CooldownPolicy:
+    """Provide the demo-only CooldownPolicy contract used by the isolated example crawler."""
     def get_cooldown_seconds(
         self,
         status: CrawlStatus,
         attempt: int = 1,
     ) -> int:
+        """Execute the demo-only get_cooldown_seconds step without affecting production workflows."""
         if status == CrawlStatus.RATE_LIMITED:
             if attempt <= 1:
                 return 60

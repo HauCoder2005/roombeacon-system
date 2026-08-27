@@ -1,7 +1,11 @@
+"""Persist version-scoped child observations in MySQL."""
+
 import json
 import logging
 import math
+
 from sqlalchemy import text
+
 from roombeacon_crawler.domain.models.bronze_observation import BronzeObservation
 from roombeacon_crawler.domain.ports.persistence_port import PostChildrenRepositoryPort
 from roombeacon_crawler.infrastructure.mysql.connection import MySQLConnectionFactory
@@ -11,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 class MySQLPostChildrenRepository(PostChildrenRepositoryPort):
-    """Repository quản lý các bảng con liên kết: post_prices, post_addresses, post_details, post_images, post_amenities, post_fees, post_contacts, post_attributes."""
+    """Persist price, address, detail, media, amenity and contact children."""
 
     def __init__(self, connection=None) -> None:
         self.connection = connection
@@ -22,65 +26,123 @@ class MySQLPostChildrenRepository(PostChildrenRepositoryPort):
         post_id: int,
         observation_id: int,
     ) -> None:
-        conn = self.connection or MySQLConnectionFactory.get_engine().connect()
+        """Persist child rows in their established order and transaction."""
+        connection = (
+            self.connection or MySQLConnectionFactory.get_engine().connect()
+        )
+        self._persist_price(connection, observation, post_id, observation_id)
+        self._persist_address(connection, observation, post_id, observation_id)
+        self._persist_details(connection, observation, post_id, observation_id)
+        self._persist_images(connection, observation, post_id, observation_id)
+        self._persist_amenities(connection, observation, post_id, observation_id)
+        self._persist_contact(connection, observation, post_id, observation_id)
 
-        # 1. Bảng giá (post_prices)
-        if observation.price_raw:
-            num_price = MySQLBronzeMapper.parse_numeric_price(observation.price_raw)
-            # Defensive guard: ensure price_amount fits within DECIMAL(15,2)
-            if num_price is not None:
-                if not isinstance(num_price, (int, float)) or not math.isfinite(num_price) or num_price <= 0 or num_price > 999_999_999_999.99:
-                    logger.warning(
-                        "Defensive guard: invalid price_amount %s rejected before insert, setting to NULL (price_raw=%s, post_id=%s)",
-                        num_price,
-                        str(observation.price_raw)[:50] if observation.price_raw else "",
-                        post_id,
-                    )
-                    num_price = None
+    @staticmethod
+    def _invalid_numeric_value(value, *, maximum: float) -> bool:
+        return (
+            not isinstance(value, (int, float))
+            or not math.isfinite(value)
+            or value <= 0
+            or value > maximum
+        )
 
-            query_price = text(
-                """
-                INSERT INTO post_prices (rental_post_id, rental_post_version_id, price_raw, price_amount, currency, period, created_at)
-                VALUES (:post_id, :version_id, :raw, :val, 'VND', 'MONTH', NOW())
-                """
+    def _persist_price(
+        self,
+        connection,
+        observation: BronzeObservation,
+        post_id: int,
+        observation_id: int,
+    ) -> None:
+        if not observation.price_raw:
+            return
+
+        normalized_price = MySQLBronzeMapper.parse_numeric_price(
+            observation.price_raw
+        )
+        if (
+            normalized_price is not None
+            and self._invalid_numeric_value(
+                normalized_price,
+                maximum=999_999_999_999.99,
             )
-            conn.execute(
-                query_price,
-                {"post_id": post_id, "version_id": observation_id, "raw": observation.price_raw, "val": num_price},
+        ):
+            logger.warning(
+                "Defensive guard: invalid price_amount %s rejected before insert, setting to NULL (price_raw=%s, post_id=%s)",
+                normalized_price,
+                str(observation.price_raw)[:50],
+                post_id,
             )
+            normalized_price = None
 
-        # 2. Bảng địa chỉ / khu vực (post_addresses)
-        addr_text = observation.address_raw or observation.location_raw
-        if addr_text:
-            query_addr = text(
-                """
-                INSERT INTO post_addresses (rental_post_id, rental_post_version_id, full_address_text, created_at)
-                VALUES (:post_id, :version_id, :addr, NOW())
-                """
+        insert_price = text(
+            """
+            INSERT INTO post_prices (rental_post_id, rental_post_version_id, price_raw, price_amount, currency, period, created_at)
+            VALUES (:post_id, :version_id, :raw, :val, 'VND', 'MONTH', NOW())
+            """
+        )
+        connection.execute(
+            insert_price,
+            {
+                "post_id": post_id,
+                "version_id": observation_id,
+                "raw": observation.price_raw,
+                "val": normalized_price,
+            },
+        )
+
+    @staticmethod
+    def _persist_address(
+        connection,
+        observation: BronzeObservation,
+        post_id: int,
+        observation_id: int,
+    ) -> None:
+        # Lightweight locations must not become inherited raw address rows.
+        observed_address = observation.address_raw
+        if not observed_address or not str(observed_address).strip():
+            return
+
+        insert_address = text(
+            """
+            INSERT INTO post_addresses (rental_post_id, rental_post_version_id, full_address_text, created_at)
+            VALUES (:post_id, :version_id, :addr, NOW())
+            """
+        )
+        connection.execute(
+            insert_address,
+            {
+                "post_id": post_id,
+                "version_id": observation_id,
+                "addr": str(observed_address).strip()[:500],
+            },
+        )
+
+    def _persist_details(
+        self,
+        connection,
+        observation: BronzeObservation,
+        post_id: int,
+        observation_id: int,
+    ) -> None:
+        normalized_area = MySQLBronzeMapper.parse_numeric_area(
+            observation.area_raw
+        )
+        if (
+            normalized_area is not None
+            and self._invalid_numeric_value(
+                normalized_area,
+                maximum=99_999_999.99,
             )
-            conn.execute(
-                query_addr,
-                {
-                    "post_id": post_id,
-                    "version_id": observation_id,
-                    "addr": addr_text[:500] if isinstance(addr_text, str) else str(addr_text)[:500],
-                },
+        ):
+            logger.warning(
+                "Defensive guard: invalid area_value %s rejected before insert, setting to NULL (area_raw=%s, post_id=%s)",
+                normalized_area,
+                str(observation.area_raw)[:50] if observation.area_raw else "",
+                post_id,
             )
+            normalized_area = None
 
-        # 3. Bảng chi tiết (post_details)
-        num_area = MySQLBronzeMapper.parse_numeric_area(observation.area_raw)
-        # Defensive guard: ensure area_value fits within DECIMAL(10,2)
-        if num_area is not None:
-            if not isinstance(num_area, (int, float)) or not math.isfinite(num_area) or num_area <= 0 or num_area > 99_999_999.99:
-                logger.warning(
-                    "Defensive guard: invalid area_value %s rejected before insert, setting to NULL (area_raw=%s, post_id=%s)",
-                    num_area,
-                    str(observation.area_raw)[:50] if observation.area_raw else "",
-                    post_id,
-                )
-                num_area = None
-
-        query_details = text(
+        insert_details = text(
             """
             INSERT INTO post_details (
                 rental_post_id, rental_post_version_id, area_raw, area_value, description_raw, property_type_raw,
@@ -93,13 +155,13 @@ class MySQLPostChildrenRepository(PostChildrenRepositoryPort):
             )
             """
         )
-        conn.execute(
-            query_details,
+        connection.execute(
+            insert_details,
             {
                 "post_id": post_id,
                 "version_id": observation_id,
                 "area_raw": observation.area_raw,
-                "area_val": num_area,
+                "area_val": normalized_area,
                 "desc_raw": observation.description_raw,
                 "prop_type": observation.property_type_raw,
                 "furnishing": observation.furnishing_raw,
@@ -108,55 +170,102 @@ class MySQLPostChildrenRepository(PostChildrenRepositoryPort):
                 "seller_name": observation.seller_name_raw,
                 "seller_type": observation.seller_type_raw,
                 "seller_phone": observation.seller_phone_raw,
-                "attributes": json.dumps(observation.attributes or {}, ensure_ascii=False),
+                "attributes": json.dumps(
+                    observation.attributes or {},
+                    ensure_ascii=False,
+                ),
             },
         )
 
-        # 4. Bảng hình ảnh (post_images)
-        if observation.image_urls_raw:
-            query_img = text(
-                """
-                INSERT INTO post_images (rental_post_id, rental_post_version_id, image_url, position, created_at)
-                VALUES (:post_id, :version_id, :img_url, :pos, NOW())
-                """
-            )
-            for idx, img in enumerate(observation.image_urls_raw):
-                if img and isinstance(img, str) and img.strip():
-                    conn.execute(
-                        query_img,
-                        {"post_id": post_id, "version_id": observation_id, "img_url": img.strip(), "pos": idx + 1},
-                    )
+    @staticmethod
+    def _persist_images(
+        connection,
+        observation: BronzeObservation,
+        post_id: int,
+        observation_id: int,
+    ) -> None:
+        if not observation.image_urls_raw:
+            return
 
-        # 5. Bảng tiện ích (post_amenities)
-        if observation.amenities_raw:
-            query_amenity = text(
-                """
-                INSERT INTO post_amenities (rental_post_id, rental_post_version_id, amenity_name, created_at)
-                VALUES (:post_id, :version_id, :amenity, NOW())
-                """
+        image_rows = [
+            {
+                "post_id": post_id,
+                "version_id": observation_id,
+                "img_url": image_url.strip(),
+                "pos": position,
+            }
+            for position, image_url in enumerate(
+                observation.image_urls_raw,
+                start=1,
             )
-            for item in observation.amenities_raw:
-                if item and isinstance(item, str) and item.strip():
-                    conn.execute(
-                        query_amenity,
-                        {"post_id": post_id, "version_id": observation_id, "amenity": item.strip()},
-                    )
+            if image_url
+            and isinstance(image_url, str)
+            and image_url.strip()
+        ]
+        if not image_rows:
+            return
 
-        # 6. Bảng danh bạ người đăng (post_contacts)
-        if observation.seller_phone_raw or observation.seller_name_raw:
-            query_contact = text(
-                """
-                INSERT INTO post_contacts (rental_post_id, rental_post_version_id, contact_name, contact_phone, contact_type, created_at)
-                VALUES (:post_id, :version_id, :name, :phone, :type, NOW())
-                """
-            )
-            conn.execute(
-                query_contact,
-                {
-                    "post_id": post_id,
-                    "version_id": observation_id,
-                    "name": observation.seller_name_raw,
-                    "phone": observation.seller_phone_raw,
-                    "type": observation.seller_type_raw,
-                },
-            )
+        insert_image = text(
+            """
+            INSERT INTO post_images (rental_post_id, rental_post_version_id, image_url, position, created_at)
+            VALUES (:post_id, :version_id, :img_url, :pos, NOW())
+            """
+        )
+        connection.execute(insert_image, image_rows)
+
+    @staticmethod
+    def _persist_amenities(
+        connection,
+        observation: BronzeObservation,
+        post_id: int,
+        observation_id: int,
+    ) -> None:
+        if not observation.amenities_raw:
+            return
+
+        amenity_rows = [
+            {
+                "post_id": post_id,
+                "version_id": observation_id,
+                "amenity": amenity.strip(),
+            }
+            for amenity in observation.amenities_raw
+            if amenity and isinstance(amenity, str) and amenity.strip()
+        ]
+        if not amenity_rows:
+            return
+
+        insert_amenity = text(
+            """
+            INSERT INTO post_amenities (rental_post_id, rental_post_version_id, amenity_name, created_at)
+            VALUES (:post_id, :version_id, :amenity, NOW())
+            """
+        )
+        connection.execute(insert_amenity, amenity_rows)
+
+    @staticmethod
+    def _persist_contact(
+        connection,
+        observation: BronzeObservation,
+        post_id: int,
+        observation_id: int,
+    ) -> None:
+        if not observation.seller_phone_raw and not observation.seller_name_raw:
+            return
+
+        insert_contact = text(
+            """
+            INSERT INTO post_contacts (rental_post_id, rental_post_version_id, contact_name, contact_phone, contact_type, created_at)
+            VALUES (:post_id, :version_id, :name, :phone, :type, NOW())
+            """
+        )
+        connection.execute(
+            insert_contact,
+            {
+                "post_id": post_id,
+                "version_id": observation_id,
+                "name": observation.seller_name_raw,
+                "phone": observation.seller_phone_raw,
+                "type": observation.seller_type_raw,
+            },
+        )

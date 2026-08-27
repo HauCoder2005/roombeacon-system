@@ -1,5 +1,7 @@
 # 08 — Storage Contract
 
+> **Trạng thái: PARTIAL / FUTURE CONTRACT.** MySQL Bronze đã được triển khai; phần raw object-storage snapshot là thiết kế tương lai. Xem [Data Lifecycle](../data/DATA_LIFECYCLE.md) để biết semantics hiện tại.
+
 Tài liệu này quy định hợp đồng lưu trữ (Storage Contract) cho hai lớp dữ liệu **RAW** (Object Storage) và **BRONZE** (Structured Datasets).
 
 ---

@@ -1,3 +1,5 @@
+"""Extract MuaBan rental cards from the source listing-page structure."""
+
 import logging
 import re
 from urllib.parse import urljoin
@@ -42,7 +44,7 @@ class MuabanListingParser:
                     seen_urls.add(card.detail_url)
                     cards.append(card)
             except Exception as exc:
-                logger.warning("Lỗi parse card thứ %d trên Muaban: %s", position, exc)
+                logger.warning("Muaban card parse failed (position=%d, error_class=%s)", position, type(exc).__name__)
                 continue
 
         return cards

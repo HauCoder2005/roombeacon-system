@@ -1,3 +1,5 @@
+"""Validate outbound URLs and fail closed for unsafe or private destinations."""
+
 import ipaddress
 from urllib.parse import urlparse
 

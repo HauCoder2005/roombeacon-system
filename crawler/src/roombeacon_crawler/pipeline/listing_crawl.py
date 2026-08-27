@@ -1,3 +1,10 @@
+"""Fetch, parse and validate one source listing page.
+
+This pipeline owns robots preflight and acquisition/parser coordination. It
+does not deduplicate cards, fetch details, persist observations or decide the
+crawl frontier.
+"""
+
 from datetime import datetime, timezone
 import logging
 

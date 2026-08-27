@@ -1,3 +1,9 @@
+"""Coordinate transport selection, throttling, retries and response status.
+
+The service returns captured content and metadata but never invokes source
+parsers or persists crawl observations.
+"""
+
 import asyncio
 from datetime import datetime, timezone
 import logging
@@ -121,10 +127,10 @@ class FetchCoordinator:
                     crawl_status = CrawlStatus.CONNECTION_ERROR
             except Exception as exc:
                 logger.warning(
-                    "FetchCoordinator: Lỗi fetch %s (lần thử %d): %s",
-                    target_obj.url,
+                    "Fetch attempt failed (source=%s, attempt=%d, error_class=%s)",
+                    target_obj.source,
                     attempt,
-                    exc,
+                    type(exc).__name__,
                 )
                 crawl_status = CrawlStatus.CONNECTION_ERROR
 

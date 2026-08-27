@@ -1,3 +1,5 @@
+"""Declare MuaBan source capabilities and compose its extraction components."""
+
 import re
 from urllib.parse import urlparse
 
@@ -100,6 +102,7 @@ class MuabanSourceAdapter(BaseSourceAdapter):
                 url="https://muaban.net/bat-dong-san/cho-thue-phong-tro-nha-tro-tp-hcm",
                 enabled=True,
                 interval_minutes=60,
+                crawl_details=True,
                 target_type_hint=CrawlTargetType.LISTING_PAGE,
                 label="muaban_hcm_phongtro",
             ),

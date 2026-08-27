@@ -1,5 +1,7 @@
 # RoomBeacon — Kiến Trúc MySQL Primary & Host Read-Only Replica
 
+> **Trạng thái: FUTURE / NOT IMPLEMENTED.** Repository hiện không triển khai read replica như mô tả dưới đây. Không dùng tài liệu này làm runbook vận hành hiện tại; xem [Current Architecture](CURRENT_ARCHITECTURE.md).
+
 ## 1. Tổng Quan Kiến Trúc (Architectural Overview)
 
 Hệ thống RoomBeacon triển khai mô hình cơ sở dữ liệu phân tách rõ ràng giữa **Tác vụ Ghi chính (Primary R/W)** và **Bản sao đọc phân tán cục bộ (Read-Only Replica)** nhằm đáp ứng các tiêu chuẩn:

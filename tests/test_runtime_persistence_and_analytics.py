@@ -230,6 +230,78 @@ class TestPostAddressesAndSchemaMapping(unittest.TestCase):
         self.assertTrue(has_post_prices, "Phải ghi nhận giá vào bảng post_prices")
         self.assertFalse(has_post_locations, "Tuyệt đối không được phụ thuộc vào bảng cũ post_locations")
 
+    def test_lightweight_observation_does_not_copy_previous_address(self):
+        from roombeacon_crawler.infrastructure.mysql.repositories.post_children_repository import MySQLPostChildrenRepository
+
+        mock_conn = MagicMock()
+        repo = MySQLPostChildrenRepository(connection=mock_conn)
+        obs = BronzeObservation(
+            source="cafeland",
+            listing_id="stable-1",
+            run_id="lightweight-run",
+            url="https://example.test/listing/stable-1",
+            location_raw="Quận 3, TP.HCM",
+            address_raw=None,
+        )
+
+        repo.persist_children(observation=obs, post_id=1, observation_id=11)
+
+        statements = [str(call.args[0]) for call in mock_conn.execute.call_args_list]
+        self.assertFalse(any("SELECT full_address_text" in sql for sql in statements))
+        self.assertFalse(any("INSERT INTO post_addresses" in sql for sql in statements))
+
+    def test_child_insert_count_and_order_remain_stable(self):
+        from roombeacon_crawler.infrastructure.mysql.repositories.post_children_repository import MySQLPostChildrenRepository
+
+        mock_conn = MagicMock()
+        observation = BronzeObservation(
+            source="cafeland",
+            listing_id="stable-order",
+            run_id="run-order",
+            url="https://example.test/listing",
+            price_raw="4 triệu",
+            address_raw="Confirmed address",
+            area_raw="25 m2",
+            image_urls_raw=["https://example.test/image.jpg"],
+            amenities_raw=["Wi-Fi"],
+            seller_name_raw="Seller",
+        )
+
+        MySQLPostChildrenRepository(connection=mock_conn).persist_children(
+            observation,
+            post_id=1,
+            observation_id=2,
+        )
+
+        executed_sql = [
+            str(call.args[0]) for call in mock_conn.execute.call_args_list
+        ]
+        inserted_tables = [
+            table
+            for sql in executed_sql
+            for table in (
+                "post_prices",
+                "post_addresses",
+                "post_details",
+                "post_images",
+                "post_amenities",
+                "post_contacts",
+            )
+            if f"INSERT INTO {table}" in sql
+        ]
+        self.assertEqual(
+            inserted_tables,
+            [
+                "post_prices",
+                "post_addresses",
+                "post_details",
+                "post_images",
+                "post_amenities",
+                "post_contacts",
+            ],
+        )
+        self.assertEqual(mock_conn.execute.call_count, 6)
+
 
 if __name__ == "__main__":
     unittest.main()

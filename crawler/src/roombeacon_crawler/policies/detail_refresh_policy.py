@@ -1,9 +1,15 @@
-from dataclasses import dataclass
+"""Decide whether a known listing requires detail refresh under its TTL.
+
+The policy is pure: callers own detail acquisition, counters and deferred work.
+"""
+
 from datetime import datetime, timedelta, timezone
 from typing import NamedTuple
 
 
 class RefreshDecision(NamedTuple):
+    """Boolean refresh decision paired with its operational reason."""
+
     should_refresh: bool
     reason: str
 

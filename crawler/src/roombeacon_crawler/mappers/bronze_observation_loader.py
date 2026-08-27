@@ -1,3 +1,9 @@
+"""Load local Bronze artifacts into persistence-ready observation models.
+
+The loader validates and maps artifact data; database writes are performed by
+the persistence use case.
+"""
+
 import hashlib
 import json
 import logging

@@ -1,3 +1,5 @@
+"""Validate parsed listing-detail fields before Bronze mapping."""
+
 from urllib.parse import urlparse
 
 from roombeacon_crawler.models.listing_detail_raw import ListingDetailRaw

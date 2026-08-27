@@ -1,3 +1,5 @@
+"""Auto-discover and register source-specific sitemap discovery adapters."""
+
 import importlib
 import inspect
 import logging
@@ -55,7 +57,7 @@ class DiscoveryRegistry:
         try:
             package = importlib.import_module(self.ADAPTERS_PACKAGE)
         except ImportError as exc:
-            logger.warning("Không thể import package discovery adapters '%s': %s", self.ADAPTERS_PACKAGE, exc)
+            logger.warning("Discovery adapter package import failed (package=%s, error_class=%s)", self.ADAPTERS_PACKAGE, type(exc).__name__)
             return
 
         if not hasattr(package, "__path__"):
@@ -79,7 +81,7 @@ class DiscoveryRegistry:
                         self.register(adapter_inst)
                         discovered_count += 1
             except Exception as exc:
-                logger.warning("Lỗi khi load discovery adapter module '%s': %s", full_module_name, exc)
+                logger.warning("Discovery adapter module load failed (module=%s, error_class=%s)", full_module_name, type(exc).__name__)
 
         logger.info("DiscoveryRegistry: Đã tự động khám phá %d discovery adapters: %s", discovered_count, self.list_sources())
 

@@ -1,3 +1,6 @@
+"""Extract the primary NhaTot detail, including its scoped full address."""
+
+import json
 import logging
 import re
 from urllib.parse import urljoin
@@ -10,7 +13,6 @@ from roombeacon_crawler.sources.nhatot.parsers.listing_parser import (
     AREA_REGEX,
 )
 from roombeacon_crawler.sources.nhatot.selectors.detail_selectors import (
-    ADDRESS_CLASSES,
     AMENITY_CLASSES,
     AREA_CLASSES,
     DEPOSIT_CLASSES,
@@ -33,6 +35,60 @@ class NhatotDetailParser:
 
     def __init__(self, source_name: str = "nhatot") -> None:
         self.source_name = source_name
+
+    @staticmethod
+    def _structured_address(root) -> str | None:
+        """Read the Product offer's PostalAddress, excluding breadcrumb JSON-LD."""
+        for script in root.find_all(tag="script"):
+            if script.attrs.get("type", "").casefold() != "application/ld+json":
+                continue
+            try:
+                payload = json.loads(script.get_text())
+            except (TypeError, ValueError, json.JSONDecodeError):
+                continue
+            items = payload if isinstance(payload, list) else [payload]
+            for item in items:
+                if not isinstance(item, dict) or item.get("@type") != "Product":
+                    continue
+                offers = item.get("offers")
+                place = offers.get("availableAtOrFrom") if isinstance(offers, dict) else None
+                address = place.get("address") if isinstance(place, dict) else None
+                value = address.get("streetAddress") if isinstance(address, dict) else None
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
+        return None
+
+    @staticmethod
+    def _semantic_address(root) -> str | None:
+        """Read the value inside the exact primary 'Địa chỉ bất động sản' section."""
+        for label in root.find_all(tag="p"):
+            if label.get_text().strip().casefold() != "địa chỉ bất động sản":
+                continue
+            section = label.parent
+            if section is None:
+                return None
+            for child in section.children:
+                if child is label:
+                    continue
+                for span in child.find_all(tag="span"):
+                    value = span.get_text().strip()
+                    normalized = value.casefold()
+                    if value and any(token in normalized for token in ("đường", "hẻm", "phường", "xã")):
+                        return value
+            return None
+        return None
+
+    @classmethod
+    def _extract_full_address(cls, root) -> str | None:
+        """Apply deterministic structured, semantic, then stable-class strategies."""
+        value = cls._structured_address(root) or cls._semantic_address(root)
+        if value:
+            return value
+        for stable_class in ("AdDecription_address", "full-address"):
+            node = root.find(class_contains=stable_class)
+            if node and node.get_text().strip():
+                return node.get_text().strip()
+        return None
 
     def parse(
         self,
@@ -64,7 +120,7 @@ class NhatotDetailParser:
             builder.feed(html)
             root = builder.root
         except Exception as exc:
-            logger.error("Lỗi khi parse DOM detail Nhà Tốt (%s): %s", detail_url, exc)
+            logger.error("NhaTot detail DOM parse failed (error_class=%s)", type(exc).__name__)
             return ListingDetailRaw(
                 source=self.source_name,
                 listing_id=listing_id,
@@ -117,14 +173,7 @@ class NhatotDetailParser:
             area_raw = self._extract_area(root.get_text())
 
         # 4. Address & Location
-        address_raw: str | None = None
-        for cls in ADDRESS_CLASSES:
-            node = root.find(class_contains=cls)
-            if node:
-                addr = node.get_text().strip()
-                if addr:
-                    address_raw = addr
-                    break
+        address_raw = self._extract_full_address(root)
 
         location_raw: str | None = address_raw
 

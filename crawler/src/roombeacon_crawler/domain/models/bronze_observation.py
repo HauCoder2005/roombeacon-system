@@ -37,6 +37,7 @@ class BronzeObservation:
     source_payload: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
+        """Serialize the source-near observation without changing raw values."""
         return {
             "source": self.source,
             "listing_id": self.listing_id,

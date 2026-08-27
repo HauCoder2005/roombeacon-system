@@ -55,12 +55,27 @@ class TestCrawlRunnerExecution(unittest.TestCase):
         self.assertIn("debug_max_records", roombeacon_crawler_dag.params)
         self.assertIn("debug_crawl_details", roombeacon_crawler_dag.params)
         task_ids = [t.task_id for t in roombeacon_crawler_dag.tasks]
-        self.assertIn("load_crawl_targets", task_ids)
-        self.assertIn("plan_crawls", task_ids)
-        self.assertIn("qualify_target", task_ids)
-        self.assertIn("execute_crawl", task_ids)
-        self.assertIn("update_checkpoint", task_ids)
-        self.assertIn("summarize_run", task_ids)
+        self.assertEqual(task_ids, [
+            "01_config_load_sources", "02_config_plan_crawls",
+            "03_crawl_check_eligibility", "04_crawl_execute_source",
+            "05_storage_save_bronze", "06_state_update_checkpoint",
+            "07_analytics_refresh_duckdb", "08_assets_sync_minio",
+            "09_report_run_summary",
+        ])
+        expected_order = task_ids
+        for upstream_id, downstream_id in zip(expected_order, expected_order[1:]):
+            upstream = roombeacon_crawler_dag.get_task(upstream_id)
+            downstream = roombeacon_crawler_dag.get_task(downstream_id)
+            self.assertEqual(upstream.downstream_task_ids, {downstream_id})
+            self.assertEqual(downstream.upstream_task_ids, {upstream_id})
+        mapped = [
+            task.task_id for task in roombeacon_crawler_dag.tasks
+            if task.__class__.__name__.endswith("MappedOperator")
+        ]
+        self.assertEqual(mapped, [
+            "03_crawl_check_eligibility", "04_crawl_execute_source",
+            "05_storage_save_bronze", "06_state_update_checkpoint",
+        ])
 
     def test_invalid_target_url_raises_value_error(self) -> None:
         with self.assertRaises(ValueError):
@@ -247,6 +262,62 @@ class TestCrawlRunnerExecution(unittest.TestCase):
         mock_http_fetch.assert_called_once()
         mock_browser_fetch.assert_not_called()
 
+    @patch(
+        "roombeacon_crawler.policies.rate_limit_policy.RateLimitPolicy.throttle",
+        new_callable=AsyncMock,
+    )
+    @patch("roombeacon_crawler.policies.robots_policy.RobotsPolicy.evaluate")
+    @patch("roombeacon_crawler.fetchers.http_fetcher.HttpFetcher.fetch")
+    def test_listing_pages_finish_before_discovery_first_detail_enrichment(
+        self,
+        mock_http_fetch: AsyncMock,
+        mock_robots_eval: MagicMock,
+        _mock_wait: AsyncMock,
+    ) -> None:
+        mock_robots_eval.return_value = (
+            "ALLOWED",
+            "https://nhatrovn.vn/robots.txt",
+        )
+        fixture_dir = Path(__file__).parent / "fixtures" / "nhatrovn"
+        listing_html = (fixture_dir / "listing_page.html").read_text(
+            encoding="utf-8"
+        )
+        detail_html = (fixture_dir / "detail_full_address.html").read_text(
+            encoding="utf-8"
+        )
+        request_kinds = []
+
+        async def fetch(url: str):
+            is_detail = "/chi-tiet/" in url
+            request_kinds.append("detail" if is_detail else "listing")
+            return CapturedResponse(
+                request_url=url,
+                final_url=url,
+                status_code=200,
+                html=detail_html if is_detail else listing_html,
+                headers={},
+                fetch_strategy=FetchStrategy.HTTP,
+            )
+
+        mock_http_fetch.side_effect = fetch
+
+        records, result = CrawlRunner.execute_crawl(
+            url="https://nhatrovn.vn/cho-thue-phong-tro/ha-noi/",
+            max_pages=2,
+            max_records=10,
+            crawl_details=True,
+            max_details_per_run=1,
+        )
+
+        self.assertEqual(request_kinds[:2], ["listing", "listing"])
+        self.assertEqual(request_kinds[2:], ["detail"])
+        self.assertEqual(result.pages_success, 2)
+        self.assertEqual(result.deferred_attempted, 1)
+        self.assertEqual(result.details_success, 1)
+        self.assertEqual(len(records), 3)
+        enriched = [record for record in records if record.address_raw]
+        self.assertEqual(len(enriched), 1)
+
     @patch("roombeacon_crawler.policies.robots_policy.RobotsPolicy.evaluate")
     @patch("roombeacon_crawler.fetchers.http_fetcher.HttpFetcher.fetch")
     @patch("roombeacon_crawler.fetchers.browser_fetcher.BrowserFetcher.fetch")
@@ -389,7 +460,9 @@ class TestCrawlRunnerExecution(unittest.TestCase):
         with self.assertRaises(AirflowException) as ctx:
             airflow_execute_crawl.function(qual_payload=qual_payload)
 
-        self.assertIn("Connection refused", str(ctx.exception))
+        rendered = str(ctx.exception)
+        self.assertIn("connection_error", rendered)
+        self.assertNotIn("Connection refused", rendered)
 
     @patch("roombeacon_crawler.pipeline.crawl_runner.CrawlRunner.execute_crawl")
     def test_airflow_task_semantics_success_returns_summary(

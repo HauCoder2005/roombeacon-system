@@ -1,3 +1,5 @@
+"""Validate parsed listing-card fields before downstream processing."""
+
 from urllib.parse import urlparse
 
 from roombeacon_crawler.models.listing_card_raw import ListingCardRaw

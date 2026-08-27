@@ -31,5 +31,5 @@ class DuckDBViewManager:
                 created.append(view_name)
                 logger.info("DuckDB: Đã tạo view %s", view_name)
             except Exception as exc:
-                logger.warning("DuckDB: Bỏ qua tạo view %s do lỗi: %s", view_name, exc)
+                logger.warning("DuckDB view creation failed (view=%s, error_class=%s)", view_name, type(exc).__name__)
         return created

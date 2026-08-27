@@ -24,6 +24,7 @@ LISTING_CARD_SELECTOR = (
 
 
 class BrowserFetcher:
+    """Provide the demo-only BrowserFetcher contract used by the isolated example crawler."""
     def __init__(
         self,
         timeout: float = 30.0,
@@ -35,6 +36,7 @@ class BrowserFetcher:
         self.max_scroll_attempts = max_scroll_attempts
 
     async def fetch(self, url: str) -> CapturedResponse:
+        """Execute the demo-only fetch step without affecting production workflows."""
         if async_playwright is None:
             raise RuntimeError(
                 "Playwright is not installed. Please run:\n"

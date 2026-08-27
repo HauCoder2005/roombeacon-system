@@ -52,3 +52,6 @@ class ConfigurationError(DomainError):
 class TestEnvironmentIsolationError(ConfigurationError):
     """Lỗi vi phạm cô lập môi trường test khi test cố gắng trỏ tới production database."""
 
+    # The public exception name intentionally starts with ``Test``. Explicitly
+    # opt out of pytest discovery when the exception is imported by test modules.
+    __test__ = False

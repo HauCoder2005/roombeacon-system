@@ -1,3 +1,5 @@
+"""Classify captured transport responses into crawler-safe status values."""
+
 from roombeacon_crawler.enums.crawl_status import CrawlStatus
 
 

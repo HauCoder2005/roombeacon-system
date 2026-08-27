@@ -1,3 +1,5 @@
+"""Extract BatDongSan rental cards from source listing-page markup."""
+
 import logging
 import re
 from urllib.parse import urljoin
@@ -42,7 +44,7 @@ class BatDongSanListingParser:
                     seen_urls.add(card.detail_url)
                     cards.append(card)
             except Exception as exc:
-                logger.warning("Lỗi parse card thứ %d trên BatDongSan: %s", position, exc)
+                logger.warning("BatDongSan card parse failed (position=%d, error_class=%s)", position, type(exc).__name__)
                 continue
 
         return cards

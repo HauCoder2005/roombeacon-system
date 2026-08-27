@@ -71,6 +71,7 @@ class TestCrawlPlannerAndStateRepository(unittest.TestCase):
         self.assertEqual(plan.target_id, "hcm_phongtro")
         self.assertEqual(plan.mode, CrawlMode.BOOTSTRAP_FULL)
         self.assertEqual(plan.reason, "FIRST_SUCCESSFUL_CRAWL_NOT_FOUND")
+        self.assertEqual(plan.interval_minutes, 30)
         self.assertIsNone(plan.watermark_from)
         self.assertIsNone(plan.overlap_from)
 
@@ -105,6 +106,32 @@ class TestCrawlPlannerAndStateRepository(unittest.TestCase):
         self.assertEqual(plan.watermark_from, last_success.isoformat())
         expected_overlap = (last_success - timedelta(hours=24)).isoformat()
         self.assertEqual(plan.overlap_from, expected_overlap)
+
+    def test_incomplete_legacy_forward_state_restarts_historical_bootstrap(self) -> None:
+        """A pagination upgrade must not misclassify incomplete forward-only state."""
+        self.repo.save_state(
+            CrawlTargetState(
+                source="nhatrovn",
+                target_id="hcm_phongtro",
+                last_success_at=self.now.isoformat(),
+                last_stop_reason="FORWARD_SCAN_COMPLETE",
+                bootstrap_completed=False,
+                bootstrap_next_page=None,
+            )
+        )
+        seed = CrawlSeed(
+            source="nhatrovn",
+            target_id="hcm_phongtro",
+            url="https://nhatrovn.vn/cho-thue-phong-tro/ho-chi-minh/",
+            interval_minutes=30,
+        )
+
+        plans = self.planner.plan_all([seed], current_time=self.now)
+
+        self.assertEqual(len(plans), 1)
+        self.assertEqual(plans[0].mode, CrawlMode.BOOTSTRAP_FULL)
+        self.assertEqual(plans[0].reason, "HISTORICAL_BOOTSTRAP_REQUIRED")
+        self.assertEqual(plans[0].start_page, 1)
 
     def test_nhatot_capability_resolves_forward_only_incremental(self) -> None:
         """NhaTot không hỗ trợ historical pagination -> CrawlPlanner tự động chọn FORWARD_ONLY_INCREMENTAL."""

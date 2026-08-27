@@ -1,5 +1,10 @@
+"""Evaluate and cache RFC 9309 robots decisions with fail-closed safeguards.
+
+The policy reports allow/deny/unavailable state and never performs page fetching
+on behalf of the crawl pipeline.
+"""
+
 from dataclasses import dataclass
-from datetime import datetime, timezone
 import logging
 import re
 import time
@@ -40,6 +45,7 @@ class RobotsRule:
 
     @classmethod
     def create(cls, pattern: str, allow: bool) -> "RobotsRule":
+        """Construct one normalized robots rule from a parsed directive."""
         pattern = pattern.strip()
         if not pattern:
             # Giá trị rỗng trong Disallow: nghĩa là Cho phép tất cả (Allow all)
@@ -48,6 +54,7 @@ class RobotsRule:
         return cls(pattern=pattern, allow=allow, regex=regex, length=length)
 
     def matches(self, target: str) -> bool:
+        """Return whether this robots rule applies to the supplied URL path."""
         if not self.pattern:
             return True
         return bool(self.regex.search(target))
@@ -62,6 +69,7 @@ class RobotsDocument:
 
     @classmethod
     def parse_text(cls, text: str) -> "RobotsDocument":
+        """Parse robots text into deterministic user-agent groups and rules."""
         groups: list[dict] = []
         crawl_delays: dict[str, float] = {}
         current_uas: list[str] = []
@@ -228,6 +236,7 @@ class RobotsPolicy:
         return self._error_details.get(domain.lower())
 
     def get_robots_url(self, url: str) -> str:
+        """Build the origin-scoped robots.txt URL for a crawl target."""
         parsed = urlparse(url)
         scheme = parsed.scheme or "https"
         domain = parsed.netloc
@@ -473,9 +482,9 @@ class RobotsPolicy:
         except (urllib.error.URLError, TimeoutError, ConnectionError, OSError) as exc:
             # Lỗi mạng, timeout, DNS resolution failure
             logger.warning(
-                "Lỗi kết nối / timeout khi nạp robots.txt từ %s: %s",
-                robots_url,
-                exc,
+                "Robots fetch unavailable (domain=%s, error_class=%s)",
+                domain,
+                type(exc).__name__,
             )
             self._error_details[domain] = {
                 "status_code": None,
@@ -496,9 +505,9 @@ class RobotsPolicy:
 
         except Exception as exc:
             logger.warning(
-                "Lỗi không xác định khi nạp robots.txt từ %s: %s",
-                robots_url,
-                exc,
+                "Robots fetch failed (domain=%s, error_class=%s)",
+                domain,
+                type(exc).__name__,
             )
             self._error_details[domain] = {
                 "status_code": None,

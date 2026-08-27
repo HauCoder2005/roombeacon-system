@@ -1,3 +1,5 @@
+"""Extract MuaBan detail fields into the source-neutral raw detail model."""
+
 import logging
 import re
 from urllib.parse import urljoin

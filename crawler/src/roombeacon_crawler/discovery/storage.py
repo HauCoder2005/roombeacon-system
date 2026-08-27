@@ -1,3 +1,5 @@
+"""Persist discovered URL candidates and discovery metadata to local storage."""
+
 from datetime import datetime, timezone
 import json
 import logging
@@ -52,7 +54,7 @@ class DiscoveryStorage:
             os.replace(tmp_file, artifact_file)
             logger.info("DiscoveryStorage: Đã lưu %d URLs tại %s", len(urls), artifact_file)
         except Exception as exc:
-            logger.warning("DiscoveryStorage: Không thể lưu artifact tại %s: %s", artifact_file, exc)
+            logger.warning("Discovery artifact write failed (path=%s, error_class=%s)", artifact_file, type(exc).__name__)
 
         return DiscoveryArtifact.from_dict(artifact_dict)
 
@@ -67,7 +69,7 @@ class DiscoveryStorage:
             data = json.loads(path.read_text(encoding="utf-8"))
             return DiscoveryArtifact.from_dict(data)
         except Exception as exc:
-            logger.error("DiscoveryStorage: Lỗi đọc file artifact %s: %s", path, exc)
+            logger.error("Discovery artifact read failed (path=%s, error_class=%s)", path, type(exc).__name__)
             return None
 
     def get_seen_urls(self, source: str) -> set[str]:
@@ -81,7 +83,7 @@ class DiscoveryStorage:
                 return set(data)
             return set()
         except Exception as exc:
-            logger.warning("DiscoveryStorage: Lỗi đọc seen URLs của %s: %s", source, exc)
+            logger.warning("Discovery seen-URL read failed (source=%s, error_class=%s)", source, type(exc).__name__)
             return set()
 
     def record_seen_urls(self, source: str, urls: list[str] | set[str]) -> None:
@@ -100,7 +102,7 @@ class DiscoveryStorage:
             )
             os.replace(tmp_file, state_file)
         except Exception as exc:
-            logger.warning("DiscoveryStorage: Lỗi lưu seen URLs của %s: %s", source, exc)
+            logger.warning("Discovery seen-URL write failed (source=%s, error_class=%s)", source, type(exc).__name__)
 
     def get_target_state(self, source: str) -> DiscoveryTargetState | None:
         """Đọc trạng thái DiscoveryTargetState của nguồn."""
@@ -111,7 +113,7 @@ class DiscoveryStorage:
             data = json.loads(state_file.read_text(encoding="utf-8"))
             return DiscoveryTargetState.from_dict(data)
         except Exception as exc:
-            logger.warning("DiscoveryStorage: Lỗi đọc DiscoveryTargetState của %s: %s", source, exc)
+            logger.warning("Discovery target-state read failed (source=%s, error_class=%s)", source, type(exc).__name__)
             return None
 
     def save_target_state(self, state: DiscoveryTargetState) -> None:
@@ -126,4 +128,4 @@ class DiscoveryStorage:
             )
             os.replace(tmp_file, state_file)
         except Exception as exc:
-            logger.warning("DiscoveryStorage: Lỗi lưu DiscoveryTargetState của %s: %s", state.source, exc)
+            logger.warning("Discovery target-state write failed (source=%s, error_class=%s)", state.source, type(exc).__name__)

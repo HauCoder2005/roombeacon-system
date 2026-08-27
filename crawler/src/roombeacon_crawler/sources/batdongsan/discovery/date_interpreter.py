@@ -7,6 +7,7 @@ class BatDongSanDateInterpreter:
 
     @staticmethod
     def interpret(raw_date_str: str | None) -> datetime | None:
+        """Convert this source's raw posting date into a policy-ready datetime."""
         if not raw_date_str:
             return None
 

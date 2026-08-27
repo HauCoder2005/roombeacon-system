@@ -40,9 +40,11 @@ class NhaTotDiscoveryAdapter(SourceDiscoveryAdapter):
     )
 
     def discover_entrypoints(self) -> list[str]:
+        """Return the source-declared sitemap or feed entrypoints for discovery."""
         return list(self.DEFAULT_ENTRYPOINTS)
 
     def filter_candidate_url(self, url: str) -> bool:
+        """Keep only discovery URLs that match this source's rental scope."""
         if not url:
             return False
         try:
@@ -72,6 +74,7 @@ class NhaTotDiscoveryAdapter(SourceDiscoveryAdapter):
             return False
 
     def classify_candidate_hint(self, url: str) -> str | None:
+        """Classify a discovered URL so planning chooses the right target type."""
         if not url:
             return None
         path = urlparse(url).path.lower()

@@ -1,4 +1,7 @@
+"""Extract NhaTroVN detail attributes from an acquired detail document."""
+
 import logging
+import json
 import re
 from urllib.parse import urljoin
 
@@ -13,6 +16,46 @@ class NhatroVNDetailParser:
 
     def __init__(self, source_name: str = "nhatrovn") -> None:
         self.source_name = source_name
+
+    @staticmethod
+    def _extract_full_address(root) -> str | None:
+        """Extract the primary listing address without scanning unrelated cards."""
+        # Current detail pages publish a Residence JSON-LD object. Breadcrumb
+        # JSON-LD is intentionally ignored because it only contains coarse area.
+        for script in root.find_all(tag="script"):
+            if "ld+json" not in script.get("type", "").casefold():
+                continue
+            raw = script.get_text().strip()
+            if not raw:
+                continue
+            try:
+                payload = json.loads(raw)
+            except (TypeError, ValueError, json.JSONDecodeError):
+                continue
+            nodes = payload if isinstance(payload, list) else [payload]
+            for node in nodes:
+                if not isinstance(node, dict) or node.get("@type") != "Residence":
+                    continue
+                address = node.get("address")
+                if isinstance(address, str) and address.strip():
+                    return address.strip()
+                if isinstance(address, dict):
+                    value = address.get("streetAddress")
+                    if isinstance(value, str) and value.strip():
+                        return value.strip()
+
+        # Stable semantic container inside the standalone room card. This does
+        # not inspect breadcrumbs, recommendations, booking modals or footer.
+        main_card = root.find(class_contains="rn-room-card--standalone") or root.find(
+            class_contains="rs-card-body"
+        )
+        address_elem = (
+            main_card.find(class_contains="rs-card-address") if main_card else None
+        )
+        if not address_elem:
+            return None
+        value = re.sub(r"^location_on\s*", "", address_elem.get_text()).strip()
+        return value or None
 
     def parse(
         self,
@@ -53,11 +96,7 @@ class NhatroVNDetailParser:
             title_raw = page_title.get_text() if page_title else None
 
         # 3. Địa chỉ
-        address_elem = root.find(class_contains="rs-card-address")
-        address_raw = None
-        if address_elem:
-            address_raw = address_elem.get_text()
-            address_raw = re.sub(r"^location_on\s*", "", address_raw).strip()
+        address_raw = self._extract_full_address(root)
 
         # 4. Giá
         price_elem = (
