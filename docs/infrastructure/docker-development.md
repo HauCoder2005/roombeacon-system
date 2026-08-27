@@ -38,6 +38,12 @@ Docker Compose
 | `mysql-airflow` | `roombeacon-mysql-airflow` | `127.0.0.1:3308` | `3306` | `roombeacon-orchestration-net` | `roombeacon-mysql-airflow-data` |
 | `minio` | `roombeacon-minio` | `127.0.0.1:9000`<br>`127.0.0.1:9001` | `9000`<br>`9001` | `roombeacon-data-net` | `roombeacon-minio-data` |
 | `minio-bootstrap` | `roombeacon-minio-bootstrap` | — | — | `roombeacon-data-net` | — (one-shot exit 0) |
+
+`minio-bootstrap` còn provision existing crawler identity bằng các
+`MINIO_CRAWLER_*` runtime variables và attach policy source-controlled
+`roombeacon-assets-writer`. Policy chỉ cho `GetObject`/`PutObject` dưới
+`roombeacon-assets/*`; không cấp bucket listing, bucket creation, object deletion
+hoặc MinIO admin. Bootstrap idempotent và không log credential.
 | `airflow-init` | `roombeacon-airflow-init` | — | — | `roombeacon-orchestration-net` | `airflow/` bindings |
 | `airflow-api-server` | `roombeacon-airflow-api-server` | `127.0.0.1:8080` | `8080` | `roombeacon-orchestration-net` | `airflow/` bindings |
 | `airflow-scheduler` | `roombeacon-airflow-scheduler` | — | — | `roombeacon-orchestration-net` | `airflow/` bindings |

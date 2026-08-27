@@ -1,10 +1,16 @@
+"""Validate and atomically publish the latest-state Silver Parquet snapshot.
+
+The materializer reads a fixed DuckDB view, validates one-row-per-listing and
+required columns, then replaces the published file atomically. It does not clean
+or enrich Bronze business fields beyond the documented snapshot semantics.
+"""
+
 import json
 import logging
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-import duckdb
 import pandas as pd
 
 from analytics.duckdb.connection import create_analytics_connection
@@ -27,6 +33,8 @@ REQUIRED_COLUMNS = [
 
 @dataclass
 class SilverMetadata:
+    """Publication metadata written alongside a Silver Parquet snapshot."""
+
     generated_at: str
     row_count: int
     unique_listing_count: int
@@ -45,7 +53,11 @@ class SilverMaterializationError(Exception):
 
 
 class SilverMaterializer:
-    """Thực thi materialization từ DuckDB analytical view v_latest_posts sang Silver Parquet nguyên tử."""
+    """Publish a validated DuckDB latest-state view as Silver Parquet.
+
+    Materialization writes and validates a temporary file before atomic replace;
+    failures leave the previously published snapshot intact.
+    """
 
     def __init__(
         self,
@@ -113,8 +125,8 @@ class SilverMaterializer:
                     self.tmp_file.unlink()
                 except Exception:
                     pass
-            logger.error("Lỗi materialization Silver: %s. Giữ nguyên snapshot trước đó.", exc)
-            raise SilverMaterializationError(f"Materialization thất bại: {exc}") from exc
+            logger.error("Silver materialization failed; previous snapshot preserved (error_class=%s)", type(exc).__name__)
+            raise SilverMaterializationError("Silver materialization failed") from None
 
     def _validate_dataframe(self, df: pd.DataFrame) -> None:
         """Kiểm tra tính toàn vẹn của DataFrame trước khi ghi."""
@@ -152,8 +164,8 @@ class SilverMaterializer:
                 raise SilverMaterializationError(
                     f"Số dòng đọc lại ({len(readback_df)}) không khớp số dòng dự kiến ({expected_rows})."
                 )
-        except Exception as exc:
-            raise SilverMaterializationError(f"Không thể đọc lại file Parquet: {exc}") from exc
+        except Exception:
+            raise SilverMaterializationError("Silver Parquet read-back validation failed") from None
 
     def _build_metadata(self, df: pd.DataFrame) -> SilverMetadata:
         """Xây dựng metadata an toàn không chứa thông tin nhạy cảm."""

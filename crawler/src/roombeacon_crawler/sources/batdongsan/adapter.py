@@ -1,3 +1,5 @@
+"""Declare BatDongSan source capabilities and extraction components."""
+
 import re
 from urllib.parse import urlparse
 
@@ -102,6 +104,7 @@ class BatDongSanSourceAdapter(BaseSourceAdapter):
                 url="https://batdongsan.com.vn/cho-thue-nha-tro-phong-tro-tp-hcm",
                 enabled=True,
                 interval_minutes=120,
+                crawl_details=True,
                 target_type_hint=CrawlTargetType.LISTING_PAGE,
                 label="batdongsan_hcm_phongtro",
             ),

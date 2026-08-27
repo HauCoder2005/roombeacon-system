@@ -1,4 +1,9 @@
-import asyncio
+"""Traverse source sitemaps and publish filtered discovery candidates.
+
+The engine coordinates discovery adapters, sitemap transport and local discovery
+storage; it does not crawl listing content or persist Bronze observations.
+"""
+
 from datetime import datetime, timezone
 import logging
 from pathlib import Path
@@ -13,10 +18,7 @@ from roombeacon_crawler.discovery.models import (
 )
 from roombeacon_crawler.discovery.sitemap.fetcher import SitemapFetcher
 from roombeacon_crawler.discovery.sitemap.index_parser import SitemapIndexParser
-from roombeacon_crawler.discovery.sitemap.parser import (
-    SitemapDocumentType,
-    SitemapUrlsetParser,
-)
+from roombeacon_crawler.discovery.sitemap.parser import SitemapUrlsetParser
 from roombeacon_crawler.discovery.sitemap.url_filter import DiscoveryUrlFilter
 from roombeacon_crawler.discovery.storage import DiscoveryStorage
 

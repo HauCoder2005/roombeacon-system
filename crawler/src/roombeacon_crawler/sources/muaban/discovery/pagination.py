@@ -1,5 +1,4 @@
 import logging
-import re
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 logger = logging.getLogger(__name__)

@@ -1,3 +1,5 @@
+"""Extract PhongTro123 listing cards with guarded source-specific fallbacks."""
+
 from html.parser import HTMLParser
 import logging
 import re
@@ -236,6 +238,6 @@ class Phongtro123ListingParser:
                     )
                 )
         except Exception as exc:
-            logger.warning("Lỗi parse listing HTML phongtro123: %s", exc)
+            logger.warning("PhongTro123 listing parse failed (error_class=%s)", type(exc).__name__)
 
         return cards

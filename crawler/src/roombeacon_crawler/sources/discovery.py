@@ -61,7 +61,7 @@ class SourceDiscovery:
         try:
             package = importlib.import_module(package_name)
         except ImportError as exc:
-            logger.error("Không thể import package nguồn '%s': %s", package_name, exc)
+            logger.error("Source package import failed (package=%s, error_class=%s)", package_name, type(exc).__name__)
             raise ImportError(f"Không tìm thấy package nguồn: {package_name}") from exc
 
         package_path = getattr(package, "__path__", None)
@@ -77,8 +77,8 @@ class SourceDiscovery:
                 try:
                     subpkg = importlib.import_module(subpkg_name)
                 except Exception as exc:
-                    logger.error("Lỗi khi tải subpackage nguồn '%s': %s", subpkg_name, exc)
-                    raise ImportError(f"Lỗi tải subpackage '{subpkg_name}': {exc}") from exc
+                    logger.error("Source subpackage load failed (package=%s, error_class=%s)", subpkg_name, type(exc).__name__)
+                    raise ImportError(f"Source subpackage load failed: {subpkg_name}") from None
 
                 # Thử tìm module adapter.py cụ thể trước, hoặc duyệt tất cả module trong subpackage
                 modules_to_inspect = []
@@ -110,7 +110,9 @@ class SourceDiscovery:
                             issubclass(obj, BaseSourceAdapter)
                             and obj is not BaseSourceAdapter
                             and not inspect.isabstract(obj)
-                            and obj.__module__.startswith(package_name)
+                            # Imported composition bases are not adapters owned
+                            # by the module currently being inspected.
+                            and obj.__module__ == mod.__name__
                         ):
                             if obj not in seen_classes:
                                 cls.validate_adapter_contract(obj)

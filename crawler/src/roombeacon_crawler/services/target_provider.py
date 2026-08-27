@@ -1,3 +1,5 @@
+"""Provide scheduled crawl targets from the registered source adapters."""
+
 from abc import ABC, abstractmethod
 import logging
 from urllib.parse import urlparse, urlunparse
@@ -61,9 +63,9 @@ class AdapterScheduledTargetProvider(ScheduledTargetProvider):
                     collected.append(seed)
             except Exception as exc:
                 logger.error(
-                    "Lỗi khi đọc scheduled_targets từ adapter %s: %s",
+                    "Scheduled-target discovery failed (adapter=%s, error_class=%s)",
                     adapter_cls.__name__,
-                    exc,
+                    type(exc).__name__,
                 )
 
         logger.info(

@@ -1,3 +1,5 @@
+"""Declare NhaTroVN source capabilities and compose its extraction components."""
+
 from urllib.parse import urlparse
 
 from roombeacon_crawler.config.source_settings import SourceSettings
@@ -95,7 +97,9 @@ class NhatroVNSourceAdapter(BaseSourceAdapter):
                 target_id="hcm_phongtro",
                 url="https://nhatrovn.vn/cho-thue-phong-tro/ho-chi-minh/",
                 enabled=True,
-                interval_minutes=30,
+                interval_minutes=5,
+                crawl_details=True,
+                max_details_per_run=40,
                 target_type_hint=CrawlTargetType.LISTING_PAGE,
                 label="nhatrovn_hcm_phongtro",
             ),

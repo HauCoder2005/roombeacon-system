@@ -1,3 +1,9 @@
+"""Create and reuse the RoomBeacon DuckDB analytics connection.
+
+The factory configures DuckDB, attaches Bronze MySQL read-only when available,
+and installs analytical views. It never owns crawler writes or schema mutation.
+"""
+
 import logging
 from pathlib import Path
 from typing import Any
@@ -10,7 +16,11 @@ logger = logging.getLogger(__name__)
 
 
 class DuckDBConnectionFactory:
-    """Quản lý kết nối DuckDB và cơ chế Attach MySQL ở chế độ READ_ONLY."""
+    """Manage the process-wide DuckDB connection and read-only MySQL attach.
+
+    Connection creation may create the local catalog and DuckDB views. Failed
+    MySQL attachment degrades safely without logging credential-bearing SQL.
+    """
 
     _connection = None
 
@@ -21,7 +31,7 @@ class DuckDBConnectionFactory:
         db_path: str | None = None,
         create_views: bool = True,
     ) -> Any:
-        """Tạo hoặc trả về kết nối DuckDB, tự động attach MySQL theo cấu hình và nạp analytical views."""
+        """Return the cached connection, creating and configuring it if needed."""
         if cls._connection is None:
             if db_path is None:
                 target_dir = Path("/data/analytics")
@@ -37,6 +47,8 @@ class DuckDBConnectionFactory:
                     fallback_dir = Path("./data/analytics").resolve()
                     fallback_dir.mkdir(parents=True, exist_ok=True)
                     resolved_db_path = str(fallback_dir / "roombeacon_analytics.duckdb")
+            else:
+                resolved_db_path = db_path
             try:
                 conn = duckdb.connect(database=resolved_db_path)
             except Exception as exc:
@@ -68,7 +80,6 @@ class DuckDBConnectionFactory:
                         seen_candidates.add((h, p))
                         unique_candidates.append((h, p))
 
-                last_exc = None
                 for host, port in unique_candidates:
                     try:
                         attach_sql = (
@@ -84,19 +95,22 @@ class DuckDBConnectionFactory:
                         )
                         attached = True
                         break
-                    except Exception as e:
-                        last_exc = e
+                    except Exception:
+                        # DuckDB may echo the full ATTACH statement (including
+                        # credentials) in its exception text. Never retain/log it.
+                        continue
 
                 if not attached:
                     logger.warning(
-                        "DuckDB: Không thể tự động ATTACH MySQL (%s). DuckDB chạy ở chế độ standalone.",
-                        last_exc,
+                        "DuckDB MySQL attachment failed; continuing in standalone mode "
+                        "(event=duckdb_mysql_attach_failed, alias=mysql_db)"
                     )
 
             except Exception as exc:
                 logger.warning(
-                    "DuckDB: Không thể tải extension mysql (%s). DuckDB chạy ở chế độ standalone.",
-                    exc,
+                    "DuckDB MySQL extension initialization failed; continuing in standalone mode "
+                    "(event=duckdb_mysql_extension_failed, error_class=%s)",
+                    type(exc).__name__,
                 )
 
             if create_views:
@@ -104,7 +118,8 @@ class DuckDBConnectionFactory:
                     DuckDBViewManager.create_views(conn)
                 except Exception as exc:
                     logger.warning(
-                        "DuckDB: Không thể tự động tạo analytical views (%s).", exc
+                        "DuckDB analytical view initialization failed (error_class=%s)",
+                        type(exc).__name__,
                     )
 
             cls._connection = conn
@@ -112,6 +127,7 @@ class DuckDBConnectionFactory:
 
     @classmethod
     def close(cls) -> None:
+        """Release the cached catalog handle so the next call opens a fresh one."""
         if cls._connection is not None:
             cls._connection.close()
             cls._connection = None

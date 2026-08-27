@@ -1,3 +1,5 @@
+"""Decide date-window continuation and safety stops for historical crawling."""
+
 from datetime import datetime
 import logging
 

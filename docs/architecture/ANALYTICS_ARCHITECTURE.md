@@ -1,5 +1,7 @@
 # RoomBeacon Analytics Architecture (DuckDB & In-Memory OLAP)
 
+> **Trạng thái: PARTIAL.** DuckDB và latest-state view đã có; cleaned Silver, Clean Analytical EDA và Gold chưa được triển khai. Xem [Data Lifecycle](../data/DATA_LIFECYCLE.md).
+
 Tài liệu này đặc tả kiến trúc tầng phân tích dữ liệu (**Analytics Layer**) sử dụng **DuckDB** để khai phá các bản ghi quan sát bất động sản từ MySQL.
 
 ---

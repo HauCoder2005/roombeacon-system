@@ -1,3 +1,9 @@
+"""Audit Bronze artifacts against MySQL and reconcile missing observations.
+
+The service coordinates discovery, loading and transactional persistence. DAG
+mapping and checkpoint updates remain outside this module.
+"""
+
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 import json
@@ -21,6 +27,8 @@ logger = logging.getLogger("BRONZE_RECONCILER")
 
 @dataclass
 class ReconciliationSummary:
+    """Aggregate counts describing one reconciliation batch."""
+
     dag_run_id: str = "UNKNOWN"
     runs_discovered: int = 0
     runs_selected: int = 0
@@ -48,6 +56,7 @@ class ReconciliationSummary:
     status: str = "SUCCESS"
 
     def to_dict(self) -> dict:
+        """Serialize the summary for Airflow XCom and structured reporting."""
         return asdict(self)
 
 
@@ -142,6 +151,7 @@ class BronzeReconcilerService:
         batch_limit: int = 25,
         engine=None,
     ) -> tuple[list[BronzeRunInfo], int, int]:
+        """Return the legacy tuple view of the richer reconciliation audit."""
         batch, meta = cls.audit_and_identify_missing_runs(discovered_runs, batch_limit, engine)
         return batch, meta["total_real_backlog"], meta["already_reconciled"]
 
@@ -194,22 +204,24 @@ class BronzeReconcilerService:
 
     @classmethod
     def load_checkpoint(cls, path: str | Path = "/data/state/bronze_reconciler.json") -> dict:
+        """Load the optional reconciler cursor, returning empty state if absent."""
         p = Path(path)
         if p.exists():
             try:
                 with open(p, "r", encoding="utf-8") as f:
                     return json.load(f)
-            except Exception as e:
-                logger.warning("Không thể đọc checkpoint tại %s: %s", p, e)
+            except Exception as exc:
+                logger.warning("Reconciler checkpoint read failed (path=%s, error_class=%s)", p, type(exc).__name__)
         return {}
 
     @classmethod
     def save_checkpoint(cls, state: dict, path: str | Path = "/data/state/bronze_reconciler.json") -> None:
+        """Persist progress metadata for the next scheduled reconciliation run."""
         p = Path(path)
         try:
             p.parent.mkdir(parents=True, exist_ok=True)
             state["updated_at"] = datetime.now(timezone.utc).isoformat()
             with open(p, "w", encoding="utf-8") as f:
                 json.dump(state, f, indent=2, ensure_ascii=False)
-        except Exception as e:
-            logger.warning("Không thể ghi checkpoint tại %s: %s", p, e)
+        except Exception as exc:
+            logger.warning("Reconciler checkpoint write failed (path=%s, error_class=%s)", p, type(exc).__name__)

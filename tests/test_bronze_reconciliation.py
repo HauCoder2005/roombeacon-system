@@ -209,7 +209,7 @@ class TestBronzeReconciliation(unittest.TestCase):
         crawler_dag = roombeacon_crawler()
         reconciler_dag = roombeacon_bronze_reconciler()
 
-        t_crawler = crawler_dag.get_task("refresh_duckdb_analytics")
+        t_crawler = crawler_dag.get_task("07_analytics_refresh_duckdb")
         t_reconciler = reconciler_dag.get_task("refresh_duckdb_analytics")
 
         self.assertEqual(t_crawler.pool, "duckdb_analytics_pool")

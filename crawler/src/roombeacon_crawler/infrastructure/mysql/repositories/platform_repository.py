@@ -1,3 +1,5 @@
+"""Resolve or create source-platform identities in Bronze MySQL."""
+
 import logging
 from sqlalchemy import text
 from roombeacon_crawler.domain.ports.persistence_port import PlatformRepositoryPort
@@ -13,6 +15,7 @@ class MySQLPlatformRepository(PlatformRepositoryPort):
         self.connection = connection
 
     def get_or_create_platform(self, source_code: str, display_name: str, base_url: str) -> int:
+        """Resolve a platform identity and create it exactly once when missing."""
         conn = self.connection or MySQLConnectionFactory.get_engine().connect()
         query_find = text("SELECT id FROM platforms WHERE code = :code LIMIT 1")
         result = conn.execute(query_find, {"code": source_code}).fetchone()

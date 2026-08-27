@@ -3,7 +3,9 @@ from roombeacon_crawler.demo.enums.fetch_action import FetchAction
 
 
 class FetchPolicy:
+    """Provide the demo-only FetchPolicy contract used by the isolated example crawler."""
     def decide(self, status: CrawlStatus) -> FetchAction:
+        """Execute the demo-only decide step without affecting production workflows."""
         if status == CrawlStatus.SUCCESS:
             return FetchAction.PARSE
 

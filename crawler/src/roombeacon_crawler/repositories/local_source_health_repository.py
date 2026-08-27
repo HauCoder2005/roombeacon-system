@@ -1,3 +1,5 @@
+"""Persist source health, failure streak and cooldown state in local storage."""
+
 from datetime import datetime, timezone
 import json
 import logging
@@ -43,6 +45,7 @@ class LocalSourceHealthRepository(SourceHealthRepository):
         return self.base_dir / f"{source}__{target_id}.json"
 
     def get_health(self, source: str, target_id: str) -> SourceHealthState | None:
+        """Load the most recent health snapshot for one source target."""
         path = self._health_file(source, target_id)
         if not path.is_file():
             return None
@@ -51,10 +54,11 @@ class LocalSourceHealthRepository(SourceHealthRepository):
                 data = json.load(f)
             return SourceHealthState.from_dict(data)
         except Exception as exc:
-            logger.warning("Lỗi đọc health state từ %s: %s", path, exc)
+            logger.warning("Source health read failed (path=%s, error_class=%s)", path, type(exc).__name__)
             return None
 
     def save_health(self, state: SourceHealthState) -> None:
+        """Publish a health snapshot using atomic file replacement."""
         path = self._health_file(state.source, state.target_id)
         temp_file = path.with_suffix(".tmp")
         data = state.to_dict()
@@ -66,7 +70,7 @@ class LocalSourceHealthRepository(SourceHealthRepository):
         except Exception as exc:
             if temp_file.is_file():
                 temp_file.unlink(missing_ok=True)
-            logger.error("Lỗi lưu health state tại %s: %s", path, exc)
+            logger.error("Source health write failed (path=%s, error_class=%s)", path, type(exc).__name__)
             raise
 
     def record_failure(
@@ -78,6 +82,7 @@ class LocalSourceHealthRepository(SourceHealthRepository):
         http_status: int | None = None,
         current_time: datetime | None = None,
     ) -> SourceHealthState:
+        """Advance the failure streak and calculate the next cooldown window."""
         now = current_time or datetime.now(timezone.utc)
         if now.tzinfo is None:
             now = now.replace(tzinfo=timezone.utc)
@@ -126,6 +131,7 @@ class LocalSourceHealthRepository(SourceHealthRepository):
         target_id: str,
         current_time: datetime | None = None,
     ) -> SourceHealthState:
+        """Reset failure and cooldown state after a successful access."""
         now = current_time or datetime.now(timezone.utc)
         if now.tzinfo is None:
             now = now.replace(tzinfo=timezone.utc)

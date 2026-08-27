@@ -1,5 +1,7 @@
 # RoomBeacon System Architecture
 
+> **Trạng thái: LEGACY DESIGN CONTEXT.** Giữ lại để tham khảo ý định thiết kế; [Current Architecture](CURRENT_ARCHITECTURE.md) là nguồn chuẩn cho implementation hiện tại.
+
 Tài liệu này đặc tả kiến trúc tổng thể toàn hệ thống (**System Architecture**) của nền tảng thu thập và khai phá dữ liệu bất động sản phòng trọ **RoomBeacon**.
 
 ---

@@ -35,7 +35,12 @@ YYYY-MM-DD_<short-issue-name>.md
 
 | Ngày (Date) | Tên Sự Cố (Incident) | Thành Phần (Component) | Trạng Thái (Status) | Báo Cáo Chi Tiết (Report Link) |
 | :--- | :--- | :--- | :--- | :--- |
+| 2026-08-26 | Full-address coverage verification | Parser / Detail Queue / Latest Analytics | **CODE FIXED — RECOVERY IN PROGRESS** | [2026-08-26_full-address-coverage-verification.md](2026-08-26_full-address-coverage-verification.md) |
 | 2026-08-23 | area_value overflow (DataError 1264) | Bronze Persistence / Airflow | **RESOLVED** | [2026-08-23_area-value-overflow.md](2026-08-23_area-value-overflow.md) |
 | 2026-08-23 | PhongTro123 Field Extraction Contamination | Crawler / PhongTro123 Parser | **RESOLVED** | [2026-08-23_phongtro123-field-extraction-contamination.md](2026-08-23_phongtro123-field-extraction-contamination.md) |
+| 2026-08-24 | Missing Detailed Address Extraction | Detail Parsers / Bronze Address | **CODE FIXED — RECRAWL PENDING** | [2026-08-24_missing-detailed-address-extraction.md](2026-08-24_missing-detailed-address-extraction.md) |
+| 2026-08-26 | Crawl and MySQL Performance Audit | Crawler / Bronze Persistence | **COMPLETE** | [2026-08-26_crawl-mysql-performance-audit.md](2026-08-26_crawl-mysql-performance-audit.md) |
+| 2026-08-26 | Discovery Throughput Regression | Crawler / Detail Enrichment | **RESOLVED / CAPACITY DEBT DOCUMENTED** | [2026-08-26_discovery-throughput-regression.md](2026-08-26_discovery-throughput-regression.md) |
+| 2026-08-26 | Fix Missing Full Address & Merge Rule | Parsers / Bronze Address Invariant | **RESOLVED** | [2026-08-26_full-address-coverage-fix.md](2026-08-26_full-address-coverage-fix.md) |
 
 *(Khi phát sinh sự cố mới, hãy tạo tệp báo cáo theo mẫu và bổ sung vào bảng danh mục trên).*

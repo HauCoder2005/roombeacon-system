@@ -27,11 +27,11 @@ from roombeacon_crawler.sources.registry import source_registry
 
 
 class TestSourceAdaptersContract(unittest.TestCase):
-    """Kiểm tra tính thống nhất của hợp đồng BaseSourceAdapter và SourcePagination trên toàn bộ 5 sources."""
+    """Kiểm tra hợp đồng BaseSourceAdapter và SourcePagination trên toàn bộ sources."""
 
     def test_all_adapters_satisfy_base_contract(self) -> None:
         adapter_classes = source_registry.get_registered_adapters()
-        self.assertEqual(len(adapter_classes), 5)
+        self.assertEqual(len(adapter_classes), 12)
 
         for adapter_cls in adapter_classes:
             with self.subTest(adapter=adapter_cls.__name__):

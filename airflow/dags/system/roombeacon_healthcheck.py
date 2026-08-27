@@ -1,8 +1,14 @@
+"""Define an on-demand Airflow healthcheck DAG.
+
+This diagnostic DAG reports scheduler execution and the non-sensitive environment
+name only; it does not inspect runtime secrets or application data.
+"""
+
 import os
 from datetime import datetime, timedelta
 
-from airflow import DAG
-from airflow.operators.python import PythonOperator
+from airflow.providers.standard.operators.python import PythonOperator
+from airflow.sdk import DAG
 
 default_args = {
     "owner": "roombeacon",

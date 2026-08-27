@@ -1,3 +1,5 @@
+"""Define bounded retry eligibility and exponential backoff for acquisition."""
+
 from roombeacon_crawler.enums.crawl_status import CrawlStatus
 
 

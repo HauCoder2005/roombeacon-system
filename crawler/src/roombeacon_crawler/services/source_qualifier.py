@@ -1,3 +1,9 @@
+"""Qualify source URLs through safety, adapter and robots checks.
+
+Qualification reports eligibility only; it does not crawl listings or bypass a
+robots denial.
+"""
+
 from datetime import datetime, timezone
 import logging
 from urllib.parse import urlparse

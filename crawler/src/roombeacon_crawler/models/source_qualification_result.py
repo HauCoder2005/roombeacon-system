@@ -1,14 +1,15 @@
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
 from enum import Enum
 
 
 class UrlSafetyStatus(str, Enum):
+    """Outcome of validating the target URL before network access."""
     VALID = "VALID"
     INVALID = "INVALID"
 
 
 class RobotsQualificationStatus(str, Enum):
+    """Outcome of the source robots-policy preflight."""
     ALLOWED = "ALLOWED"
     DENIED = "DENIED"
     UNAVAILABLE = "UNAVAILABLE"
@@ -18,11 +19,13 @@ class RobotsQualificationStatus(str, Enum):
 
 
 class AdapterStatus(str, Enum):
+    """Whether an installed source adapter can process the target."""
     REGISTERED = "REGISTERED"
     NOT_REGISTERED = "NOT_REGISTERED"
 
 
 class QualificationOverallStatus(str, Enum):
+    """Combined decision exposed to crawl orchestration."""
     READY = "READY"
     CANDIDATE_FOR_ADAPTER = "CANDIDATE_FOR_ADAPTER"
     DENIED_BY_ROBOTS = "DENIED_BY_ROBOTS"
@@ -50,6 +53,7 @@ class SourceQualificationResult:
     checked_at: str = ""
 
     def to_dict(self) -> dict:
+        """Serialize qualification output for Airflow XCom."""
         data = asdict(self)
         for key, value in data.items():
             if isinstance(value, Enum):
@@ -57,6 +61,7 @@ class SourceQualificationResult:
         return data
 
     def format_human_readable(self) -> str:
+        """Render a concise operator-facing qualification report."""
         lines = [
             "Source Qualification",
             "-" * 50,

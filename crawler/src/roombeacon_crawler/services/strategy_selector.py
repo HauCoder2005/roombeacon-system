@@ -1,3 +1,5 @@
+"""Select HTTP or browser acquisition from source capabilities and overrides."""
+
 from typing import Any
 from urllib.parse import urlparse
 

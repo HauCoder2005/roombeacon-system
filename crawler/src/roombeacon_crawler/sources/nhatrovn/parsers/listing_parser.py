@@ -1,3 +1,5 @@
+"""Extract and normalize NhaTroVN cards from a listing-page document."""
+
 import logging
 import re
 from urllib.parse import urljoin, urlparse
@@ -47,10 +49,9 @@ class NhatroVNListingParser:
                     cards.append(card)
             except Exception as exc:
                 logger.warning(
-                    "Lỗi khi parse listing card thứ %d trên trang %s: %s",
+                    "NhatroVN listing card parse failed (position=%d, error_class=%s)",
                     position,
-                    source_url,
-                    exc,
+                    type(exc).__name__,
                 )
                 continue
 

@@ -111,7 +111,7 @@ class NhatroVNPagination:
             if max_seen_page > current_page:
                 return True
         except Exception as exc:
-            logger.warning("Lỗi phân tích pagination HTML trên trang %d: %s. Cho phép tiếp tục nếu chưa đạt max_pages.", current_page, exc)
+            logger.warning("NhatroVN pagination parse failed; continuing within max-pages policy (page=%d, error_class=%s)", current_page, type(exc).__name__)
 
         # 7. Nếu có items và không có chỉ dấu hết trang -> cho phép tiếp tục
         return current_page < max_pages

@@ -1,14 +1,18 @@
+"""Run an explicit end-to-end verification against configured runtime services.
+
+This operational script performs live crawl, MySQL persistence and analytics
+checks and therefore must only be invoked deliberately after runtime bootstrap.
+Importing the module alone does not execute the verification.
+"""
+
 import asyncio
 from datetime import datetime, timezone
-import json
 import logging
-from pathlib import Path
 
 from roombeacon_crawler.application.persistence.persist_observations import PersistBronzeObservationsUseCase
-from roombeacon_crawler.config.get_env import env
+from roombeacon_crawler.config.get_env import bootstrap_runtime_environment
 from roombeacon_crawler.models.crawl_plan import CrawlPlan
 from roombeacon_crawler.enums.crawl_mode import CrawlMode
-from roombeacon_crawler.enums.crawl_status import CrawlStatus
 from roombeacon_crawler.infrastructure.mysql.connection import MySQLConnectionFactory
 from roombeacon_crawler.infrastructure.mysql.repositories.observation_repository import MySQLObservationRepository
 from roombeacon_crawler.infrastructure.mysql.repositories.platform_repository import MySQLPlatformRepository
@@ -28,6 +32,7 @@ logger = logging.getLogger("RUNTIME_VERIFY")
 
 
 async def run_pipeline_test():
+    """Execute the live verification workflow and assert cross-layer counts."""
     print("=" * 70)
     print("ROOMBEACON END-TO-END AUTOMATED RUNTIME PIPELINE VERIFICATION")
     print("=" * 70)
@@ -231,4 +236,5 @@ async def run_pipeline_test():
 
 
 if __name__ == "__main__":
+    bootstrap_runtime_environment(load_dotenv_file=True)
     asyncio.run(run_pipeline_test())

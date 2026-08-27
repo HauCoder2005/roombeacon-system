@@ -1,3 +1,5 @@
+"""Extract NhaTot listing cards using source-specific markup and fallbacks."""
+
 from html.parser import HTMLParser
 import logging
 import re
@@ -162,7 +164,7 @@ class NhatotListingParser:
             builder = DOMTreeBuilder()
             builder.feed(html)
         except Exception as exc:
-            logger.error("Lỗi khi parse DOM tree listing Nhà Tốt: %s", exc)
+            logger.error("NhaTot listing DOM parse failed (error_class=%s)", type(exc).__name__)
             return []
 
         search_root = self._locate_main_container(builder.root)

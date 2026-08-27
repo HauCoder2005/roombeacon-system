@@ -1,6 +1,11 @@
+"""Provide a small allowlisted command-line browser for DuckDB views.
+
+The CLI performs read-only queries against known analytical views and does not
+accept arbitrary SQL identifiers from the user.
+"""
+
 import argparse
 import logging
-import sys
 from analytics.duckdb.connection import DuckDBConnectionFactory
 from analytics.duckdb.bootstrap import bootstrap_analytics
 
@@ -19,7 +24,7 @@ AVAILABLE_VIEWS = [
 
 
 def launch_ui(view_name: str | None = None, limit: int = 20) -> None:
-    """Khởi chạy giao diện dòng lệnh tra cứu phân tích dữ liệu DuckDB."""
+    """Print overview data or rows from one allowlisted analytical view."""
     bootstrap_analytics()
     conn = DuckDBConnectionFactory.get_connection()
 

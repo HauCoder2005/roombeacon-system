@@ -43,4 +43,5 @@ class CrawlerSettings:
 
     @property
     def http_timeout_seconds(self) -> float:
+        """Expose the configured timeout as seconds for legacy HTTP callers."""
         return self.request_timeout

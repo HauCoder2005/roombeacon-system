@@ -1,3 +1,10 @@
+"""Fetch and parse one listing detail page into raw and Bronze representations.
+
+The pipeline enforces robots/fetch policy and delegates source extraction to the
+adapter. Detail scheduling, TTL policy and deferred backlog ownership are outside
+this module.
+"""
+
 from datetime import datetime, timezone
 import logging
 

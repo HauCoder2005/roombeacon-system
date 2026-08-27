@@ -5,10 +5,12 @@ from roombeacon_crawler.demo.models.captured_response import CapturedResponse
 
 
 class HttpFetcher:
+    """Provide the demo-only HttpFetcher contract used by the isolated example crawler."""
     def __init__(self, timeout: float = 20.0) -> None:
         self.timeout = timeout
 
     async def fetch(self, url: str) -> CapturedResponse:
+        """Execute the demo-only fetch step without affecting production workflows."""
         headers = {
             "User-Agent": "RoomBeaconCrawler/0.1",
             "Accept": "text/html,application/xhtml+xml",

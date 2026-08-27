@@ -1,5 +1,7 @@
 # KIẾN TRÚC ĐƯỜNG ỐNG TÀI NGUYÊN HÌNH ẢNH (ASSET PIPELINE)
 
+> **Trạng thái: CURRENT.** Mô tả asset reconciliation hiện hành; [Current Architecture](CURRENT_ARCHITECTURE.md) là sơ đồ hệ thống cấp cao.
+
 Tài liệu này mô tả chi tiết kiến trúc, cơ chế tải, kiểm thực, điều phối công bằng đa nguồn (Fair Source Scheduling) và lưu trữ tài nguyên nhị phân hình ảnh vào **MinIO Object Storage (`roombeacon-assets`)** trong hệ thống **RoomBeacon**.
 
 ---
@@ -84,7 +86,48 @@ Mọi tệp tin trước khi được lưu vào MinIO đều phải vượt qua 
 
 ## 6. Tự Động Hóa Qua Airflow DAG
 
-DAG `roombeacon_asset_reconciler` (`airflow/dags/assets/roombeacon_asset_reconciler.py`) chạy định kỳ mỗi 30 phút (`15,45 * * * *`) với ngân sách an toàn (`batch_budget = 50`), tự động tạo báo cáo kiểm toán chi tiết theo từng nguồn sau mỗi chu kỳ.
+Scheduled authority là task không mapped `08_assets_sync_minio` trong main DAG
+`roombeacon_crawler`, sau MySQL/checkpoint và DuckDB refresh, trước final report.
+Task dùng batch bounded mặc định 100 từ cùng `AssetReconcilerService`; fair scheduler
+chia quota giữa mọi source có persisted HTTP(S) `post_images` mà không cần
+source-specific switch. DAG `roombeacon_asset_reconciler` cũ giữ `schedule=None`
+và chỉ phục vụ manual recovery/backfill qua đúng application workflow này.
+
+Provisioning nằm tại `infrastructure/minio/bootstrap.sh` và policy
+`infrastructure/minio/policies/roombeacon-assets-writer.json`. Existing crawler
+principal chỉ có `s3:PutObject` và `s3:GetObject` trên
+`arn:aws:s3:::roombeacon-assets/*`. Reconciler không list/create bucket và không
+delete object; sau upload nó dùng `HeadObject` để xác minh trước khi persist
+`SUCCESS`.
+
+### Batch reporting semantics
+
+- `selected`/`batch_used`: canonical candidates chosen inside the bounded batch;
+  it equals `attempted`.
+- `downloaded_valid`: responses that passed status, size and magic-byte checks.
+- `uploaded`: `PutObject` calls accepted by MinIO. This is a processing stage,
+  not the final success outcome.
+- `post_upload_verified`: uploaded objects confirmed through `HeadObject`; only
+  these are persisted as `SUCCESS`.
+- `already_existing`: prior SUCCESS states whose objects were confirmed while
+  scanning. They are skipped before selection and therefore are not added to
+  `selected`.
+- `terminal_failed`: selected candidates rejected permanently;
+  `invalid_magic` is a subset of this value.
+- `retryable_failed`: selected candidates left in bounded retry state.
+- `pending_before/after`: unique actionable plus retry-waiting references.
+
+Per-run invariant:
+
+```text
+selected = post_upload_verified + terminal_failed + retryable_failed
+```
+
+`post_images.image_url` là metadata/source reference. Durable asset state giữ
+mapping source URL → bucket/object key/status; MinIO giữ binary. Không có binary
+trong MySQL, DuckDB, Parquet hoặc Bronze JSON. Một state `SUCCESS` chỉ được skip
+khi `HeadObject` xác nhận object còn tồn tại; duplicate observations của cùng
+canonical `(source, platform_post_id, image_url)` chỉ tạo một candidate mỗi run.
 
 ---
 
@@ -106,7 +149,10 @@ DAG `roombeacon_asset_reconciler` (`airflow/dags/assets/roombeacon_asset_reconci
 - Dựa trên 39 mẫu ảnh thực tế đã lưu trong MinIO:
   - Dung lượng trung vị: **71,27 KB/ảnh** (trung bình: 133,26 KB).
   - Tổng dung lượng ước tính cho toàn bộ 9.160 ảnh còn lại: **~653 MB** (mức trần: ~2,29 GB).
-- Với cấu hình an toàn hiện tại (50 ảnh/run, 48 run/ngày = 2.400 ảnh/ngày):
-  - Thời gian hoàn tất nạp bù toàn bộ backlog độc nhất: **~3,8 ngày**.
+- Sau ba NORMAL validation runs ở batch 50, authorization/operational failures
+  bằng 0 và task duration chỉ 18–31 giây. Batch được nâng có kiểm soát lên 100.
+  Với 16.945 pending references sau validation, mức trần lý thuyết là
+  9.600 ảnh/ngày và mức sàn drain khoảng **1,8 ngày** nếu mọi slot đều dùng hết.
+  Thời gian thực tế phụ thuộc new image arrivals, retry, terminal responses và
+  quyền object-level của runtime MinIO principal.
   - Không cần thiết lập thông lượng ồ ạt, tránh rủi ro nghẽn mạng hoặc kích hoạt cơ chế phòng vệ (Rate Limit/WAF) của các nền tảng nguồn.
-

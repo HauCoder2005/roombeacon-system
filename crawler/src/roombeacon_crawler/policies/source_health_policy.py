@@ -1,3 +1,5 @@
+"""Calculate source cooldown and recovery transitions from crawl outcomes."""
+
 from datetime import datetime, timedelta, timezone
 from typing import ClassVar
 

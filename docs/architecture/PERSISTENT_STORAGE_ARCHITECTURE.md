@@ -1,5 +1,7 @@
 # Kiến Trúc Lưu Trữ Dữ Liệu Vật Lý RoomBeacon (Persistent Storage Architecture)
 
+> **Trạng thái: PARTIAL / DESIGN CONTEXT.** Các nguyên tắc persistence vẫn hữu ích nhưng một số topology và đường dẫn phụ thuộc deployment. Đối chiếu [Current Architecture](CURRENT_ARCHITECTURE.md) trước khi vận hành.
+
 ## 1. Nguyên Tắc Cốt Lõi: Docker Là Compute, Host Là Source of Truth
 
 Hệ thống RoomBeacon tuân thủ nguyên lý phân tách triệt để giữa **Runtime/Compute (Môi trường thực thi)** và **Persistent Data (Dữ liệu bền vững vật lý)**:

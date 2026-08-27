@@ -1,7 +1,10 @@
+"""Create guarded SQLAlchemy engines for the Bronze MySQL database.
+
+This infrastructure adapter owns connection construction and test isolation. It
+does not define repository queries or application transaction semantics.
+"""
+
 import logging
-import os
-import sys
-from typing import Any
 
 from roombeacon_crawler.config.env.mysql import is_test_runtime
 from roombeacon_crawler.config.get_env import env
@@ -51,7 +54,11 @@ class MySQLConnectionFactory:
             except TestEnvironmentIsolationError:
                 raise
             except Exception as exc:
-                err_msg = f"Không thể khởi tạo kết nối MySQL: {exc}"
-                logger.error(err_msg, exc_info=True)
-                raise DatabaseConnectionError(err_msg) from exc
+                logger.error(
+                    "MySQL engine initialization failed (operation=create_engine, error_class=%s)",
+                    type(exc).__name__,
+                )
+                raise DatabaseConnectionError(
+                    "MySQL engine initialization failed"
+                ) from None
         return cls._engine

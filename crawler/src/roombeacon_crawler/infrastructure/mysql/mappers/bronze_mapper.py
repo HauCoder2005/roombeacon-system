@@ -1,3 +1,5 @@
+"""Map persistence-layer Bronze values into normalized SQL parameter sets."""
+
 import json
 import logging
 import math

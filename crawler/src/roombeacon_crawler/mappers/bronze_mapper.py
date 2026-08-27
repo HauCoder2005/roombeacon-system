@@ -1,3 +1,9 @@
+"""Map parsed card/detail models into canonical Bronze records.
+
+Mapping is deterministic and side-effect free. Source parsing and persistence
+remain outside this module.
+"""
+
 from datetime import datetime, timezone
 
 from roombeacon_crawler.models.listing_card_raw import ListingCardRaw

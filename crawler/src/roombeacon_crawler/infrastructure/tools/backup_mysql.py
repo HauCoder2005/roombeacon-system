@@ -5,7 +5,7 @@ from pathlib import Path
 import shutil
 import subprocess
 from datetime import datetime, timezone
-from roombeacon_crawler.config.get_env import env
+from roombeacon_crawler.config.get_env import bootstrap_runtime_environment, env
 
 logger = logging.getLogger("MYSQL_BACKUP")
 
@@ -14,6 +14,7 @@ def backup_mysql_database(
     database_name: str | None = None,
     backup_dir: str | Path | None = None,
     compress: bool = True,
+    db_config=None,
 ) -> Path:
     """Tạo bản sao lưu logic (mysqldump) an toàn cho MySQL Database.
 
@@ -22,7 +23,7 @@ def backup_mysql_database(
     - Tùy chọn nén gzip để tiết kiệm dung lượng đĩa vật lý.
     - Kiểm tra tính toàn vẹn và đảm bảo tệp kết quả không rỗng.
     """
-    db_config = env.mysql_bronze
+    db_config = db_config or env.mysql_bronze
     target_db = database_name or db_config.database
     host = db_config.host
     port = str(db_config.port)
@@ -88,18 +89,18 @@ def backup_mysql_database(
         return final_path
 
     except subprocess.CalledProcessError as err:
-        err_msg = err.stderr.decode("utf-8", errors="replace") if err.stderr else str(err)
-        logger.error("Lỗi khi chạy mysqldump cho database '%s': %s", target_db, err_msg)
+        logger.error("MySQL backup command failed (database=%s, return_code=%s)", target_db, err.returncode)
         if raw_sql_path.exists():
             raw_sql_path.unlink(missing_ok=True)
-        raise RuntimeError(f"Lỗi mysqldump: {err_msg}") from err
+        raise RuntimeError("MySQL backup command failed") from None
     except Exception as exc:
-        logger.exception("Lỗi không xác định khi backup MySQL: %s", exc)
+        logger.error("MySQL backup failed (error_class=%s)", type(exc).__name__)
         if raw_sql_path.exists():
             raw_sql_path.unlink(missing_ok=True)
-        raise
+        raise RuntimeError("MySQL backup failed") from None
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+    bootstrap_runtime_environment(load_dotenv_file=True)
     backup_mysql_database()

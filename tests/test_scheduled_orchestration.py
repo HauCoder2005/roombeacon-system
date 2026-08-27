@@ -72,17 +72,29 @@ class TestScheduledMultiSourceOrchestration(unittest.TestCase):
         self.repo_patcher.stop()
         shutil.rmtree(self.test_dir, ignore_errors=True)
 
-    def test_adapter_scheduled_target_provider_discovers_all_five_sources(self) -> None:
-        """Provider tự động phát hiện targets định kỳ từ tất cả 5 nguồn production."""
+    def test_adapter_scheduled_target_provider_discovers_active_sources(self) -> None:
+        """Provider discovers all sources except the intentionally blocked source."""
         provider = AdapterScheduledTargetProvider(registry=source_registry)
         seeds = provider.get_scheduled_targets()
 
         discovered_sources = sorted(list(set(s.source for s in seeds)))
         self.assertEqual(
             discovered_sources,
-            ["batdongsan", "muaban", "nhatot", "nhatrovn", "phongtro123"],
+            [
+                "batdongsan",
+                "cafeland",
+                "chothuenha",
+                "chothuephongtro",
+                "guland",
+                "mogi",
+                "muaban",
+                "nhatot",
+                "nhatrovn",
+                "phongtro123",
+                "tromoi",
+            ],
         )
-        self.assertEqual(len(seeds), 5)
+        self.assertEqual(len(seeds), 11)
 
     def test_duplicate_scheduled_url_deduplication(self) -> None:
         """Kiểm tra deduplication URL định kỳ trùng lặp."""
@@ -110,12 +122,12 @@ class TestScheduledMultiSourceOrchestration(unittest.TestCase):
     def test_stage_1_load_targets_and_stage_2_plan_crawls_auto(self) -> None:
         """Kiểm tra Stage 1 & 2: Load targets và Plan crawls tự động ở chế độ AUTO."""
         raw_targets = load_crawl_targets.function()
-        self.assertEqual(len(raw_targets), 5)
+        self.assertEqual(len(raw_targets), 11)
 
         plans = plan_crawls.function(targets=raw_targets, params={"execution_mode": "AUTO"})
-        self.assertEqual(len(plans), 5)
+        self.assertEqual(len(plans), 11)
         for p in plans:
-            if p["source"] == "nhatot":
+            if p["source"] in {"nhatot", "guland"}:
                 self.assertEqual(p["mode"], CrawlMode.FORWARD_ONLY_INCREMENTAL.value)
                 self.assertEqual(p["reason"], "FORWARD_ONLY_SEED_ACQUISITION")
             else:
@@ -267,6 +279,60 @@ class TestScheduledMultiSourceOrchestration(unittest.TestCase):
         self.assertEqual(summary["records_created"], 15)
         self.assertEqual(summary["details_created"], 2)
         self.assertEqual(summary["checkpoints_updated"], 3)
+
+    def test_summary_includes_deferred_success_in_total_detail_metrics(self) -> None:
+        """Twenty completed details must not be reported as zero immediate successes."""
+        crawl_result = {
+            "source": "nhatot",
+            "crawl_status": "success",
+            "action": "CRAWLED",
+            "records_seen": 34,
+            "records_created": 34,
+            "observations_written": 34,
+            "pages_success": 1,
+            "pages_failed": 0,
+            "details_success": 20,
+            "details_failed": 0,
+            "detail_required": 20,
+            "detail_requested": 6,
+            "detail_succeeded": 6,
+            "detail_failed": 0,
+            "detail_skipped": 14,
+            "skipped_request_budget": 14,
+            "skipped_known_unchanged_ttl": 0,
+            "deferred_backlog_before": 14,
+            "deferred_attempted": 14,
+            "deferred_succeeded": 14,
+            "deferred_failed": 0,
+            "deferred_added": 14,
+            "deferred_remaining": 14,
+        }
+
+        with self.assertLogs(
+            "roombeacon_crawler.application.orchestration.reporting",
+            level="INFO",
+        ) as captured:
+            summary = summarize_run.function(
+                plans=[{"mode": "INCREMENTAL"}],
+                qualifications=[{"qualification_status": "READY"}],
+                crawl_results=[crawl_result],
+                checkpoints=[{"checkpoint_updated": True}],
+            )
+
+        output = "\n".join(captured.output)
+        self.assertEqual(crawl_result["pages_success"], 1)
+        self.assertEqual(crawl_result["pages_failed"], 0)
+        self.assertEqual(crawl_result["details_success"], 20)
+        self.assertEqual(crawl_result["deferred_added"], 14)
+        self.assertEqual(crawl_result["deferred_remaining"], 14)
+        self.assertEqual(crawl_result["observations_written"], 34)
+        self.assertEqual(summary["crawl_success"], 1)
+        self.assertEqual(summary["details_created"], 20)
+        self.assertIn("Detail Attempted (Total)  : 20", output)
+        self.assertIn("Detail Succeeded (Total)  : 20", output)
+        self.assertIn("Detail Failed (Total)     : 0", output)
+        self.assertIn("Immediate Succeeded       : 6", output)
+        self.assertIn("Deferred Succeeded        : 14", output)
 
 
 if __name__ == "__main__":

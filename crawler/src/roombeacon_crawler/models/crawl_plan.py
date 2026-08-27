@@ -16,6 +16,7 @@ class CrawlPlan:
     watermark_from: str | None = None
     overlap_from: str | None = None
     crawl_details: bool = False
+    interval_minutes: int = 60
     safety_max_pages: int = 50
     safety_max_records: int = 1000
     incremental_stop_after_known_pages: int = 2
@@ -24,6 +25,7 @@ class CrawlPlan:
     start_page: int = 1
 
     def to_dict(self) -> dict:
+        """Serialize the immutable plan for Airflow task mapping."""
         return {
             "source": self.source,
             "target_id": self.target_id,
@@ -34,6 +36,7 @@ class CrawlPlan:
             "watermark_from": self.watermark_from,
             "overlap_from": self.overlap_from,
             "crawl_details": self.crawl_details,
+            "interval_minutes": self.interval_minutes,
             "safety_max_pages": self.safety_max_pages,
             "safety_max_records": self.safety_max_records,
             "incremental_stop_after_known_pages": self.incremental_stop_after_known_pages,
@@ -48,6 +51,7 @@ class CrawlPlan:
 
     @classmethod
     def from_dict(cls, data: dict) -> "CrawlPlan":
+        """Rebuild a plan while safely normalizing persisted enum values."""
         mode_val = data["mode"]
         if isinstance(mode_val, str):
             try:
@@ -76,6 +80,7 @@ class CrawlPlan:
             watermark_from=data.get("watermark_from"),
             overlap_from=data.get("overlap_from"),
             crawl_details=data.get("crawl_details", False),
+            interval_minutes=int(data.get("interval_minutes", 60) or 60),
             safety_max_pages=data.get("safety_max_pages", 50),
             safety_max_records=data.get("safety_max_records", 1000),
             incremental_stop_after_known_pages=data.get("incremental_stop_after_known_pages", 2),

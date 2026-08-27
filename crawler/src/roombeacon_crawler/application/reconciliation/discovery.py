@@ -1,3 +1,9 @@
+"""Discover and describe locally stored Bronze crawl runs for reconciliation.
+
+This application service inspects artifact metadata only; it does not persist to
+MySQL or decide Airflow task ordering.
+"""
+
 from dataclasses import asdict, dataclass
 import json
 import logging
@@ -19,10 +25,12 @@ class BronzeRunInfo:
     record_count: int = 0
 
     def to_dict(self) -> dict:
+        """Serialize run metadata for task mapping or checkpoint storage."""
         return asdict(self)
 
     @classmethod
     def from_dict(cls, d: dict) -> "BronzeRunInfo":
+        """Restore typed run metadata from a serialized task payload."""
         return cls(**d)
 
 
@@ -31,6 +39,7 @@ class BronzeRunDiscoveryService:
 
     @classmethod
     def discover_bronze_runs(cls, bronze_root: str | Path = "/data/bronze") -> list[BronzeRunInfo]:
+        """Return valid Bronze run directories with readable listing artifacts."""
         root = Path(bronze_root)
         if not root.exists() or not root.is_dir():
             logger.warning("Thư mục Bronze root không tồn tại: %s", root)
@@ -66,8 +75,8 @@ class BronzeRunDiscoveryService:
                             logger.warning("File listings.json tại %s không phải là list JSON, bỏ qua.", run_dir)
                             continue
                         record_count = len(listings_data)
-                    except Exception as err:
-                        logger.warning("Lỗi đọc JSON tại %s (bỏ qua run bị lỗi): %s", listings_file, err)
+                    except Exception as exc:
+                        logger.warning("Bronze run JSON read failed; skipping run (path=%s, error_class=%s)", listings_file, type(exc).__name__)
                         continue
 
                     details_file = run_dir / "details.json"

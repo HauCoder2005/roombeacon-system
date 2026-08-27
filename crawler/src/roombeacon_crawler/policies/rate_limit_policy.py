@@ -1,3 +1,5 @@
+"""Enforce per-process request concurrency and inter-request delay."""
+
 import asyncio
 import logging
 import time

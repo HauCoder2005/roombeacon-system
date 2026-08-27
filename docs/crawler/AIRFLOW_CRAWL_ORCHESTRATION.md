@@ -347,7 +347,7 @@ Hệ thống phân giải tự động 2 chiến lược khám phá URL đầu v
 * **`ENHANCED_DISCOVERY` (Sitemap XML Discovery):** Dành cho các nguồn quy mô lớn (`nhatot`, `batdongsan`, `muaban`), khám phá toàn bộ URL ứng viên từ Sitemap Index / URL Sets chính thức được website công bố mà không phụ thuộc vào giới hạn phân trang sâu.
 
 > [!NOTE]
-> Chi tiết toàn diện về thiết kế 2 loại Adapter (`SourceAdapter` vs `DiscoveryAdapter`), cấu trúc lưu trữ `/data/discovery/`, và quy trình tích hợp nguồn lớn vui lòng xem tại: [SOURCE_DISCOVERY_STRATEGIES.md](file:///home/codeser/Data/projects/roombeacon/docs/crawler/SOURCE_DISCOVERY_STRATEGIES.md).
+> Chi tiết toàn diện về thiết kế 2 loại Adapter (`SourceAdapter` vs `DiscoveryAdapter`), cấu trúc lưu trữ `/data/discovery/`, và quy trình tích hợp nguồn lớn vui lòng xem tại: [SOURCE_DISCOVERY_STRATEGIES.md](SOURCE_DISCOVERY_STRATEGIES.md).
 
 ---
 
@@ -375,6 +375,5 @@ Hệ thống bổ sung cơ chế **Health Gate** và **Adaptive Cooldown Policy*
 - Health Gate tự động hoãn (DEFER) target mà không gửi request mạng, giữ cho Airflow task luôn xanh (`SUCCESS`) và bảo vệ checkpoint đồng bộ.
 
 > [!TIP]
-> Tài liệu thiết kế chi tiết về Source Health, Backoff và Checkpoint Safety vui lòng xem tại: [SOURCE_HEALTH_AND_BACKOFF.md](file:///home/codeser/Data/projects/roombeacon/docs/crawler/SOURCE_HEALTH_AND_BACKOFF.md).
-
+> Tài liệu thiết kế chi tiết về Source Health, Backoff và Checkpoint Safety vui lòng xem tại: [SOURCE_HEALTH_AND_BACKOFF.md](SOURCE_HEALTH_AND_BACKOFF.md).
 

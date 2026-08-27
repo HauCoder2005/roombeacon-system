@@ -1,9 +1,15 @@
+"""Schedule validated publication of the latest-state Silver Parquet snapshot.
+
+Airflow owns ordering and retries; DuckDB extraction, validation and atomic file
+publication remain in the analytics materializer.
+"""
+
 import json
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
-from airflow.decorators import dag, task
+from airflow.sdk import dag, task
 
 logger = logging.getLogger("airflow.task")
 
@@ -26,6 +32,7 @@ DEFAULT_ARGS = {
     tags=["roombeacon", "analytics", "silver", "parquet", "duckdb"],
 )
 def roombeacon_silver_materializer():
+    """Build verification, materialization, validation and summary tasks."""
 
     @task
     def verify_analytics_connection() -> dict:

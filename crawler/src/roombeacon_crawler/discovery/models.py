@@ -1,4 +1,4 @@
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 
@@ -39,6 +39,7 @@ class DiscoveredUrl:
     )
 
     def to_dict(self) -> dict:
+        """Serialize a candidate URL for discovery artifacts."""
         return {
             "source": self.source,
             "url": self.url,
@@ -55,6 +56,7 @@ class DiscoveredUrl:
 
     @classmethod
     def from_dict(cls, data: dict) -> "DiscoveredUrl":
+        """Restore a candidate and normalize unknown discovery types."""
         disc_type = data.get("discovery_type", DiscoveryType.SITEMAP_URLSET)
         if isinstance(disc_type, str):
             try:
@@ -87,6 +89,7 @@ class DiscoveryArtifact:
     artifact_path: str
 
     def to_dict(self) -> dict:
+        """Serialize artifact metadata for durable discovery state."""
         return {
             "source": self.source,
             "run_id": self.run_id,
@@ -98,6 +101,7 @@ class DiscoveryArtifact:
 
     @classmethod
     def from_dict(cls, data: dict) -> "DiscoveryArtifact":
+        """Restore artifact metadata with backward-compatible defaults."""
         return cls(
             source=data["source"],
             run_id=data["run_id"],
@@ -125,6 +129,7 @@ class DiscoveryResult:
     error: str | None = None
 
     def to_dict(self) -> dict:
+        """Serialize the lightweight result passed through Airflow XCom."""
         return {
             "source": self.source,
             "run_id": self.run_id,
@@ -156,6 +161,7 @@ class DiscoveryTargetState:
     last_error: str | None = None
 
     def to_dict(self) -> dict:
+        """Serialize the per-source discovery checkpoint."""
         return {
             "source": self.source,
             "last_discovery_at": self.last_discovery_at,
@@ -169,6 +175,7 @@ class DiscoveryTargetState:
 
     @classmethod
     def from_dict(cls, data: dict) -> "DiscoveryTargetState":
+        """Restore a discovery checkpoint with additive-schema defaults."""
         return cls(
             source=data["source"],
             last_discovery_at=data.get("last_discovery_at"),

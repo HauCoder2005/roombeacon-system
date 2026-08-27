@@ -1,5 +1,7 @@
 # RoomBeacon Crawler — Fetch / Capture Mechanism
 
+> **Trạng thái: HISTORICAL DESIGN NOTES.** Giữ lại để giải thích fetch/capture concepts; [Current Architecture](../architecture/CURRENT_ARCHITECTURE.md) là nguồn chuẩn cho component boundaries hiện tại.
+
 ## 1. Tổng quan
 
 Tài liệu này mô tả cơ chế **Fetch / Capture** của RoomBeacon Crawler.

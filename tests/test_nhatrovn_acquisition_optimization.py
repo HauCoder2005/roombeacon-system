@@ -61,6 +61,10 @@ class TestNhaTroVNAcquisitionOptimization(unittest.TestCase):
         self.assertEqual(plans[0].mode, CrawlMode.BOOTSTRAP_CONTINUE)
         self.assertEqual(plans[0].start_page, 6)
 
+    def test_runtime_seed_uses_high_throughput_interval(self):
+        seed = self.adapter.scheduled_targets()[0]
+        self.assertEqual(seed.interval_minutes, 5)
+
     def test_lightweight_observation_retains_card_signals_without_detail_request(self):
         """Tin đã biết trong hạn TTL tạo ra RentalBronzeRecord hoàn chỉnh từ card mà không gọi request detail."""
         settings = CrawlerSettings(

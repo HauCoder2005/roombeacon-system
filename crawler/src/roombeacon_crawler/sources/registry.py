@@ -1,3 +1,5 @@
+"""Discover, validate and index source adapters by name and domain."""
+
 import logging
 from typing import Type
 from urllib.parse import urlparse
@@ -5,7 +7,6 @@ from urllib.parse import urlparse
 from roombeacon_crawler.sources.base import BaseSourceAdapter
 from roombeacon_crawler.sources.discovery import (
     DuplicateDomainError,
-    InvalidAdapterError,
     SourceDiscovery,
 )
 

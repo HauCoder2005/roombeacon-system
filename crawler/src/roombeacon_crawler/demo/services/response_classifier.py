@@ -4,11 +4,13 @@ from roombeacon_crawler.demo.enums.crawl_status import CrawlStatus
 
 
 class ResponseClassifier:
+    """Provide the demo-only ResponseClassifier contract used by the isolated example crawler."""
     def classify(
         self,
         status_code: int,
         html: str,
     ) -> CrawlStatus:
+        """Execute the demo-only classify step without affecting production workflows."""
         if self._is_cloudflare_challenge(status_code=status_code, html=html):
             return CrawlStatus.CLOUDFLARE_CHALLENGE
 
