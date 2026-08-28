@@ -15,6 +15,38 @@ from analytics.duckdb.views import DuckDBViewManager
 logger = logging.getLogger(__name__)
 
 
+def _find_project_root() -> Path:
+    """Xác định thư mục gốc của project bằng cách tìm marker (.git, docker-compose.yml, Makefile)."""
+    current = Path(__file__).resolve()
+    for parent in current.parents:
+        if (parent / ".git").exists() or (parent / "docker-compose.yml").exists() or (parent / "Makefile").exists():
+            return parent
+    return Path.cwd().resolve()
+
+
+def _resolve_default_db_path() -> str:
+    """Xác định đường dẫn lưu trữ DuckDB ưu tiên thư mục root data/duckdb."""
+    # 1. Kiểm tra môi trường Docker container nơi /data hoặc /data/duckdb được mount
+    container_duckdb_dir = Path("/data/duckdb")
+    if container_duckdb_dir.exists() or (Path("/data").exists() and not Path("./data").resolve().exists()):
+        try:
+            container_duckdb_dir.mkdir(parents=True, exist_ok=True)
+            return str(container_duckdb_dir / "roombeacon_analytics.duckdb")
+        except Exception:
+            pass
+
+    # 2. Môi trường Host / Local / Notebook: định vị chính xác <PROJECT_ROOT>/data/duckdb
+    project_root = _find_project_root()
+    host_duckdb_dir = project_root / "data" / "duckdb"
+    try:
+        host_duckdb_dir.mkdir(parents=True, exist_ok=True)
+        return str(host_duckdb_dir / "roombeacon_analytics.duckdb")
+    except Exception:
+        fallback_dir = Path("./data/duckdb").resolve()
+        fallback_dir.mkdir(parents=True, exist_ok=True)
+        return str(fallback_dir / "roombeacon_analytics.duckdb")
+
+
 class DuckDBConnectionFactory:
     """Manage the process-wide DuckDB connection and read-only MySQL attach.
 
@@ -33,22 +65,7 @@ class DuckDBConnectionFactory:
     ) -> Any:
         """Return the cached connection, creating and configuring it if needed."""
         if cls._connection is None:
-            if db_path is None:
-                target_dir = Path("/data/analytics")
-                if target_dir.exists() or (Path("/data").exists() and not Path("./data").resolve().exists()):
-                    try:
-                        target_dir.mkdir(parents=True, exist_ok=True)
-                        resolved_db_path = str(target_dir / "roombeacon_analytics.duckdb")
-                    except Exception:
-                        fallback_dir = Path("./data/analytics").resolve()
-                        fallback_dir.mkdir(parents=True, exist_ok=True)
-                        resolved_db_path = str(fallback_dir / "roombeacon_analytics.duckdb")
-                else:
-                    fallback_dir = Path("./data/analytics").resolve()
-                    fallback_dir.mkdir(parents=True, exist_ok=True)
-                    resolved_db_path = str(fallback_dir / "roombeacon_analytics.duckdb")
-            else:
-                resolved_db_path = db_path
+            resolved_db_path = db_path if db_path is not None else _resolve_default_db_path()
             try:
                 conn = duckdb.connect(database=resolved_db_path)
             except Exception as exc:
