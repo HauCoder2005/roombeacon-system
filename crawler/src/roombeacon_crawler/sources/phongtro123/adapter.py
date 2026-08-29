@@ -1,11 +1,13 @@
-"""Declare PhongTro123 source capabilities and extraction components."""
+"""Khai báo khả năng và các thành phần trích xuất của nguồn Phongtro123."""
 
 from urllib.parse import urlparse
 
 from roombeacon_crawler.config.source_settings import SourceSettings
 from roombeacon_crawler.enums.crawl_target_type import CrawlTargetType
 from roombeacon_crawler.enums.fetch_strategy import FetchStrategy
+from roombeacon_crawler.enums.source_access_profile import SourceAccessProfile
 from roombeacon_crawler.models.crawl_seed import CrawlSeed
+from roombeacon_crawler.models.source_capabilities import SourceCapabilities
 from roombeacon_crawler.sources.base import BaseSourceAdapter
 from roombeacon_crawler.sources.phongtro123.discovery.date_interpreter import (
     Phongtro123DateInterpreter,
@@ -24,16 +26,15 @@ from roombeacon_crawler.sources.phongtro123.parsers.metadata_parser import (
 )
 
 
-from roombeacon_crawler.enums.source_access_profile import SourceAccessProfile
-from roombeacon_crawler.models.source_capabilities import SourceCapabilities
-
-
 class Phongtro123SourceAdapter(BaseSourceAdapter):
     """Source Adapter cho website Phongtro123 (phongtro123.com)."""
 
     SOURCE_NAME = "phongtro123"
     DOMAINS = ("phongtro123.com", "www.phongtro123.com")
     DEFAULT_BASE_URL = "https://phongtro123.com/cho-thue-phong-tro"
+    HCM_NEWEST_LISTINGS_URL = (
+        "https://phongtro123.com/tinh-thanh/ho-chi-minh?orderby=moi-nhat"
+    )
     CAPABILITIES = SourceCapabilities(
         access_profile=SourceAccessProfile.STANDARD_PAGINATION,
         supports_pagination=True,
@@ -89,12 +90,14 @@ class Phongtro123SourceAdapter(BaseSourceAdapter):
             return CrawlTargetType.UNSUPPORTED
 
     def scheduled_targets(self) -> tuple[CrawlSeed, ...]:
-        """Cấu hình các target định kỳ mặc định cho Phongtro123."""
+        """Cấu hình target định kỳ để ưu tiên thu thập các tin mới đăng."""
         return (
             CrawlSeed(
                 source=self.SOURCE_NAME,
                 target_id="hcm_phongtro",
-                url="https://phongtro123.com/tinh-thanh/ho-chi-minh",
+                # Trang mặc định sắp xếp theo "Đề xuất", thường lặp lại tin cũ.
+                # `orderby=moi-nhat` giúp incremental crawl tiếp cận tin mới trước.
+                url=self.HCM_NEWEST_LISTINGS_URL,
                 enabled=True,
                 interval_minutes=5,
                 crawl_details=True,

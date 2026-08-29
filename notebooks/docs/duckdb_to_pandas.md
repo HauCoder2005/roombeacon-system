@@ -20,7 +20,8 @@ Trực quan hóa.
 Cần chuyển đổi kết quả truy vấn sang DataFrame bằng phương thức .df():
 
 
-```df = conn.sql("""
+```python
+df = conn.sql("""
     SELECT *
     FROM v_latest_posts
 """).df()

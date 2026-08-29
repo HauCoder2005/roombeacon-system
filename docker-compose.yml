@@ -250,7 +250,7 @@ services:
       #
       # from roombeacon_crawler...
       #
-      PYTHONPATH: "/opt/roombeacon/crawler/src"
+      PYTHONPATH: "/opt/roombeacon:/opt/roombeacon/crawler/src"
 
     user: "${AIRFLOW_UID}:0"
 
@@ -265,6 +265,9 @@ services:
 
       # Crawler source is read-only inside Airflow
       - "./crawler/src:/opt/roombeacon/crawler/src:ro"
+
+      # Analytics chỉ có một source of truth tại repository root.
+      - "./analytics:/opt/roombeacon/analytics:ro"
 
       - "${ROOMBEACON_DATA_DIR}:/data"
 
@@ -403,11 +406,22 @@ services:
       BRONZE_MYSQL_PASSWORD: "${BRONZE_MYSQL_PASSWORD}"
 
       # --------------------------------------------------------
+      # DuckDB / Processing
+      # --------------------------------------------------------
+
+      DUCKDB_DATABASE: "${DUCKDB_DATABASE}"
+      DUCKDB_TEMP_DIRECTORY: "${DUCKDB_TEMP_DIRECTORY}"
+      DUCKDB_MEMORY_LIMIT: "${DUCKDB_MEMORY_LIMIT}"
+      DUCKDB_THREADS: "${DUCKDB_THREADS}"
+      PROCESSING_SILVER_DIR: "${PROCESSING_SILVER_DIR}"
+
+      # --------------------------------------------------------
       # MinIO application access
       # --------------------------------------------------------
 
       MINIO_ENDPOINT: "${MINIO_ENDPOINT}"
       MINIO_SECURE: "${MINIO_SECURE}"
+      MINIO_RAW_MIRROR_ENABLED: "${MINIO_RAW_MIRROR_ENABLED}"
 
       MINIO_CRAWLER_ACCESS_KEY: "${MINIO_CRAWLER_ACCESS_KEY}"
       MINIO_CRAWLER_SECRET_KEY: "${MINIO_CRAWLER_SECRET_KEY}"
@@ -516,6 +530,23 @@ services:
     networks:
       - "${ROOMBEACON_DATA_NETWORK}"
 
+    depends_on:
+      mysql-bronze:
+        condition: service_healthy
+
+    environment:
+      ROOMBEACON_CONTAINER_DATA_DIR: "${ROOMBEACON_CONTAINER_DATA_DIR}"
+      BRONZE_MYSQL_HOST: "${BRONZE_MYSQL_HOST}"
+      BRONZE_MYSQL_PORT: "${BRONZE_MYSQL_PORT}"
+      BRONZE_MYSQL_DATABASE: "${BRONZE_MYSQL_DATABASE}"
+      BRONZE_MYSQL_USER: "${BRONZE_MYSQL_USER}"
+      BRONZE_MYSQL_PASSWORD: "${BRONZE_MYSQL_PASSWORD}"
+      DUCKDB_DATABASE: "${DUCKDB_DATABASE}"
+      DUCKDB_TEMP_DIRECTORY: "${DUCKDB_TEMP_DIRECTORY}"
+      DUCKDB_MEMORY_LIMIT: "${DUCKDB_MEMORY_LIMIT}"
+      DUCKDB_THREADS: "${DUCKDB_THREADS}"
+      PROCESSING_SILVER_DIR: "${PROCESSING_SILVER_DIR}"
+
     volumes:
       - "${ROOMBEACON_DATA_DIR}:${ROOMBEACON_CONTAINER_DATA_DIR}"
 
@@ -523,12 +554,7 @@ services:
       - tools
       - processing
 
-    command:
-      [
-        "python",
-        "-c",
-        "import duckdb; print('DuckDB version:', duckdb.__version__)"
-      ]
+    command: ["python", "-m", "analytics.duckdb.bootstrap"]
 
 
   # ============================================================
@@ -539,6 +565,25 @@ services:
     build:
       context: ./crawler
       dockerfile: Dockerfile
+
+    profiles:
+      - tools
+
+    networks:
+      - "${ROOMBEACON_DATA_NETWORK}"
+
+    volumes:
+      - "${ROOMBEACON_DATA_DIR}:${ROOMBEACON_CONTAINER_DATA_DIR}"
+
+    environment:
+      CRAWLER_DATA_DIR: "${CRAWLER_DATA_DIR}"
+      BRONZE_MYSQL_HOST: "${BRONZE_MYSQL_HOST}"
+      BRONZE_MYSQL_PORT: "${BRONZE_MYSQL_PORT}"
+      BRONZE_MYSQL_DATABASE: "${BRONZE_MYSQL_DATABASE}"
+      BRONZE_MYSQL_USER: "${BRONZE_MYSQL_USER}"
+      BRONZE_MYSQL_PASSWORD: "${BRONZE_MYSQL_PASSWORD}"
+
+    command: ["python", "-m", "roombeacon_crawler.main", "--diagnostics"]
     # Gán thẳng DNS của Cloudflare và Google
     dns:
       - 1.1.1.1
