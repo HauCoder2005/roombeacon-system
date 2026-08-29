@@ -7,10 +7,18 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# Cài đặt DuckDB cùng các thư viện xử lý dữ liệu tabular cốt lõi
+# Dùng chung crawler config và analytics source thay vì tạo một runtime rỗng
+# chỉ in phiên bản DuckDB.
+COPY crawler/pyproject.toml /app/crawler/pyproject.toml
+COPY crawler/src/ /app/crawler/src/
+COPY analytics/ /app/analytics/
+
 RUN pip install --no-cache-dir \
+    -e /app/crawler \
     duckdb==${DUCKDB_VERSION} \
     pyarrow \
     pandas
 
-CMD ["python", "-c", "import duckdb; print('DuckDB version:', duckdb.__version__)"]
+ENV PYTHONPATH=/app:/app/crawler/src
+
+CMD ["python", "-m", "analytics.duckdb.bootstrap"]

@@ -17,17 +17,19 @@ RUN apt-get update \
 
 USER airflow
 
-# Cài đặt MySQL provider, driver và crawler dependencies
+# Cài đặt crawler như một package để Airflow và runtime độc lập dùng cùng
+# dependency contract. Source vẫn được bind mount khi development.
+COPY --chown=airflow:root crawler/pyproject.toml /opt/roombeacon/crawler/pyproject.toml
+COPY --chown=airflow:root crawler/src/ /opt/roombeacon/crawler/src/
+
 RUN pip install --no-cache-dir \
+    -e /opt/roombeacon/crawler \
     apache-airflow-providers-mysql \
     mysqlclient \
     cryptography \
-    playwright \
-    httpx \
-    beautifulsoup4 \
-    pydantic \
-    python-dotenv \
-    duckdb
+    duckdb \
+    pandas \
+    pyarrow
 
 USER root
 

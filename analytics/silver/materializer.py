@@ -13,11 +13,14 @@ from pathlib import Path
 from typing import Any
 import pandas as pd
 
-from analytics.duckdb.connection import create_analytics_connection
+from analytics.duckdb.connection import (
+    create_analytics_connection,
+    resolve_runtime_path,
+)
+from roombeacon_crawler.config.get_env import env
 
 logger = logging.getLogger(__name__)
 
-VALID_SOURCES = {"phongtro123", "nhatrovn", "nhatot", "batdongsan"}
 REQUIRED_COLUMNS = [
     "source_code",
     "rental_post_id",
@@ -63,20 +66,15 @@ class SilverMaterializer:
         self,
         output_dir: Path | str | None = None,
         source_view: str = "v_latest_posts",
+        valid_sources: set[str] | None = None,
     ) -> None:
         if output_dir is None:
-            # Fallback path resolution: ưu tiên thư mục data trong repo
-            candidate = Path("./data/silver").resolve()
-            if candidate.parent.exists():
-                self.output_dir = candidate
-            elif Path("/data/silver").exists():
-                self.output_dir = Path("/data/silver")
-            else:
-                self.output_dir = candidate
+            self.output_dir = resolve_runtime_path(env.processing.silver_dir)
         else:
             self.output_dir = Path(output_dir).resolve()
 
         self.source_view = source_view
+        self.valid_sources = valid_sources
         self.output_file = self.output_dir / "rental_latest.parquet"
         self.metadata_file = self.output_dir / "rental_latest.metadata.json"
         self.tmp_file = self.output_dir / "rental_latest.parquet.tmp"
@@ -149,7 +147,12 @@ class SilverMaterializer:
 
         # Kiểm tra nguồn hợp lệ (loại bỏ fake/test data)
         sources = set(df["source_code"].dropna().unique())
-        invalid_sources = sources - VALID_SOURCES
+        valid_sources = self.valid_sources
+        if valid_sources is None:
+            from roombeacon_crawler.sources.registry import source_registry
+
+            valid_sources = set(source_registry.list_sources())
+        invalid_sources = sources - valid_sources
         if invalid_sources:
             raise SilverMaterializationError(f"Phát hiện nguồn dữ liệu không hợp lệ: {invalid_sources}")
 

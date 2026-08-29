@@ -48,10 +48,7 @@ def test_latest_posts_uses_latest_confirmed_address_with_provenance():
     )
 
     analytics_sql = Path("analytics/duckdb/sql/latest_posts.sql").read_text()
-    packaged_sql = Path(
-        "crawler/src/analytics/duckdb/sql/latest_posts.sql"
-    ).read_text()
-    assert analytics_sql == packaged_sql
+    assert not Path("crawler/src/analytics/duckdb/sql/latest_posts.sql").exists()
     connection.execute(f"CREATE VIEW latest_posts AS {analytics_sql}")
 
     latest_post = connection.execute(

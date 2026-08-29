@@ -23,6 +23,9 @@ from roombeacon_crawler.sources.nhatrovn.adapter import NhatroVNSourceAdapter
 from roombeacon_crawler.sources.phongtro123.adapter import (
     Phongtro123SourceAdapter,
 )
+from roombeacon_crawler.sources.phongtro123.discovery.pagination import (
+    Phongtro123Pagination,
+)
 from roombeacon_crawler.sources.registry import source_registry
 
 
@@ -148,6 +151,32 @@ class TestSourceAdaptersContract(unittest.TestCase):
         self.assertEqual(
             adapter.classify_url("https://phongtro123.com/cho-thue-phong-tro-quan-1-pr12345"),
             CrawlTargetType.DETAIL_PAGE,
+        )
+
+    def test_phongtro123_scheduled_target_prioritizes_newest_listings(self) -> None:
+        """Scheduler phải bắt đầu từ luồng tin mới thay vì luồng đề xuất."""
+        target = Phongtro123SourceAdapter().scheduled_targets()[0]
+
+        self.assertEqual(
+            target.url,
+            "https://phongtro123.com/tinh-thanh/ho-chi-minh?orderby=moi-nhat",
+        )
+
+    def test_phongtro123_pagination_preserves_newest_order(self) -> None:
+        """Phân trang phải giữ bộ lọc mới nhất trong toàn bộ lượt crawl."""
+        pagination = Phongtro123Pagination()
+        base_url = (
+            "https://phongtro123.com/tinh-thanh/ho-chi-minh?orderby=moi-nhat"
+        )
+
+        self.assertEqual(
+            pagination.build_page_url(base_url=base_url, page_number=1),
+            base_url,
+        )
+        self.assertEqual(
+            pagination.build_page_url(base_url=base_url, page_number=2),
+            "https://phongtro123.com/tinh-thanh/ho-chi-minh"
+            "?orderby=moi-nhat&page=2",
         )
 
     def test_batdongsan_pagination(self) -> None:

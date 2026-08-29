@@ -6,6 +6,8 @@ relevant use-case boundary until Phase 3 introduces explicit composition roots.
 
 import logging
 
+from roombeacon_crawler.application.orchestration.errors import CrawlerWorkflowError
+
 logger = logging.getLogger(__name__)
 
 
@@ -18,15 +20,15 @@ def refresh_duckdb_analytics(checkpoints: list[dict], **context) -> dict:
     from analytics.duckdb.bootstrap import bootstrap_analytics
 
     try:
-        bootstrap_analytics()
-        logger.info("DuckDB Analytics views refreshed successfully.")
-        return {"status": "SUCCESS"}
+        views = bootstrap_analytics()
+        logger.info("DuckDB Analytics views refreshed successfully: %d views.", len(views))
+        return {"status": "SUCCESS", "views_created": views}
     except Exception as exc:
         logger.error(
             "DuckDB analytics refresh failed (error_class=%s)",
             type(exc).__name__,
         )
-        return {"status": "FAILED", "error_class": type(exc).__name__}
+        raise CrawlerWorkflowError("DuckDB analytics refresh failed") from None
 
 
 # --------------------------------------------------------------------------

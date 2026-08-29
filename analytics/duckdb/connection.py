@@ -5,6 +5,7 @@ and installs analytical views. It never owns crawler writes or schema mutation.
 """
 
 import logging
+import os
 from pathlib import Path
 from typing import Any
 import duckdb
@@ -24,27 +25,44 @@ def _find_project_root() -> Path:
     return Path.cwd().resolve()
 
 
-def _resolve_default_db_path() -> str:
-    """Xác định đường dẫn lưu trữ DuckDB ưu tiên thư mục root data/duckdb."""
-    # 1. Kiểm tra môi trường Docker container nơi /data hoặc /data/duckdb được mount
-    container_duckdb_dir = Path("/data/duckdb")
-    if container_duckdb_dir.exists() or (Path("/data").exists() and not Path("./data").resolve().exists()):
-        try:
-            container_duckdb_dir.mkdir(parents=True, exist_ok=True)
-            return str(container_duckdb_dir / "roombeacon_analytics.duckdb")
-        except Exception:
-            pass
+def resolve_runtime_path(configured_path: str) -> Path:
+    """Phân giải đường dẫn dùng chung giữa Docker và môi trường host/notebook."""
+    path = Path(configured_path).expanduser()
+    container_data_dir = Path(
+        os.getenv("ROOMBEACON_CONTAINER_DATA_DIR", "/data")
+    )
 
-    # 2. Môi trường Host / Local / Notebook: định vị chính xác <PROJECT_ROOT>/data/duckdb
-    project_root = _find_project_root()
-    host_duckdb_dir = project_root / "data" / "duckdb"
-    try:
-        host_duckdb_dir.mkdir(parents=True, exist_ok=True)
-        return str(host_duckdb_dir / "roombeacon_analytics.duckdb")
-    except Exception:
-        fallback_dir = Path("./data/duckdb").resolve()
-        fallback_dir.mkdir(parents=True, exist_ok=True)
-        return str(fallback_dir / "roombeacon_analytics.duckdb")
+    # Trong Docker, /data là volume thật. Trên host, ánh xạ cùng đường dẫn đó
+    # về <project_root>/data để một cấu hình dùng được ở cả hai môi trường.
+    if path.is_absolute():
+        try:
+            relative_to_data = path.relative_to(container_data_dir)
+        except ValueError:
+            return path.resolve()
+        if container_data_dir.is_dir() and os.access(container_data_dir, os.W_OK):
+            return path
+        configured_project_root = os.getenv("ROOMBEACON_PROJECT_ROOT")
+        project_root = (
+            Path(configured_project_root).resolve()
+            if configured_project_root
+            else _find_project_root()
+        )
+        return (project_root / "data" / relative_to_data).resolve()
+
+    configured_project_root = os.getenv("ROOMBEACON_PROJECT_ROOT")
+    project_root = (
+        Path(configured_project_root).resolve()
+        if configured_project_root
+        else _find_project_root()
+    )
+    return (project_root / path).resolve()
+
+
+def _resolve_default_db_path() -> str:
+    """Lấy đường dẫn catalog từ DUCKDB_DATABASE và tạo thư mục cha."""
+    database_path = resolve_runtime_path(env.duckdb.database)
+    database_path.parent.mkdir(parents=True, exist_ok=True)
+    return str(database_path)
 
 
 class DuckDBConnectionFactory:
@@ -59,7 +77,7 @@ class DuckDBConnectionFactory:
     @classmethod
     def get_connection(
         cls,
-        memory_limit: str = "2GB",
+        memory_limit: str | None = None,
         db_path: str | None = None,
         create_views: bool = True,
     ) -> Any:
@@ -75,8 +93,15 @@ class DuckDBConnectionFactory:
                     exc,
                 )
                 conn = duckdb.connect(database=":memory:")
-            conn.execute(f"SET memory_limit='{memory_limit}';")
-            conn.execute("SET threads TO 4;")
+            duckdb_cfg = env.duckdb
+            effective_memory_limit = memory_limit or duckdb_cfg.memory_limit
+            conn.execute(f"SET memory_limit='{effective_memory_limit}';")
+            conn.execute(f"SET threads TO {duckdb_cfg.threads};")
+
+            temp_directory = resolve_runtime_path(duckdb_cfg.temp_directory)
+            temp_directory.mkdir(parents=True, exist_ok=True)
+            escaped_temp_directory = str(temp_directory).replace("'", "''")
+            conn.execute(f"SET temp_directory='{escaped_temp_directory}';")
 
             # Cài đặt và tải extension mysql
             try:
@@ -151,7 +176,7 @@ class DuckDBConnectionFactory:
 
 
 def create_analytics_connection(
-    memory_limit: str = "2GB",
+    memory_limit: str | None = None,
     db_path: str | None = None,
     create_views: bool = True,
 ) -> Any:

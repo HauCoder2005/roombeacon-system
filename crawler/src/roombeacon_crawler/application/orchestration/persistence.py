@@ -52,6 +52,26 @@ def persist_bronze_mysql(result_payload: dict, **context) -> dict:
     from roombeacon_crawler.infrastructure.mysql.schema import ensure_mysql_schema
     from roombeacon_crawler.infrastructure.mysql.transaction import MySQLTransactionManager
     from roombeacon_crawler.mappers.bronze_observation_loader import BronzeObservationLoader
+    from roombeacon_crawler.infrastructure.storage.minio.raw_artifact_mirror import (
+        MinIORawArtifactMirror,
+    )
+
+    try:
+        mirrored_objects = MinIORawArtifactMirror().mirror_directory(
+            bronze_path,
+            source=source,
+            run_id=run_id,
+        )
+    except Exception as exc:
+        logger.error(
+            "Bronze raw mirror failed (source=%s, run_id=%s, error_class=%s)",
+            source,
+            run_id,
+            type(exc).__name__,
+        )
+        raise CrawlerWorkflowError(
+            f"Bronze raw mirror failed for {source} (run_id={run_id})"
+        ) from None
 
     try:
         ensure_mysql_schema()
@@ -139,6 +159,7 @@ def persist_bronze_mysql(result_payload: dict, **context) -> dict:
             "posts_existing": import_res.posts_existing,
             "observations_inserted": import_res.observations_inserted,
             "technical_duplicates": import_res.technical_duplicates,
+            "raw_objects_mirrored": len(mirrored_objects),
             "mapper_seconds": mapper_seconds,
             "transaction_begin_seconds": import_res.transaction_begin_seconds,
             "platform_seconds": import_res.platform_seconds,

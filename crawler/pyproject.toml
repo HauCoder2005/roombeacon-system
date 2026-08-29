@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "roombeacon-crawler"
+version = "0.1.0"
+description = "RoomBeacon rental-listing acquisition pipeline"
+requires-python = ">=3.11"
+dependencies = [
+    "beautifulsoup4>=4.12,<5",
+    "boto3>=1.34,<2",
+    "httpx>=0.27,<1",
+    "playwright>=1.46,<2",
+    "PyMySQL>=1.1,<2",
+    "python-dotenv>=1.0,<2",
+    "requests>=2.32,<3",
+    "SQLAlchemy>=2.0,<3",
+]
+
+[project.scripts]
+roombeacon-crawler = "roombeacon_crawler.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
