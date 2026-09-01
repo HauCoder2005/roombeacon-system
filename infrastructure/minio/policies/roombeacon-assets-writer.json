@@ -5,6 +5,9 @@
       "Effect": "Allow",
       "Action": [
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> origin/feature/codeser
         "s3:ListBucket"
       ],
       "Resource": [
@@ -14,18 +17,26 @@
     {
       "Effect": "Allow",
       "Action": [
+<<<<<<< HEAD
 =======
 >>>>>>> feature/codeser
+=======
+>>>>>>> origin/feature/codeser
         "s3:GetObject",
         "s3:PutObject"
       ],
       "Resource": [
+<<<<<<< HEAD
 <<<<<<< HEAD
         "arn:aws:s3:::roombeacon-assets/*",
         "arn:aws:s3:::roombeacon-raw/*"
 =======
         "arn:aws:s3:::roombeacon-assets/*"
 >>>>>>> feature/codeser
+=======
+        "arn:aws:s3:::roombeacon-assets/*",
+        "arn:aws:s3:::roombeacon-raw/*"
+>>>>>>> origin/feature/codeser
       ]
     }
   ]
