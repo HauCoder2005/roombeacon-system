@@ -4,11 +4,21 @@
     {
       "Effect": "Allow",
       "Action": [
+        "s3:ListBucket"
+      ],
+      "Resource": [
+        "arn:aws:s3:::roombeacon-assets"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
         "s3:GetObject",
         "s3:PutObject"
       ],
       "Resource": [
-        "arn:aws:s3:::roombeacon-assets/*"
+        "arn:aws:s3:::roombeacon-assets/*",
+        "arn:aws:s3:::roombeacon-raw/*"
       ]
     }
   ]
