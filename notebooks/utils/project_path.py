@@ -32,3 +32,4 @@ def setup_project_path() -> Path:
         f"{start_directory}. Thư mục gốc phải chứa analytics/, crawler/ và "
         "docker-compose.yml."
     )
+

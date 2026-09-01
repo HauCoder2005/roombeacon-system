@@ -1588,4 +1588,8 @@ RoomBeacon được phát hành theo giấy phép [MIT](LICENSE).
 
 *From fragmented rental listings to structured rental intelligence.*
 
+<<<<<<< HEAD
 </div>
+=======
+</div>
+>>>>>>> feature/codeser

@@ -187,3 +187,4 @@ def _run_verification_tests() -> None:
 if __name__ == "__main__":
     _run_verification_tests()
     print("All verification tests passed.")
+    print("All verification tests passed.")
