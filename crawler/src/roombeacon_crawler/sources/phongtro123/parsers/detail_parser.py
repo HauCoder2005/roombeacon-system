@@ -171,17 +171,61 @@ class Phongtro123DetailParser:
 
             address_raw = self._extract_full_address(root)
 
+            # Try finding the "Thông tin mô tả" heading, then getting its parent or next siblings
+            description_raw = None
             desc_node = root.find(class_contains="section-post-summary") or root.find(class_contains="post-main-content") or root.find(class_contains="post-description")
-            description_raw = desc_node.get_text() if desc_node else None
+            if desc_node:
+                description_raw = desc_node.get_text()
+            else:
+                for heading in root.find_all(tag="h2") + root.find_all(tag="h3"):
+                    if "mô tả" in heading.get_text().lower():
+                        if heading.parent:
+                            description_raw = heading.parent.get_text()
+                            break
 
             author_node = root.find(class_contains="author-name") or root.find(class_contains="user-name") or root.find(class_contains="post-author")
             seller_name_raw = author_node.get_text() if author_node else None
 
-            image_urls: list[str] = []
-            for img in root.find_all(tag="img"):
-                src = img.attrs.get("data-src") or img.attrs.get("src")
-                if src and not src.startswith("data:"):
-                    image_urls.append(urljoin(source_url, src))
+            # Extract phone number from <a> tags with tel: or zalo.me
+            seller_phone_raw = None
+            for a_node in root.find_all(tag="a"):
+                href = a_node.attrs.get("href", "")
+                if href.startswith("tel:"):
+                    phone = href[4:].strip().replace(" ", "")
+                    # Ignore general hotlines
+                    if not phone.startswith("1900") and not phone.startswith("1800") and not phone.startswith("0909316890"):
+                        seller_phone_raw = phone
+                        break
+                elif "zalo.me/" in href:
+                    zalo_id = href.split("zalo.me/")[-1].strip()
+                    if zalo_id.startswith("0") and len(zalo_id) >= 10 and not zalo_id.startswith("0909316890"):
+                        seller_phone_raw = zalo_id
+                        break
+
+            from roombeacon_crawler.sources.common_html import extract_scoped_images
+            from roombeacon_crawler.sources.common_html_location import extract_google_maps_info
+            
+            gallery = root.find(class_contains="post-images") or root.find(class_contains="image-gallery") or root.find(class_contains="post-slider")
+            image_urls = extract_scoped_images(gallery, effective_url)
+
+            # Map Extraction
+            # We need to pass the raw BeautifulSoup parsing into extract_google_maps_info if we want full map support
+            # For simplicity, let's extract the iframe directly from the HTML text
+            latitude = None
+            longitude = None
+            import re
+            map_match = re.search(r'q=(-?\d+\.\d+)%2C(-?\d+\.\d+)', html)
+            if not map_match:
+                map_match = re.search(r'q=(-?\d+\.\d+),(-?\d+\.\d+)', html)
+            if map_match:
+                latitude = float(map_match.group(1))
+                longitude = float(map_match.group(2))
+            
+            # Pack coordinates into location_raw as JSON
+            import json
+            location_raw = address_raw
+            if latitude and longitude:
+                location_raw = json.dumps({"address": address_raw, "latitude": latitude, "longitude": longitude})
 
             return ListingDetailRaw(
                 source=self.source_name,
@@ -191,9 +235,10 @@ class Phongtro123DetailParser:
                 price_raw=price_raw,
                 area_raw=area_raw,
                 address_raw=address_raw,
-                location_raw=address_raw,
+                location_raw=location_raw,
                 description_raw=description_raw,
                 seller_name_raw=seller_name_raw,
+                seller_phone_raw=seller_phone_raw,
                 image_urls_raw=image_urls,
                 crawled_at=datetime.now(timezone.utc).isoformat(),
             )

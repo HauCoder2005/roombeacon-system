@@ -136,17 +136,18 @@ class NhatotDetailParser:
 
         # 1. Title
         title_raw: str | None = None
-        for cls in TITLE_CLASSES:
-            node = root.find(class_contains=cls)
-            if node:
-                t = node.get_text().strip()
-                if t:
-                    title_raw = t
-                    break
+        h1 = root.find(tag="h1")
+        if h1:
+            title_raw = h1.get_text().strip() or None
+            
         if not title_raw:
-            h1 = root.find(tag="h1")
-            if h1:
-                title_raw = h1.get_text().strip() or None
+            for cls in TITLE_CLASSES:
+                node = root.find(class_contains=cls)
+                if node:
+                    t = node.get_text().strip()
+                    if t:
+                        title_raw = t
+                        break
 
         # 2. Price
         price_raw: str | None = None
@@ -173,9 +174,35 @@ class NhatotDetailParser:
             area_raw = self._extract_area(root.get_text())
 
         # 4. Address & Location
-        address_raw = self._extract_full_address(root)
+        latitude = None
+        longitude = None
+        next_data_address = None
+        import re, json
+        match = re.search(r'__NEXT_DATA__.*?>(.*?)</script>', html)
+        if match:
+            try:
+                data = json.loads(match.group(1))
+                state = data.get('props', {}).get('initialState', {}) or data.get('props', {}).get('pageProps', {}).get('initialState', {})
+                adInfo = state.get('adView', {}).get('adInfo', {})
+                ad = adInfo.get('ad', {})
+                ad_params = adInfo.get('ad_params', {})
+                
+                lat = ad.get('latitude')
+                lon = ad.get('longitude')
+                if lat and float(lat) != 0: latitude = float(lat)
+                if lon and float(lon) != 0: longitude = float(lon)
+                
+                addr_obj = ad_params.get('address', {})
+                if isinstance(addr_obj, dict):
+                    next_data_address = addr_obj.get('value')
+            except Exception:
+                pass
+                
+        address_raw = next_data_address or self._extract_full_address(root)
 
-        location_raw: str | None = address_raw
+        location_raw = address_raw
+        if latitude and longitude and address_raw:
+            location_raw = json.dumps({"address": address_raw, "latitude": latitude, "longitude": longitude})
 
         # 5. Description
         description_raw: str | None = None
@@ -232,14 +259,16 @@ class NhatotDetailParser:
                 seller_type_raw = node.get_text().strip() or None
                 break
 
+
         # 9. Image URLs
+        from roombeacon_crawler.sources.common_html import extract_scoped_images
         image_urls_raw: list[str] = []
-        for img in root.find_all(tag="img"):
-            src = img.attrs.get("src") or img.attrs.get("data-src")
-            if src and not src.startswith("data:"):
-                abs_img = urljoin(detail_url, src)
-                if abs_img not in image_urls_raw and ("chotot" in abs_img or "nhatot" in abs_img or "cdn" in abs_img):
-                    image_urls_raw.append(abs_img)
+        for cls in IMAGE_CLASSES:
+            gallery = root.find(class_contains=cls)
+            if gallery:
+                image_urls_raw = extract_scoped_images(gallery, detail_url)
+                break
+
 
         # 10. Amenities
         amenities_raw: list[str] = []

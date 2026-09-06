@@ -180,6 +180,7 @@ class CardProcessingProcessor:
             card_changed=content_changed,
             last_detailed_at=last_detailed_at,
             current_time=now,
+            detail_status=previous.get("detail_status"),
         )
         if is_new:
             state.new_listing_ids.append(listing_id)
@@ -328,13 +329,16 @@ class CardProcessingProcessor:
             if detail_raw is not None:
                 state.detail_succeeded += 1
                 state.detail_records.append(detail_raw)
+                address_extracted = bool(
+                    detail_raw.address_raw and str(detail_raw.address_raw).strip()
+                )
                 state.updated_seen_meta[listing_id] = {
-                    "last_detailed_at": now.isoformat(),
+                    "last_detailed_at": now.isoformat() if address_extracted else None,
                     "card_fingerprint": fingerprint,
                     "detail_status": (
                         "SUCCESS_WITH_ADDRESS"
-                        if detail_raw.address_raw and str(detail_raw.address_raw).strip()
-                        else "SUCCESS_WITHOUT_ADDRESS"
+                        if address_extracted
+                        else "ADDRESS_MISSING_RETRY"
                     ),
                 }
                 if hasattr(self._deferred_repository, "record_success"):

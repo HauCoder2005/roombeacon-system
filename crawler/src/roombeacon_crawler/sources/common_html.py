@@ -11,6 +11,7 @@ from html.parser import HTMLParser
 import json
 import re
 from urllib.parse import parse_qs, urlencode, urljoin, urlparse, urlunparse
+from dataclasses import dataclass
 
 from roombeacon_crawler.models.listing_card_raw import ListingCardRaw
 from roombeacon_crawler.models.listing_detail_raw import ListingDetailRaw
@@ -86,6 +87,287 @@ def first_text(node: HtmlNode, classes: tuple[str, ...]) -> str | None:
     return None
 
 
+
+@dataclass
+class LocationCandidate:
+    address: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    source_url: str | None = None
+
+def extract_google_maps_info(
+    root: "HtmlNode | None", html: str | None = None
+) -> LocationCandidate:
+    import re
+    from urllib.parse import urlparse, parse_qs
+    cand = LocationCandidate()
+    if not root:
+        return cand
+
+    for iframe in root.find_all(tag="iframe"):
+        src = (iframe.attrs.get("src") or iframe.attrs.get("data-src") or "").strip()
+        if "google.com/maps" in src or "maps.google.com" in src:
+            parsed = urlparse(src)
+            qs = parse_qs(parsed.query)
+            
+            if "q" in qs:
+                q_val = qs["q"][0]
+                coords_match = re.search(r"(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)", q_val)
+                if coords_match:
+                    cand.latitude = float(coords_match.group(1))
+                    cand.longitude = float(coords_match.group(2))
+                else:
+                    cand.address = q_val.replace("+", " ").strip()
+            
+            if cand.latitude is None and cand.longitude is None:
+                for param in ("ll", "center", "sll"):
+                    if param in qs:
+                        coords_match = re.search(r"(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)", qs[param][0])
+                        if coords_match:
+                            cand.latitude = float(coords_match.group(1))
+                            cand.longitude = float(coords_match.group(2))
+                            break
+
+            if cand.latitude is not None or cand.longitude is not None or cand.address:
+                return cand
+
+    for el in root.find_all():
+        lat = el.attrs.get("data-lat") or el.attrs.get("data-latitude")
+        lng = el.attrs.get("data-lng") or el.attrs.get("data-longitude")
+        addr = el.attrs.get("data-address")
+        if lat and lng:
+            try:
+                cand.latitude = float(lat)
+                cand.longitude = float(lng)
+            except ValueError:
+                pass
+        if addr:
+            cand.address = addr
+        if cand.latitude is not None or cand.longitude is not None or cand.address is not None:
+            return cand
+
+    for script in root.find_all(tag="script"):
+        if script.attrs.get("type") == "application/ld+json":
+            try:
+                import json
+                data = json.loads(script.text())
+                if isinstance(data, dict):
+                    geo = data.get("geo")
+                    if isinstance(geo, dict):
+                        lat = geo.get("latitude")
+                        lng = geo.get("longitude")
+                        if lat is not None and lng is not None:
+                            cand.latitude = float(lat)
+                            cand.longitude = float(lng)
+                            return cand
+            except Exception:
+                pass
+
+    return cand
+
+
+
+
+    m = re.search(r"(\+84|0)[0-9\.\s-]+", text)
+    if m: return m.group(0).strip()
+    return None
+    match = re.search(r"(\+84|0)[-. ]?[0-9]{2,3}[-. ]?[0-9]{3}[-. ]?[0-9]{3,4}", text)
+    if match: return match.group(0)
+    return None
+
+
+def normalize_vietnamese_phone(phone: str | None) -> str | None:
+    """Normalize Vietnamese phone to 09xxxxxxxx."""
+    if not phone:
+        return None
+    import re
+    cleaned = re.sub(r'[\s\.\-\((\)]', '', phone)
+    if cleaned.startswith('+84'):
+        cleaned = '0' + cleaned[3:]
+    elif cleaned.startswith('84'):
+        cleaned = '0' + cleaned[2:]
+    if len(cleaned) >= 9 and cleaned.startswith('0'):
+        return cleaned
+    return None
+
+def extract_phone_from_text(text: str | None) -> str | None:
+    """Extract raw phone string from text."""
+    if not text:
+        return None
+    import re
+    match = re.search(r'(?:\+?84|0)[\d\s\.\-\((\)]{7,15}', text)
+    if match:
+        candidate = match.group(0).strip(" .")
+        if len(re.sub(r'[\s\.\-\((\)]', '', candidate)) >= 9:
+            return candidate
+    return None
+    import re
+    match = re.search(r'(?:\+?84|0)[\d\s\.\-\((\)]{7,15}', text)
+    if match:
+        candidate = match.group(0).strip()
+        if len(re.sub(r'[\s\.\-\((\)]', '', candidate)) >= 9:
+            return candidate
+    return None
+
+def extract_scoped_phone(root, fallback_text: str | None = None, **kwargs) -> str | None:
+    """Extract phone strictly within a specific container."""
+    if not root:
+        return extract_phone_from_text(fallback_text)
+    
+    for script in root.find_all(tag="script"):
+        text = script.text()
+        if text:
+            import re
+            match = re.search(r'(?:phone|mobile|hotline)["\']?\s*[:=]\s*["\']([0-9\s\.\+]+)["\']', text, re.I)
+            if match:
+                phone = match.group(1).strip()
+                if len(re.sub(r'[\s\.\-\((\)]', '', phone)) >= 9:
+                    return phone
+
+    for a in root.find_all(tag="a"):
+        href = a.attrs.get("href", "").strip()
+        if href.startswith("tel:"):
+            phone = href[4:].strip()
+            if phone.startswith("1900") or phone.startswith("1800"):
+                continue
+            if phone and '*' not in phone:
+                return phone
+                
+    for el in root.find_all():
+        phone = el.attrs.get("data-phone") or el.attrs.get("data-mobile")
+        if phone:
+            phone_str = str(phone).strip()
+            if '*' not in phone_str and not phone_str.startswith("1900") and not phone_str.startswith("1800"):
+                return phone_str
+            
+    text = root.text()
+    found = extract_phone_from_text(text)
+    if found and not found.startswith("1900") and not found.startswith("1800"):
+        return found
+        
+    found = extract_phone_from_text(fallback_text)
+    if found and not found.startswith("1900") and not found.startswith("1800"):
+        return found
+    return None
+
+    
+    # 1. Check for tel: links
+    for a in root.find_all(tag="a"):
+        href = a.attrs.get("href", "").strip()
+        if href.startswith("tel:"):
+            phone = href[4:].strip()
+            if phone:
+                return phone
+                
+    # 2. Check for data attributes (data-phone, data-mobile)
+    for el in root.find_all():
+        phone = el.attrs.get("data-phone") or el.attrs.get("data-mobile")
+        if phone:
+            return str(phone).strip()
+            
+    # 3. Check text inside container
+    text = root.text()
+    found = extract_phone_from_text(text)
+    if found:
+        return found
+        
+    # 4. Fallback to passed text (e.g. description) if nothing found
+    return extract_phone_from_text(fallback_text)
+
+import json
+from urllib.parse import urljoin
+
+def extract_best_image_url(attrs: dict, base_url: str) -> str | None:
+    """Extract best image URL respecting priority and srcset resolution."""
+    for attr in ("data-original", "data-lazy-src", "data-src"):
+        val = attrs.get(attr)
+        if val and isinstance(val, str) and not val.startswith("data:"):
+            return urljoin(base_url, val.strip())
+            
+    srcset = attrs.get("srcset")
+    if srcset and isinstance(srcset, str):
+        candidates = []
+        for part in srcset.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            pieces = part.split()
+            url = pieces[0]
+            if url.startswith("data:"):
+                continue
+            size = 0
+            if len(pieces) > 1:
+                import re
+                match = re.match(r'^(\d+)[wx]$', pieces[1])
+                if match:
+                    size = int(match.group(1))
+            candidates.append((size, url))
+        if candidates:
+            candidates.sort(key=lambda x: x[0], reverse=True)
+            return urljoin(base_url, candidates[0][1])
+            
+    src = attrs.get("src")
+    if src and isinstance(src, str) and not src.startswith("data:"):
+        return urljoin(base_url, src.strip())
+        
+    return None
+
+def deduplicate_images(urls: list[str]) -> list[str]:
+    seen = set()
+    result = []
+    for u in urls:
+        if u not in seen:
+            seen.add(u)
+            result.append(u)
+    return result
+
+def extract_json_ld_images(root, base_url: str) -> list[str]:
+    """Extract images from JSON-LD representing the listing."""
+    if not root:
+        return []
+    images = []
+    for script in root.find_all(tag="script"):
+        t = script.attrs.get("type")
+        if t != "application/ld+json":
+            continue
+        text = script.text()
+        if not text:
+            continue
+        try:
+            data = json.loads(text)
+            if isinstance(data, dict):
+                data = [data]
+            for item in data:
+                t = item.get("@type", "")
+                if isinstance(t, list):
+                    t = t[0]
+                if t in ("Product", "RealEstateListing", "Apartment", "House", "Accommodation", "Room", "Place"):
+                    img = item.get("image")
+                    if isinstance(img, str):
+                        images.append(urljoin(base_url, img))
+                    elif isinstance(img, list):
+                        for i in img:
+                            if isinstance(i, str):
+                                images.append(urljoin(base_url, i))
+                            elif isinstance(i, dict) and "url" in i:
+                                images.append(urljoin(base_url, i["url"]))
+                    elif isinstance(img, dict) and "url" in img:
+                        images.append(urljoin(base_url, img["url"]))
+        except Exception:
+            continue
+    return deduplicate_images(images)
+
+def extract_scoped_images(container, base_url: str) -> list[str]:
+    """Extract deduplicated images strictly within a specific container."""
+    if not container:
+        return []
+    images = []
+    for img in container.find_all(tag="img"):
+        url = extract_best_image_url(img.attrs, base_url)
+        if url:
+            images.append(url)
+    return deduplicate_images(images)
+
 class SourceListingParser:
     """Extract cards using one source's explicitly supplied DOM contract."""
 
@@ -98,6 +380,8 @@ class SourceListingParser:
     IMAGE_CLASSES: tuple[str, ...] = ()
     DETAIL_PATH_PREFIXES: tuple[str, ...] = ()
     ID_PATTERN = re.compile(r"(?:-id|-pr|-)(\d{4,})(?:\.html)?(?:$|[/?#])", re.I)
+
+    MAP_CLASSES: tuple[str, ...] = ()
 
     def __init__(self, source_name: str):
         self.source_name = source_name
@@ -213,6 +497,8 @@ class SourceDetailParser:
         "singlefamilyresidence",
     }
     ID_PATTERN = SourceListingParser.ID_PATTERN
+
+    MAP_CLASSES: tuple[str, ...] = ()
 
     def __init__(self, source_name: str):
         self.source_name = source_name
@@ -334,16 +620,59 @@ class SourceDetailParser:
             listing_id = match.group(1) if match else urlparse(effective_url).path.strip("/").removesuffix(".html")
         address = self._extract_address(root)
         images = []
-        for image in root.find_all(tag="img"):
-            src = image.attrs.get("data-src") or image.attrs.get("src")
-            if src and not src.startswith("data:"):
-                absolute = urljoin(effective_url, src)
-                if absolute not in images:
-                    images.append(absolute)
-        title = first_text(root, self.TITLE_CLASSES)
+        gallery_classes = getattr(self, "GALLERY_CLASSES", ()) or ()
+        if gallery_classes:
+            gallery_container = None
+            for cls in gallery_classes:
+                found = root.find_all(class_token=cls)
+                if found:
+                    gallery_container = found[0]
+                    break
+            images = extract_scoped_images(gallery_container, effective_url)
+            
+        if not images:
+            images = extract_json_ld_images(root, effective_url)
+            
+        title = None
+        h1 = root.first(tag="h1")
+        if h1:
+            title = h1.text() or None
+            
         if not title:
-            h1 = root.first(tag="h1")
-            title = h1.text() if h1 else None
+            title = first_text(root, self.TITLE_CLASSES)
+
+        lat = None
+        lng = None
+        if self.MAP_CLASSES:
+            for cls in self.MAP_CLASSES:
+                map_nodes = root.find_all(class_token=cls)
+                if map_nodes:
+                    cand = extract_google_maps_info(map_nodes[0], html)
+                    if cand.latitude is not None and cand.longitude is not None:
+                        from roombeacon_crawler.validators.location_validator import LocationValidator
+                        v_lat, v_lng = LocationValidator.validate_coordinates(cand.latitude, cand.longitude, self.source_name)
+                        lat, lng = v_lat, v_lng
+                    if cand.address and not address:
+                        address = cand.address
+                    break
+
+        # Phone Extraction Logic
+        seller_phone = None
+        seller_classes = getattr(self, "SELLER_CLASSES", ()) or ()
+        contact_classes = getattr(self, "CONTACT_CLASSES", ()) or ()
+        all_classes = tuple(seller_classes) + tuple(contact_classes)
+        
+        if all_classes:
+            seller_container = None
+            for cls in all_classes:
+                found = root.find_all(class_token=cls)
+                if found:
+                    seller_container = found[0]
+                    break
+            seller_phone = extract_scoped_phone(seller_container, fallback_text=first_text(root, self.DESCRIPTION_CLASSES))
+        else:
+            seller_phone = extract_phone_from_text(first_text(root, self.DESCRIPTION_CLASSES))
+
         return ListingDetailRaw(
             source=self.source_name,
             listing_id=listing_id,
@@ -353,8 +682,11 @@ class SourceDetailParser:
             area_raw=first_text(root, self.AREA_CLASSES),
             address_raw=address,
             location_raw=address,
+            latitude=lat,
+            longitude=lng,
             description_raw=first_text(root, self.DESCRIPTION_CLASSES),
             seller_name_raw=first_text(root, self.SELLER_CLASSES),
+            seller_phone_raw=seller_phone,
             image_urls_raw=images,
         )
 

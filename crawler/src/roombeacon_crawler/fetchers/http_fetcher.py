@@ -23,7 +23,7 @@ class HttpFetcher:
         self,
         timeout: float = 30.0,
         timeout_seconds: float | None = None,
-        user_agent: str = "RoomBeaconCrawler/0.1",
+        user_agent: str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         follow_redirects: bool = True,
     ) -> None:
         self.timeout = timeout_seconds if timeout_seconds is not None else timeout

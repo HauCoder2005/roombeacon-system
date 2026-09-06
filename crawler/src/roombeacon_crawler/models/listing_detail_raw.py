@@ -15,6 +15,8 @@ class ListingDetailRaw:
     area_raw: str | None = None
     address_raw: str | None = None
     location_raw: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
     description_raw: str | None = None
     posted_at_raw: str | None = None
     updated_at_raw: str | None = None
@@ -37,6 +39,7 @@ class ListingDetailRaw:
 
     seller_name_raw: str | None = None
     seller_type_raw: str | None = None
+    seller_phone_raw: str | None = None
 
     image_urls_raw: list[str] = field(default_factory=list)
     amenities_raw: list[str] = field(default_factory=list)

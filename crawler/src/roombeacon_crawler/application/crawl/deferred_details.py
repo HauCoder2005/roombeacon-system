@@ -135,17 +135,13 @@ class DeferredDetailProcessor:
         crawl_details: bool,
         max_details_per_run: int | None,
     ) -> tuple[int, list[DeferredDetailItem]]:
-        backlog_before = (
-            self.repository.count_backlog(self.adapter.SOURCE_NAME, target_id)
-            if hasattr(self.repository, "count_backlog")
-            else 0
-        )
+        backlog_before = self.repository.count_backlog(self.adapter.SOURCE_NAME, target_id)
+        
         can_process_backlog = (
             crawl_details
             and max_details_per_run is not None
             and max_details_per_run > 0
             and backlog_before > 0
-            and hasattr(self.repository, "get_backlog")
         )
         if not can_process_backlog:
             return backlog_before, []
@@ -295,6 +291,7 @@ class DeferredDetailProcessor:
         detail_records: list,
         metadata: list,
         updated_seen_meta: dict[str, dict],
+        max_output_records: int | None = None,
     ) -> DeferredDetailResult:
         """Process the eligible backlog slice and return its aggregate outcome."""
         backlog_before, pending_details = self._select_pending_details(
@@ -303,6 +300,24 @@ class DeferredDetailProcessor:
             crawl_details=crawl_details,
             max_details_per_run=max_details_per_run,
         )
+
+        if max_output_records is not None:
+            existing_ids = {
+                str(getattr(record, "listing_id", ""))
+                for record in bronze_records
+            }
+            remaining_slots = max(0, max_output_records - len(bronze_records))
+            bounded_pending_details = []
+            for pending_detail in pending_details:
+                listing_id = str(pending_detail.platform_post_id)
+                if listing_id in existing_ids:
+                    bounded_pending_details.append(pending_detail)
+                elif remaining_slots > 0:
+                    bounded_pending_details.append(pending_detail)
+                    existing_ids.add(listing_id)
+                    remaining_slots -= 1
+            pending_details = bounded_pending_details
+
         metrics = _DeferredDetailMetrics(attempted=len(pending_details))
 
         for pending_detail in pending_details:

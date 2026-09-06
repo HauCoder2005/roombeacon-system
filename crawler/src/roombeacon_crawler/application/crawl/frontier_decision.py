@@ -36,6 +36,7 @@ class FrontierTransition(str, Enum):
     KNOWN_REGION_REACHED = "known_region_reached"
     MAX_RECORDS_REACHED = "max_records_reached"
     MAX_PAGES_REACHED = "max_pages_reached"
+    PAGE_RANGE_EXHAUSTED = "page_range_exhausted"
 
 
 @dataclass(frozen=True)
@@ -49,6 +50,19 @@ class FrontierDecision:
     def should_stop(self) -> bool:
         """Return whether the page loop must terminate after this transition."""
         return self.action == FrontierAction.STOP
+        
+    @property
+    def allow_deferred_enrichment(self) -> bool:
+        """Return whether deferred detail enrichment should proceed."""
+        return self.transition in {
+            FrontierTransition.PAGE_READY,
+            FrontierTransition.NEXT_PAGE,
+            FrontierTransition.FORWARD_COMPLETE,
+            FrontierTransition.KNOWN_REGION_REACHED,
+            FrontierTransition.MAX_RECORDS_REACHED,
+            FrontierTransition.MAX_PAGES_REACHED,
+            FrontierTransition.SOURCE_END,
+        }
 
 
 class FrontierDecisionProcessor:
@@ -116,6 +130,7 @@ class FrontierDecisionProcessor:
         effective_max_records: int,
         stop_after_known_pages: int,
         raw_html: str | None,
+        record_cap_truncated_page: bool = False,
     ) -> FrontierDecision:
         """Evaluate post-card limits and advance to the next page when allowed."""
         if state.is_forward_only:
@@ -142,7 +157,11 @@ class FrontierDecisionProcessor:
             state.final_status = CrawlStatus.SUCCESS
             if state.is_bootstrap:
                 state.bootstrap_completed = False
-                state.bootstrap_next_page = state.current_page + 1
+                state.bootstrap_next_page = (
+                    state.current_page
+                    if record_cap_truncated_page
+                    else state.current_page + 1
+                )
             else:
                 state.bootstrap_completed = True
                 state.bootstrap_next_page = None
@@ -171,26 +190,32 @@ class FrontierDecisionProcessor:
             state.bootstrap_next_page = None
             return self._stop(FrontierTransition.SOURCE_END)
 
-        state.current_page += 1
         return FrontierDecision(
             FrontierAction.CONTINUE,
             FrontierTransition.NEXT_PAGE,
         )
 
     @staticmethod
-    def complete_exhausted_loop(state: CrawlSessionState) -> None:
-        """Normalize state if the loop exits by passing its effective end page."""
-        if state.stop_reason is not None or state.current_page <= state.effective_end_page:
-            return
-        if state.is_forward_only:
-            state.stop_reason = "FORWARD_SCAN_COMPLETE"
-            state.bootstrap_completed = False
-            state.bootstrap_next_page = None
-        elif state.is_bootstrap:
-            state.stop_reason = "MAX_PAGES_REACHED"
-            state.bootstrap_completed = False
-            state.bootstrap_next_page = state.current_page
-        else:
-            state.stop_reason = "MAX_PAGES_REACHED"
-            state.bootstrap_completed = True
-            state.bootstrap_next_page = None
+    def finalize(
+        state: CrawlSessionState,
+        exit_transition: FrontierTransition,
+    ) -> None:
+        """Finalize the state based on the explicit loop exit reason."""
+        state.loop_exit_transition = exit_transition.value
+        
+        if state.stop_reason is None:
+            state.stop_reason = exit_transition.value
+            
+        if exit_transition == FrontierTransition.PAGE_RANGE_EXHAUSTED:
+            if state.is_forward_only:
+                state.stop_reason = "FORWARD_SCAN_COMPLETE"
+                state.bootstrap_completed = False
+                state.bootstrap_next_page = None
+            elif state.is_bootstrap:
+                state.stop_reason = "MAX_PAGES_REACHED"
+                state.bootstrap_completed = False
+                state.bootstrap_next_page = state.current_page
+            else:
+                state.stop_reason = "MAX_PAGES_REACHED"
+                state.bootstrap_completed = True
+                state.bootstrap_next_page = None

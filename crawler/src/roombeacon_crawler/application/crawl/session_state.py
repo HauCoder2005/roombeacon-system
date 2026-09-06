@@ -56,6 +56,10 @@ class CrawlSessionState:
     coarse_only_address: int = 0
     detail_address_extracted: int = 0
     detail_address_parse_failed: int = 0
+    
+    run_started_at: float | None = None
+    discovery_started_at: float | None = None
+    discovery_finished_at: float | None = None
 
     is_forward_only: bool = False
     is_incremental: bool = False
@@ -64,6 +68,8 @@ class CrawlSessionState:
     effective_end_page: int = 1
     bootstrap_completed: bool = False
     bootstrap_next_page: int | None = None
+    
+    loop_exit_transition: str | None = None
 
     pages_attempted: int = 0
     pages_success: int = 0

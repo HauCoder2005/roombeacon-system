@@ -80,6 +80,7 @@ class TestCardProcessingProcessor(unittest.IsolatedAsyncioTestCase):
                 "listing-1": {
                     "card_fingerprint": fingerprint,
                     "last_detailed_at": recent,
+                    "detail_status": "SUCCESS_WITH_ADDRESS",
                 }
             },
         )
@@ -90,7 +91,38 @@ class TestCardProcessingProcessor(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(result.content_changed)
         self.assertEqual(result.outcome, CardProcessingOutcome.LIGHTWEIGHT)
         self.assertEqual(state.skipped_known_unchanged_ttl, 1)
+        self.assertEqual(
+            state.updated_seen_meta["listing-1"]["detail_status"],
+            "SUCCESS_WITH_ADDRESS",
+        )
         self.detail_pipeline.execute.assert_not_awaited()
+
+    async def test_known_missing_address_within_ttl_forces_detail_refresh(self):
+        card = self.card()
+        recent = (self.now - timedelta(hours=2)).isoformat()
+        state = CrawlSessionState(
+            known_seen_ids={"listing-1"},
+            known_seen_meta={
+                "listing-1": {
+                    "card_fingerprint": self.processor._fingerprint(card),
+                    "last_detailed_at": recent,
+                    "detail_status": "SUCCESS_WITHOUT_ADDRESS",
+                }
+            },
+        )
+        detail_raw = MagicMock()
+        detail_raw.address_raw = "12 Example Street, District 1"
+        self.detail_pipeline.execute.return_value = (MagicMock(), detail_raw, MagicMock())
+
+        result = await self.process(state, card=card)
+
+        self.assertEqual(result.outcome, CardProcessingOutcome.DETAIL_SUCCEEDED)
+        self.assertEqual(state.detail_requested, 1)
+        self.assertEqual(
+            state.updated_seen_meta["listing-1"]["detail_status"],
+            "SUCCESS_WITH_ADDRESS",
+        )
+        self.detail_pipeline.execute.assert_awaited_once()
 
     async def test_changed_listing_forces_detail_refresh(self):
         state = CrawlSessionState(
@@ -177,6 +209,11 @@ class TestCardProcessingProcessor(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(state.full_address_missing, 1)
         self.assertEqual(state.coarse_only_address, 1)
         self.assertEqual(state.detail_address_parse_failed, 1)
+        self.assertIsNone(state.updated_seen_meta["listing-1"]["last_detailed_at"])
+        self.assertEqual(
+            state.updated_seen_meta["listing-1"]["detail_status"],
+            "ADDRESS_MISSING_RETRY",
+        )
 
     async def test_exhausted_budget_enqueues_deferred_detail(self):
         state = CrawlSessionState(details_crawled_count=2)

@@ -36,7 +36,7 @@ SOURCE_CASES = {
         "id": "22744154", "page2": "?cp=2",
     },
     "cafeland": {
-        "listing": '<div class="row-item"><a href="/phong-tro-hoc-mon-3144910.html">Phòng trọ Hóc Môn</a><div class="reals-price">2,4 triệu</div><div class="reals-address">Hóc Môn</div></div>',
+        "listing": '<div class="row-item"><a href="/cho-thue-phong-tro-hoc-mon-3144910.html">Phòng trọ Hóc Môn</a><div class="reals-price">2,4 triệu</div><div class="reals-address">Hóc Môn</div></div>',
         "detail": '<h1>Phòng trọ Hóc Môn</h1><script type="application/ld+json">{"@type":"House","address":{"streetAddress":"12 Song Hành","addressLocality":"Hóc Môn","addressRegion":"Hồ Chí Minh"}}</script><div class="reals-description">Mô tả dự án</div><footer class="address">Địa chỉ tòa soạn</footer>',
         "id": "3144910", "page2": "/page-2/",
     },
@@ -148,10 +148,51 @@ def test_chothuenha_numeric_detail_route_is_not_confused_with_category():
     ) is CrawlTargetType.DETAIL_PAGE
 
 
+def test_chothuenha_selects_only_room_listing_detail_links():
+    adapter = SourceRegistry().get("chothuenha")()
+    html = """
+    <div class="dv-bds">
+      <a href="/cho-thue-nha-nguyen-can-gia-tot-79129">Nhà nguyên căn</a>
+      <a href="/phong-tro-quan-12-cvpm-quang-trung-78905">Phòng trọ Quận 12</a>
+    </div>
+    """
+
+    cards = adapter.listing_parser.parse(html, adapter.DEFAULT_BASE_URL)
+
+    assert [card.detail_url for card in cards] == [
+        "https://chothuenha.com.vn/phong-tro-quan-12-cvpm-quang-trung-78905"
+    ]
+    assert adapter.classify_url(
+        "https://chothuenha.com.vn/cho-thue-nha-nguyen-can-gia-tot-79129"
+    ) is CrawlTargetType.UNSUPPORTED
+
+
 def test_cafeland_broker_profile_is_not_a_rental_detail():
     adapter = SourceRegistry().get("cafeland")()
     assert adapter.classify_url(
         "https://nhadat.cafeland.vn/moi-gioi/profile.html"
+    ) is CrawlTargetType.UNSUPPORTED
+
+
+def test_cafeland_selects_listing_detail_after_broker_link():
+    adapter = SourceRegistry().get("cafeland")()
+    html = """
+    <div class="row-item">
+      <a href="/moi-gioi/ms-lan-205149.html">Thông tin môi giới</a>
+      <a href="/cho-thue-phong-tro-duong-22-linh-dong-2479238.html">
+        Cho thuê phòng trọ đường 22 Linh Đông
+      </a>
+    </div>
+    """
+
+    cards = adapter.listing_parser.parse(html, adapter.DEFAULT_BASE_URL)
+
+    assert [card.detail_url for card in cards] == [
+        "https://nhadat.cafeland.vn/cho-thue-phong-tro-duong-22-linh-dong-2479238.html"
+    ]
+    assert adapter.classify_url(cards[0].detail_url) is CrawlTargetType.DETAIL_PAGE
+    assert adapter.classify_url(
+        "https://nhadat.cafeland.vn/tin-thi-truong-123.html"
     ) is CrawlTargetType.UNSUPPORTED
 
 

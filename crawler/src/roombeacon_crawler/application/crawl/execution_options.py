@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from roombeacon_crawler.config.crawler_settings import CrawlerSettings
 from roombeacon_crawler.enums.crawl_mode import CrawlMode
 from roombeacon_crawler.models.crawl_plan import CrawlPlan
+from roombeacon_crawler.models.source_capabilities import SourceCapabilities
 
 
 @dataclass(frozen=True)
@@ -42,21 +43,27 @@ class CrawlExecutionOptions:
             plan.mode.value if plan and hasattr(plan.mode, "value") else
             str(plan.mode) if plan else CrawlMode.BOOTSTRAP_FULL.value
         )
-        forward_only = (
-            mode in (CrawlMode.FORWARD_ONLY_INCREMENTAL.value, "FORWARD_ONLY_INCREMENTAL")
-            or (
-                capabilities is not None
-                and not getattr(capabilities, "historical_backfill_supported", True)
+        
+        caps = capabilities if capabilities is not None else SourceCapabilities()
+        
+        # Validation instead of silent coercion
+        is_bootstrap_mode = mode in (CrawlMode.BOOTSTRAP_FULL.value, CrawlMode.BOOTSTRAP_CONTINUE.value, CrawlMode.FORCE_FULL.value)
+        is_forward_only_mode = mode in (CrawlMode.FORWARD_ONLY_INCREMENTAL.value, "FORWARD_ONLY_INCREMENTAL")
+        
+        if is_bootstrap_mode and not caps.historical_backfill_supported:
+            raise ValueError(
+                f"Requested mode {mode} is not supported because the source does not support historical backfill"
             )
-            or (
-                capabilities is not None
-                and not getattr(capabilities, "supports_pagination", True)
-            )
-        )
+            
+        if not caps.supports_pagination and (max_pages is not None and max_pages > 1):
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning("Source does not support pagination, but max_pages > 1 was requested. Only 1 page will be crawled.")
+            max_pages = 1
 
-        if forward_only:
+        if is_forward_only_mode:
             return cls(
-                mode=CrawlMode.FORWARD_ONLY_INCREMENTAL.value,
+                mode=mode,
                 max_pages=1,
                 max_records=max_records if max_records is not None else (
                     plan.safety_max_records if plan else settings.max_total_records

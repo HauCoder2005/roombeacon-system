@@ -97,15 +97,37 @@ class MySQLPostChildrenRepository(PostChildrenRepositoryPort):
         post_id: int,
         observation_id: int,
     ) -> None:
-        # Lightweight locations must not become inherited raw address rows.
-        observed_address = observation.address_raw
-        if not observed_address or not str(observed_address).strip():
+        observed_address = observation.address_raw or observation.location_raw
+        
+        lat = observation.latitude
+        lng = observation.longitude
+        
+        # Prevent JSON strings from being saved as the raw address string if they slipped through
+        if observed_address and isinstance(observed_address, str) and observed_address.startswith("{"):
+            import json
+            try:
+                parsed = json.loads(observed_address)
+                observed_address = parsed.get("address", observed_address)
+                if lat is None and parsed.get("latitude"):
+                    lat = float(parsed.get("latitude"))
+                if lng is None and parsed.get("longitude"):
+                    lng = float(parsed.get("longitude"))
+            except Exception:
+                pass
+                
+        addr_val = str(observed_address).strip()[:500] if observed_address and str(observed_address).strip() else None
+        
+        if (lat is not None and lng is None) or (lat is None and lng is not None):
+            lat = None
+            lng = None
+        
+        if addr_val is None and lat is None and lng is None:
             return
 
         insert_address = text(
             """
-            INSERT INTO post_addresses (rental_post_id, rental_post_version_id, full_address_text, created_at)
-            VALUES (:post_id, :version_id, :addr, NOW())
+            INSERT INTO post_addresses (rental_post_id, rental_post_version_id, full_address_text, latitude, longitude, created_at)
+            VALUES (:post_id, :version_id, :addr, :lat, :lng, NOW())
             """
         )
         connection.execute(
@@ -113,7 +135,9 @@ class MySQLPostChildrenRepository(PostChildrenRepositoryPort):
             {
                 "post_id": post_id,
                 "version_id": observation_id,
-                "addr": str(observed_address).strip()[:500],
+                "addr": addr_val,
+                "lat": lat,
+                "lng": lng,
             },
         )
 

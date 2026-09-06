@@ -23,6 +23,8 @@ class BronzeObservation:
     area_raw: str | None = None
     location_raw: str | None = None
     address_raw: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
     description_raw: str | None = None
     posted_at_raw: str | None = None
     property_type_raw: str | None = None
@@ -49,6 +51,8 @@ class BronzeObservation:
             "area_raw": self.area_raw,
             "location_raw": self.location_raw,
             "address_raw": self.address_raw,
+            "latitude": self.latitude,
+            "longitude": self.longitude,
             "description_raw": self.description_raw,
             "posted_at_raw": self.posted_at_raw,
             "property_type_raw": self.property_type_raw,

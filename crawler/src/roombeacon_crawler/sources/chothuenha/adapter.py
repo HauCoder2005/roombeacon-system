@@ -33,14 +33,18 @@ class ChothuenhaSourceAdapter(ScheduledHtmlSourceAdapter):
     LISTING_PARSER = ChothuenhaListingParser
     DETAIL_PARSER = ChothuenhaDetailParser
     PAGINATION = QueryPagination
+    DETAIL_PATH_PATTERN = re.compile(
+        r"^/(?:phong-tro|nha-tro)-[^/]+-\d+$",
+        re.IGNORECASE,
+    )
 
     def classify_url(self, url: str) -> CrawlTargetType:
         """Classify a supported URL as a listing, detail, or unsupported target."""
         if not self.supports(url):
             return CrawlTargetType.UNSUPPORTED
         path = urlparse(url).path.rstrip("/")
-        if re.search(r"-\d+$", path):
-            return CrawlTargetType.DETAIL_PAGE
         if path.startswith("/cho-thue-phong-tro"):
             return CrawlTargetType.LISTING_PAGE
+        if self.DETAIL_PATH_PATTERN.fullmatch(path):
+            return CrawlTargetType.DETAIL_PAGE
         return CrawlTargetType.UNSUPPORTED

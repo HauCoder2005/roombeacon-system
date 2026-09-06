@@ -275,14 +275,14 @@ class TestIncrementalCrawlAndKnownRegionStop(unittest.TestCase):
             )
 
         # -------------------------------------------------------------
-        # 1. RUN 1: Chưa có state -> Phải là BOOTSTRAP_FULL
+        # 1. RUN 1: Chưa có state -> bounded incremental, không auto full crawl
         # -------------------------------------------------------------
         planner = CrawlPlanner(state_repository=self.repo)
         plans = planner.plan_all(seeds=[seed])
         self.assertEqual(len(plans), 1)
         plan_run_1 = plans[0]
-        self.assertEqual(plan_run_1.mode, CrawlMode.BOOTSTRAP_FULL)
-        self.assertEqual(plan_run_1.reason, "FIRST_SUCCESSFUL_CRAWL_NOT_FOUND")
+        self.assertEqual(plan_run_1.mode, CrawlMode.INCREMENTAL)
+        self.assertEqual(plan_run_1.reason, "FIRST_CRAWL_BOUNDED_INCREMENTAL")
 
         # Mock dữ liệu 2 trang cho run 1
         cards_p1 = [make_card(f"id_{i}") for i in range(1, 21)]
@@ -531,8 +531,8 @@ class TestIncrementalCrawlAndKnownRegionStop(unittest.TestCase):
     def test_multi_run_bootstrap_continuation_lifecycle_55_pages(
         self, mock_listing_exec: AsyncMock
     ) -> None:
-        """Kiểm thử chu trình tiếp diễn bootstrap nhiều chặng: 55 trang, safety_max_pages=20:
-        - Run 1: BOOTSTRAP_FULL (trang 1-20) -> MAX_PAGES_REACHED -> next_page = 21, bootstrap_completed = False
+        """Kiểm thử chu trình bootstrap được yêu cầu rõ ràng qua nhiều chặng:
+        - Run 1: FORCE_FULL (trang 1-20) -> MAX_PAGES_REACHED -> next_page = 21, bootstrap_completed = False
         - Run 2: BOOTSTRAP_CONTINUE (trang 21-40) -> MAX_PAGES_REACHED -> next_page = 41, bootstrap_completed = False
         - Run 3: BOOTSTRAP_CONTINUE (trang 41-55) -> SOURCE_END -> next_page = None, bootstrap_completed = True
         - Run 4: INCREMENTAL (trang 1-3) -> KNOWN_REGION_REACHED
@@ -596,12 +596,12 @@ class TestIncrementalCrawlAndKnownRegionStop(unittest.TestCase):
         planner = CrawlPlanner(state_repository=self.repo)
 
         # -------------------------------------------------------------
-        # RUN 1: Khởi tạo BOOTSTRAP_FULL (Trang 1 đến 20)
+        # RUN 1: Historical crawl chỉ bắt đầu bằng FORCE_FULL rõ ràng
         # -------------------------------------------------------------
-        plans_1 = planner.plan_all(seeds=[seed])
+        plans_1 = planner.plan_all(seeds=[seed], override_mode="FORCE_FULL")
         self.assertEqual(len(plans_1), 1)
         plan_1 = plans_1[0]
-        self.assertEqual(plan_1.mode, CrawlMode.BOOTSTRAP_FULL)
+        self.assertEqual(plan_1.mode, CrawlMode.FORCE_FULL)
         self.assertEqual(plan_1.start_page, 1)
 
         runner_1 = CrawlRunner(
@@ -805,19 +805,91 @@ class TestIncrementalCrawlAndKnownRegionStop(unittest.TestCase):
         )
         records, result = asyncio.run(runner.run(plan=plan))
 
-        # 3 trang hoàn chỉnh x 10 records = 30 records (không bị cắt vụn giữa chừng)
-        self.assertEqual(result.records_created, 30)
+        # Hard safety cap phải được áp dụng ngay trong boundary page.
+        self.assertEqual(result.records_created, 25)
+        self.assertEqual(len(records), 25)
         self.assertEqual(result.pages_attempted, 3)
         self.assertEqual(result.stop_reason, "MAX_RECORDS_REACHED")
         self.assertFalse(result.bootstrap_completed)
-        self.assertEqual(result.bootstrap_next_page, 4)
+        self.assertEqual(result.bootstrap_next_page, 3)
+
+    @patch("roombeacon_crawler.pipeline.listing_crawl.ListingCrawlPipeline.execute")
+    def test_max_records_is_a_hard_cap_across_page_boundaries(
+        self, mock_listing_exec: AsyncMock
+    ) -> None:
+        def make_card(page: int, index: int) -> ListingCardRaw:
+            return ListingCardRaw(
+                source="phongtro123",
+                listing_id=f"cap_p{page}_{index}",
+                detail_url=f"https://phongtro123.com/cap/p{page}_{index}",
+                title_raw=f"Cap {page}-{index}",
+                price_raw="3 triệu/tháng",
+                area_raw="25 m2",
+                location_raw="TP.HCM",
+                posted_at_raw="2026-09-04",
+            )
+
+        def make_meta(page: int) -> CrawlMetadata:
+            return CrawlMetadata(
+                run_id="run_hard_cap",
+                source="phongtro123",
+                target_type=CrawlTargetType.LISTING_PAGE,
+                request_url=f"https://phongtro123.com/rooms?page={page}",
+                final_url=f"https://phongtro123.com/rooms?page={page}",
+                page_number=page,
+                fetch_strategy=FetchStrategy.HTTP,
+                http_status=200,
+                content_type="text/html",
+                server="nginx",
+                cf_ray=None,
+                html_size=1000,
+                started_at="2026-09-04T00:00:00+00:00",
+                finished_at="2026-09-04T00:00:01+00:00",
+                elapsed_ms=100.0,
+                retry_count=0,
+                robots_allowed=True,
+                crawl_status=CrawlStatus.SUCCESS,
+            )
+
+        async def page_side_effect(target, run_id, limit_per_page):
+            page = target.page_number
+            cards = [make_card(page, index) for index in range(10)]
+            return cards, [], make_meta(page), f"<html>page {page}</html>"
+
+        mock_listing_exec.side_effect = page_side_effect
+
+        for cap, expected_pages in ((1, 1), (5, 1), (15, 2)):
+            with self.subTest(max_records=cap):
+                plan = CrawlPlan(
+                    source="phongtro123",
+                    target_id=f"hard_cap_{cap}",
+                    target_url="https://phongtro123.com/cho-thue-phong-tro-ho-chi-minh",
+                    mode=CrawlMode.BOOTSTRAP_FULL,
+                    reason="HARD_CAP_TEST",
+                    planned_at="2026-09-04T00:00:00+00:00",
+                    safety_max_pages=5,
+                    safety_max_records=cap,
+                    crawl_details=False,
+                )
+                runner = CrawlRunner(
+                    target_url=plan.target_url,
+                    storage_writer=self.writer,
+                    state_repository=self.repo,
+                )
+
+                records, result = asyncio.run(runner.run(plan=plan))
+
+                self.assertEqual(len(records), cap)
+                self.assertEqual(result.records_created, cap)
+                self.assertLessEqual(result.observations_written, cap)
+                self.assertEqual(result.pages_attempted, expected_pages)
+                self.assertEqual(result.stop_reason, "MAX_RECORDS_REACHED")
 
     @patch("roombeacon_crawler.pipeline.listing_crawl.ListingCrawlPipeline.execute")
     def test_boundary_page_records_not_skipped_on_max_records_limit(
         self, mock_listing_exec: AsyncMock
     ) -> None:
-        """Kiểm thử hồi quy: Khi đạt max_records, toàn bộ các thẻ tin trên trang biên (boundary page)
-        được xử lý trọn vẹn, không bị bỏ sót khi tiếp tục chặng sau từ current_page + 1.
+        """Khi boundary page bị cắt bởi cap, resume lại chính page đó để không mất tin.
         """
         def make_card(page: int, idx: int) -> ListingCardRaw:
             return ListingCardRaw(
@@ -865,7 +937,7 @@ class TestIncrementalCrawlAndKnownRegionStop(unittest.TestCase):
 
         # CHẶNG 1: safety_max_records = 15
         # Trang 1 có 10 tin -> total 10 < 15
-        # Trang 2 có 10 tin -> total 20 >= 15 -> Hoàn tất cả 10 tin trang 2, dừng MAX_RECORDS_REACHED
+        # Trang 2 chỉ xử lý 5 tin còn lại rồi dừng đúng tại hard cap 15.
         plan_1 = CrawlPlan(
             source="phongtro123",
             target_id="hcm_phongtro",
@@ -886,12 +958,12 @@ class TestIncrementalCrawlAndKnownRegionStop(unittest.TestCase):
         )
         records_1, result_1 = asyncio.run(runner_1.run(plan=plan_1))
 
-        # Phải thu thập đủ 20 tin (10 trang 1 + 10 trang 2), không bị cắt ở tin 15
-        self.assertEqual(result_1.records_created, 20)
+        self.assertEqual(result_1.records_created, 15)
+        self.assertEqual(len(records_1), 15)
         self.assertEqual(result_1.pages_attempted, 2)
         self.assertEqual(result_1.stop_reason, "MAX_RECORDS_REACHED")
         self.assertFalse(result_1.bootstrap_completed)
-        self.assertEqual(result_1.bootstrap_next_page, 3)
+        self.assertEqual(result_1.bootstrap_next_page, 2)
 
         # Lưu checkpoint chặng 1
         state_1 = CrawlTargetState(
@@ -902,12 +974,12 @@ class TestIncrementalCrawlAndKnownRegionStop(unittest.TestCase):
             last_stop_reason=result_1.stop_reason,
             last_records_created=result_1.records_created,
             bootstrap_completed=False,
-            bootstrap_next_page=3,
+            bootstrap_next_page=2,
         )
         self.repo.save_state(state_1)
         self.repo.record_seen_listing_ids("phongtro123", "hcm_phongtro", result_1.observed_listing_ids)
 
-        # CHẶNG 2: Tiếp diễn từ trang 3
+        # CHẶNG 2: Tiếp diễn lại từ boundary page 2
         plan_2 = CrawlPlan(
             source="phongtro123",
             target_id="hcm_phongtro",
@@ -918,7 +990,7 @@ class TestIncrementalCrawlAndKnownRegionStop(unittest.TestCase):
             safety_max_pages=50,
             safety_max_records=100,
             crawl_details=False,
-            start_page=3,
+            start_page=2,
         )
 
         runner_2 = CrawlRunner(
@@ -928,8 +1000,9 @@ class TestIncrementalCrawlAndKnownRegionStop(unittest.TestCase):
         )
         records_2, result_2 = asyncio.run(runner_2.run(plan=plan_2))
 
-        # Trang 3 thu thập 10 tin còn lại
-        self.assertEqual(result_2.records_created, 10)
+        # Chạy lại trang 2: 5 tin đã biết + 5 tin mới, sau đó lấy 10 tin trang 3.
+        self.assertEqual(result_2.records_created, 15)
+        self.assertEqual(len(records_2), 20)
         self.assertEqual(result_2.stop_reason, "SOURCE_END")
         self.assertTrue(result_2.bootstrap_completed)
 

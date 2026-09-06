@@ -17,6 +17,9 @@ class RentalBronzeRecord:
     location_raw: str | None
     description_raw: str | None
     posted_at_raw: str | None
+    
+    latitude: float | None = None
+    longitude: float | None = None
 
     property_type_raw: str | None = None
     furnishing_raw: str | None = None
@@ -24,6 +27,7 @@ class RentalBronzeRecord:
 
     seller_name_raw: str | None = None
     seller_type_raw: str | None = None
+    seller_phone_raw: str | None = None
 
     image_urls_raw: list[str] = field(default_factory=list)
     amenities_raw: list[str] = field(default_factory=list)

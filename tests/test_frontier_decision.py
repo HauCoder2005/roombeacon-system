@@ -167,6 +167,27 @@ class TestFrontierDecisionProcessor(unittest.TestCase):
         self.assertEqual(state.bootstrap_next_page, 4)
         self.assertFalse(state.bootstrap_completed)
 
+    def test_max_records_keeps_truncated_boundary_page_for_resume(self):
+        state = CrawlSessionState(
+            is_bootstrap=True,
+            current_page=3,
+            effective_end_page=20,
+            bronze_records=[MagicMock(), MagicMock()],
+        )
+
+        decision = self.after_cards(
+            state,
+            effective_max_records=2,
+            record_cap_truncated_page=True,
+        )
+
+        self.assertEqual(
+            decision.transition,
+            FrontierTransition.MAX_RECORDS_REACHED,
+        )
+        self.assertEqual(state.bootstrap_next_page, 3)
+        self.assertFalse(state.bootstrap_completed)
+
 
 if __name__ == "__main__":
     unittest.main()

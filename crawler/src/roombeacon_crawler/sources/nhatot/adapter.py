@@ -26,9 +26,9 @@ class NhatotSourceAdapter(BaseSourceAdapter):
     DEFAULT_BASE_URL = "https://www.nhatot.com/thue-phong-tro"
     CAPABILITIES = SourceCapabilities(
         access_profile=SourceAccessProfile.DISCOVERY_RESTRICTED,
-        supports_pagination=False,
+        supports_pagination=True,
         supports_sitemap_discovery=True,
-        historical_backfill_supported=False,
+        historical_backfill_supported=True,
         forward_incremental_supported=True,
         seed_page_discovery_supported=True,
         preferred_seed_transport=FetchStrategy.BROWSER,

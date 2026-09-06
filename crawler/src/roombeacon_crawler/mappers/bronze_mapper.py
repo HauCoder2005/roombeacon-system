@@ -50,6 +50,14 @@ class BronzeMapper:
         location_raw = (detail.location_raw if detail and detail.location_raw else None) or (
             card.location_raw if card else None
         )
+        
+        latitude = (detail.latitude if detail and detail.latitude is not None else None) or (
+            card.latitude if card and card.latitude is not None else None
+        )
+        longitude = (detail.longitude if detail and detail.longitude is not None else None) or (
+            card.longitude if card and card.longitude is not None else None
+        )
+
         description_raw = detail.description_raw if detail else None
         posted_at_raw = (detail.posted_at_raw if detail and detail.posted_at_raw else None) or (
             card.posted_at_raw if card else None
@@ -68,6 +76,10 @@ class BronzeMapper:
             or (card.seller_type_raw if card else None)
         )
 
+        seller_phone_raw = (
+            (detail.seller_phone_raw if detail and detail.seller_phone_raw else None)
+        )
+
         image_urls_raw = detail.image_urls_raw if detail else []
         if not image_urls_raw and card and card.thumbnail_url_raw:
             image_urls_raw = [card.thumbnail_url_raw]
@@ -83,6 +95,8 @@ class BronzeMapper:
             area_raw=area_raw,
             address_raw=address_raw,
             location_raw=location_raw,
+            latitude=latitude,
+            longitude=longitude,
             description_raw=description_raw,
             posted_at_raw=posted_at_raw,
             property_type_raw=property_type_raw,
@@ -90,6 +104,7 @@ class BronzeMapper:
             deposit_raw=deposit_raw,
             seller_name_raw=seller_name_raw,
             seller_type_raw=seller_type_raw,
+            seller_phone_raw=seller_phone_raw,
             image_urls_raw=image_urls_raw,
             amenities_raw=amenities_raw,
             crawl_run_id=run_id,

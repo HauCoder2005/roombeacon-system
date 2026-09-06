@@ -120,22 +120,14 @@ class NhatroVNDetailParser:
                 val_elem = badge.find(class_contains="rs-info-badge__val")
                 position_raw = val_elem.get_text() if val_elem else text
 
-        # 6. Danh sách hình ảnh (Deduplicated)
+
+        # 6. Danh sách hình ảnh
+        from roombeacon_crawler.sources.common_html import extract_scoped_images
         image_urls_raw: list[str] = []
-        img_elements = root.find_all(
-            tag="img",
-            predicate=lambda n: bool(
-                n.find_parent(class_contains="carousel-slide")
-                or n.find_parent(class_contains="carousel-thumb")
-                or n.find_parent(class_contains="carousel-main")
-            ),
-        )
-        for img in img_elements:
-            src = img.get("src") or img.get("data-src")
-            if src and not src.startswith("data:"):
-                full_img_url = urljoin(detail_url, src.strip())
-                if full_img_url not in image_urls_raw:
-                    image_urls_raw.append(full_img_url)
+        gallery = root.find(class_contains="carousel-main") or root.find(class_contains="carousel")
+        if gallery:
+            image_urls_raw = extract_scoped_images(gallery, detail_url)
+
 
         # 7. Tiện ích (Amenities - chỉ lấy các mục active)
         amenities_raw: list[str] = []

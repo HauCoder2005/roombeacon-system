@@ -216,6 +216,11 @@ services:
 
       AIRFLOW__CORE__EXECUTION_API_SERVER_URL: "http://airflow-api-server:8080/execution/"
 
+      # Shared signing secret required by every Airflow component that
+      # communicates with the Execution API. The value remains sourced from
+      # the local environment; never generate a per-container default.
+      AIRFLOW__API__SECRET_KEY: "${AIRFLOW__API_AUTH__JWT_SECRET}"
+
       # --------------------------------------------------------
       # Logging
       # --------------------------------------------------------

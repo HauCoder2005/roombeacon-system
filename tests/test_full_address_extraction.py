@@ -13,6 +13,7 @@ from roombeacon_crawler.sources.phongtro123.adapter import Phongtro123SourceAdap
 from roombeacon_crawler.sources.phongtro123.parsers.detail_parser import Phongtro123DetailParser
 from roombeacon_crawler.sources.batdongsan.adapter import BatDongSanSourceAdapter
 from roombeacon_crawler.sources.muaban.adapter import MuabanSourceAdapter
+from roombeacon_crawler.sources.tromoi.parsers.detail_parser import TromoiDetailParser
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -34,6 +35,20 @@ def _card(source: str, location: str = "Quận 12, Hồ Chí Minh") -> ListingCa
 
 
 class FullAddressExtractionTests(unittest.TestCase):
+    def test_tromoi_extracts_box_address(self) -> None:
+        detail = TromoiDetailParser("tromoi").parse(
+            '<main><div class="box-address"><i></i>239, Cao Đạt, Phường Chợ Quán, Quận 5, Hồ Chí Minh</div></main>',
+            detail_url="https://tromoi.com/phong-tro/ky-tuc-xa-239-cao-dat",
+            listing_id="tromoi-contract-id",
+        )
+
+        self.assertIsNotNone(detail)
+        self.assertEqual(detail.listing_id, "tromoi-contract-id")
+        self.assertEqual(
+            detail.address_raw,
+            "239, Cao Đạt, Phường Chợ Quán, Quận 5, Hồ Chí Minh",
+        )
+
     def test_address_sources_enable_detail_crawl_for_scheduled_targets(self) -> None:
         """Normal Airflow scheduling must execute the detail parsers."""
         for adapter_type in (

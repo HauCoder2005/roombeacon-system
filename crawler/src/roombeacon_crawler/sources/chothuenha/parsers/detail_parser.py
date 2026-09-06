@@ -6,6 +6,8 @@ from roombeacon_crawler.sources.common_html import HtmlNode, SourceDetailParser
 
 
 class ChothuenhaDetailParser(SourceDetailParser):
+    MAP_CLASSES = ("dv-bds-bd",)
+
     """Apply this source's detail-page HTML contract without downstream cleaning."""
     PRICE_CLASSES = ("price", "product-price")
     AREA_CLASSES = ("area", "dientich")

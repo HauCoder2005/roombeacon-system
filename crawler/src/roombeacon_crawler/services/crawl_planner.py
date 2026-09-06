@@ -27,7 +27,7 @@ class CrawlPlanner:
     1. Kiểm tra các target xem có đến hạn chạy (DUE) không.
     2. Tự động xác định chế độ cào dựa trên capabilities và checkpoint state:
        - FORWARD_ONLY_INCREMENTAL: Cho các nguồn không hỗ trợ phân trang lịch sử (như NhaTot)
-       - BOOTSTRAP_FULL: Nếu chưa từng crawl thành công và nguồn hỗ trợ historical backfill
+       - INCREMENTAL: Nếu chưa có checkpoint, bắt đầu từ trang đầu với safety cap
        - BOOTSTRAP_CONTINUE: Tiếp diễn bootstrap nếu đợt trước chưa tới SOURCE_END
        - INCREMENTAL: Cho các nguồn đã hoàn tất bootstrap
     3. Phân giải chiến lược khám phá (STANDARD vs ENHANCED_DISCOVERY) qua DiscoveryStrategyResolver.
@@ -192,7 +192,12 @@ class CrawlPlanner:
             return CrawlMode.FORWARD_ONLY_INCREMENTAL, "FORWARD_ONLY_SEED_ACQUISITION"
 
         if state is None:
-            return CrawlMode.BOOTSTRAP_FULL, "FIRST_SUCCESSFUL_CRAWL_NOT_FOUND"
+            # AUTO scheduling must never turn missing runtime state into an
+            # unrequested historical backfill.  INCREMENTAL still starts at
+            # page 1, but remains bounded by the seed's page/record limits and
+            # known-page frontier.  Historical bootstrap stays explicit via
+            # FORCE_FULL.
+            return CrawlMode.INCREMENTAL, "FIRST_CRAWL_BOUNDED_INCREMENTAL"
 
         bootstrap_completed = bool(getattr(state, "bootstrap_completed", False)) or (
             getattr(state, "last_stop_reason", None)
@@ -201,6 +206,6 @@ class CrawlPlanner:
         if not bootstrap_completed:
             if getattr(state, "bootstrap_next_page", None) is not None:
                 return CrawlMode.BOOTSTRAP_CONTINUE, "BOOTSTRAP_INCOMPLETE_CONTINUATION"
-            return CrawlMode.BOOTSTRAP_FULL, "HISTORICAL_BOOTSTRAP_REQUIRED"
+            return CrawlMode.INCREMENTAL, "CHECKPOINT_NOT_BOOTSTRAPPED_BOUNDED_INCREMENTAL"
 
         return CrawlMode.INCREMENTAL, "INCREMENTAL_SCHEDULED_DUE"

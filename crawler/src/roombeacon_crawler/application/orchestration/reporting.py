@@ -4,29 +4,61 @@ This module is deliberately Airflow-free. Runtime adapters are composed inside t
 relevant use-case boundary until Phase 3 introduces explicit composition roots.
 """
 
+import json
 import logging
+from collections.abc import Iterable, Mapping
+
 from roombeacon_crawler.enums.crawl_mode import CrawlMode
 from roombeacon_crawler.enums.crawl_status import CrawlStatus
 
 logger = logging.getLogger(__name__)
 
+_MappingCollectionInput = Iterable[dict | str] | dict | str | None
+
+
+def _normalize_mapping_collection(payload: object, *, scalar_key: str | None = None) -> list[dict]:
+    """Normalize mapped-task XCom shapes without changing the report schema."""
+    if payload is None:
+        return []
+
+    if isinstance(payload, Mapping):
+        return [dict(payload)]
+
+    if isinstance(payload, str):
+        value = payload.strip()
+        if not value:
+            return []
+        try:
+            decoded = json.loads(value)
+        except json.JSONDecodeError:
+            return [{scalar_key: value}] if scalar_key else []
+        return _normalize_mapping_collection(decoded, scalar_key=scalar_key)
+
+    if isinstance(payload, Iterable):
+        normalized: list[dict] = []
+        for item in payload:
+            normalized.extend(_normalize_mapping_collection(item, scalar_key=scalar_key))
+        return normalized
+
+    return []
+
 
 def summarize_run(
-    plans: list[dict] = None,
-    qualifications: list[dict] = None,
-    crawl_results: list[dict] = None,
-    persistence_results: list[dict] = None,
-    checkpoints: list[dict] = None,
+    plans: _MappingCollectionInput = None,
+    qualifications: _MappingCollectionInput = None,
+    crawl_results: _MappingCollectionInput = None,
+    persistence_results: _MappingCollectionInput = None,
+    checkpoints: _MappingCollectionInput = None,
     analytics_summary: dict = None,
     asset_summary: dict = None,
     **context,
 ) -> dict:
     """8. Tổng hợp số liệu thống kê toàn diện của toàn bộ fleet sau phiên cào."""
-    plans = plans or []
-    qualifications = qualifications or []
-    crawl_results = crawl_results or []
-    persistence_results = persistence_results or []
-    checkpoints = checkpoints or []
+    plans = _normalize_mapping_collection(plans, scalar_key="mode")
+    qualifications = _normalize_mapping_collection(qualifications, scalar_key="qualification_status")
+    crawl_results = _normalize_mapping_collection(crawl_results, scalar_key="crawl_status")
+    persistence_results = _normalize_mapping_collection(persistence_results, scalar_key="status")
+    checkpoints = _normalize_mapping_collection(checkpoints)
     analytics_summary = analytics_summary or {}
     asset_summary = asset_summary or {}
 

@@ -47,6 +47,14 @@ class MuabanDetailParser:
         desc_elem = root.find(class_contains="description") or root.find(class_contains="content")
         description_raw = desc_elem.get_text() if desc_elem else None
 
+        from roombeacon_crawler.sources.common_html import extract_scoped_images, extract_json_ld_images
+        image_urls_raw = []
+        gallery = root.find(class_contains="gallery") or root.find(class_contains="swiper-container") or root.find(class_contains="image-slider")
+        if gallery:
+            image_urls_raw = extract_scoped_images(gallery, detail_url)
+        if not image_urls_raw:
+            image_urls_raw = extract_json_ld_images(root, detail_url)
+
         return ListingDetailRaw(
             source=self.source_name,
             listing_id=listing_id,
@@ -56,4 +64,5 @@ class MuabanDetailParser:
             address_raw=address_raw,
             location_raw=address_raw,
             description_raw=description_raw,
+            image_urls_raw=image_urls_raw,
         )

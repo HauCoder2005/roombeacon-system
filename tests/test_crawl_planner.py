@@ -53,8 +53,8 @@ class TestCrawlPlannerAndStateRepository(unittest.TestCase):
         self.assertEqual(loaded_state.last_records_created, 25)
         self.assertEqual(loaded_seen, {"id_101", "id_102"})
 
-    def test_first_crawl_no_state_is_bootstrap_full(self) -> None:
-        """Target chưa từng có state -> Chế độ BOOTSTRAP_FULL với lý do FIRST_SUCCESSFUL_CRAWL_NOT_FOUND."""
+    def test_first_crawl_no_state_is_bounded_incremental(self) -> None:
+        """Missing checkpoint must not trigger an automatic historical crawl."""
         seed = CrawlSeed(
             source="nhatrovn",
             target_id="hcm_phongtro",
@@ -69,8 +69,10 @@ class TestCrawlPlannerAndStateRepository(unittest.TestCase):
         plan = plans[0]
         self.assertEqual(plan.source, "nhatrovn")
         self.assertEqual(plan.target_id, "hcm_phongtro")
-        self.assertEqual(plan.mode, CrawlMode.BOOTSTRAP_FULL)
-        self.assertEqual(plan.reason, "FIRST_SUCCESSFUL_CRAWL_NOT_FOUND")
+        self.assertEqual(plan.mode, CrawlMode.INCREMENTAL)
+        self.assertEqual(plan.reason, "FIRST_CRAWL_BOUNDED_INCREMENTAL")
+        self.assertEqual(plan.safety_max_pages, seed.bootstrap_safety_max_pages)
+        self.assertEqual(plan.safety_max_records, seed.bootstrap_safety_max_records)
         self.assertEqual(plan.interval_minutes, 30)
         self.assertIsNone(plan.watermark_from)
         self.assertIsNone(plan.overlap_from)
@@ -107,8 +109,8 @@ class TestCrawlPlannerAndStateRepository(unittest.TestCase):
         expected_overlap = (last_success - timedelta(hours=24)).isoformat()
         self.assertEqual(plan.overlap_from, expected_overlap)
 
-    def test_incomplete_legacy_forward_state_restarts_historical_bootstrap(self) -> None:
-        """A pagination upgrade must not misclassify incomplete forward-only state."""
+    def test_incomplete_state_without_resume_page_stays_bounded(self) -> None:
+        """An incomplete state without an explicit resume page must not auto-full."""
         self.repo.save_state(
             CrawlTargetState(
                 source="nhatrovn",
@@ -129,8 +131,11 @@ class TestCrawlPlannerAndStateRepository(unittest.TestCase):
         plans = self.planner.plan_all([seed], current_time=self.now)
 
         self.assertEqual(len(plans), 1)
-        self.assertEqual(plans[0].mode, CrawlMode.BOOTSTRAP_FULL)
-        self.assertEqual(plans[0].reason, "HISTORICAL_BOOTSTRAP_REQUIRED")
+        self.assertEqual(plans[0].mode, CrawlMode.INCREMENTAL)
+        self.assertEqual(
+            plans[0].reason,
+            "CHECKPOINT_NOT_BOOTSTRAPPED_BOUNDED_INCREMENTAL",
+        )
         self.assertEqual(plans[0].start_page, 1)
 
     def test_nhatot_capability_resolves_forward_only_incremental(self) -> None:

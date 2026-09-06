@@ -24,9 +24,22 @@ class CafelandDetailParser(SourceDetailParser):
     def parse(self, html: str, detail_url: str = "", **kwargs):
         """Parse a rental detail while refusing broker-profile locations."""
         detail = super().parse(html, detail_url=detail_url, **kwargs)
-        if detail is not None and "/moi-gioi/" in detail_url.casefold():
-            detail.address_raw = None
-            detail.location_raw = None
+        if detail is not None:
+            if "/moi-gioi/" in detail_url.casefold():
+                detail.address_raw = None
+                detail.location_raw = None
+            else:
+                lat_match = re.search(r"_latitude\s*=\s*(-?\d+\.\d+);", html)
+                lng_match = re.search(r"_longitude\s*=\s*(-?\d+\.\d+);", html)
+                if lat_match and lng_match:
+                    from roombeacon_crawler.validators.location_validator import LocationValidator
+                    v_lat, v_lng = LocationValidator.validate_coordinates(
+                        float(lat_match.group(1)),
+                        float(lng_match.group(1)),
+                        self.source_name
+                    )
+                    detail.latitude = v_lat
+                    detail.longitude = v_lng
         return detail
 
     def _valid_address(self, raw_address: str) -> str | None:
