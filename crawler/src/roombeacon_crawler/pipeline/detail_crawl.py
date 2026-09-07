@@ -105,7 +105,12 @@ class DetailCrawlPipeline:
             detail.crawl_run_id = run_id
             detail.crawled_at = datetime.now(timezone.utc).isoformat()
             if not DetailValidator.validate(detail):
-                logger.warning("Trang chi tiết %s không đạt validation cấu trúc", target.url)
+                logger.warning(
+                    "Detail parse rejected by structural validation (url=%s)",
+                    target.url,
+                )
+                meta.crawl_status = CrawlStatus.PARSE_ERROR
+                detail = None
 
         # 4. Map to Bronze
         bronze_record = BronzeMapper.map(

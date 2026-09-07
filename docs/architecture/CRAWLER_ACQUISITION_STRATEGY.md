@@ -71,13 +71,20 @@ Mỗi phần tử công việc (`DeferredDetailItem`) chứa dữ liệu vận h
 
 Để ngăn chặn hiện tượng một luồng công việc làm tê liệt (starve) luồng công việc còn lại, `DeferredBudgetScheduler` phân bổ ngân sách `max_details_per_run` theo nguyên tắc:
 
+Ngân sách detail độc lập với `max_records`: giới hạn discovery không được lọc
+các job cũ trong backlog. Vì vậy một batch listing đã đầy vẫn dành quota mạng
+riêng để backlog tiếp tục giảm qua mỗi run.
+
 $$\text{Deferred Quota} = \min(\text{Pending Backlog}, \lceil \text{max\_details} \times \text{deferred\_share\_ratio} \rceil)$$
 
 $$\text{Immediate Quota} = \text{max\_details} - \text{Deferred Quota}$$
 
-- **Chống bỏ đói Backlog**: Dành sẵn hạn ngạch (mặc định 50%) để xử lý dứt điểm các tin cũ bị hoãn.
-- **Chống bỏ đói Discovery mới**: Dành sẵn 50% cho các tin mới phát hiện trên các trang hiện tại.
-- **Cơ chế Dynamic Spillover**: Nếu hàng đợi hoãn chỉ có ít tin (ví dụ 3 tin trong quota 10), 7 slot còn lại tự động nhượng lại cho luồng Discovery mới (Immediate Quota = 17).
+- **Ưu tiên backlog hiện tại**: cấu hình mặc định dành toàn bộ detail budget
+  của run cho FIFO backlog; listing mới được ghi Bronze nhẹ và đưa vào queue.
+- **Không mất discovery mới**: mọi listing đủ điều kiện đều được enqueue bền vững,
+  không phụ thuộc việc quota detail của run đã hết hay chưa.
+- **Dynamic spillover**: API scheduler vẫn trả phần quota chưa dùng để caller có
+  thể cấp cho immediate detail khi chiến lược vận hành được cấu hình theo tỷ lệ nhỏ hơn 100%.
 
 ---
 

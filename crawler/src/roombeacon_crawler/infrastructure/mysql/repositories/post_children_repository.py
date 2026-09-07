@@ -46,6 +46,24 @@ class MySQLPostChildrenRepository(PostChildrenRepositoryPort):
             or value > maximum
         )
 
+    @staticmethod
+    def _has_detail_payload(observation: BronzeObservation) -> bool:
+        """Return whether the observation contains a real detail-table value."""
+        values = (
+            observation.area_raw,
+            observation.description_raw,
+            observation.property_type_raw,
+            observation.furnishing_raw,
+            observation.deposit_raw,
+            observation.posted_at_raw,
+            observation.seller_name_raw,
+            observation.seller_type_raw,
+            observation.seller_phone_raw,
+        )
+        return any(
+            value is not None and str(value).strip() for value in values
+        )
+
     def _persist_price(
         self,
         connection,
@@ -97,30 +115,35 @@ class MySQLPostChildrenRepository(PostChildrenRepositoryPort):
         post_id: int,
         observation_id: int,
     ) -> None:
-        observed_address = observation.address_raw or observation.location_raw
-        
+        # ``location_raw`` is a coarse card label, not a confirmed address.
+        observed_address = observation.address_raw
         lat = observation.latitude
         lng = observation.longitude
-        
-        # Prevent JSON strings from being saved as the raw address string if they slipped through
-        if observed_address and isinstance(observed_address, str) and observed_address.startswith("{"):
-            import json
+
+        if (
+            isinstance(observed_address, str)
+            and observed_address.lstrip().startswith("{")
+        ):
             try:
                 parsed = json.loads(observed_address)
                 observed_address = parsed.get("address", observed_address)
-                if lat is None and parsed.get("latitude"):
+                if lat is None and parsed.get("latitude") is not None:
                     lat = float(parsed.get("latitude"))
-                if lng is None and parsed.get("longitude"):
+                if lng is None and parsed.get("longitude") is not None:
                     lng = float(parsed.get("longitude"))
-            except Exception:
-                pass
-                
-        addr_val = str(observed_address).strip()[:500] if observed_address and str(observed_address).strip() else None
-        
+            except (json.JSONDecodeError, TypeError, ValueError):
+                logger.warning(
+                    "Invalid structured address payload ignored (post_id=%s)",
+                    post_id,
+                )
+
+        address_text = str(observed_address).strip() if observed_address else ""
+        addr_val = address_text[:500] or None
+
         if (lat is not None and lng is None) or (lat is None and lng is not None):
             lat = None
             lng = None
-        
+
         if addr_val is None and lat is None and lng is None:
             return
 
@@ -148,6 +171,9 @@ class MySQLPostChildrenRepository(PostChildrenRepositoryPort):
         post_id: int,
         observation_id: int,
     ) -> None:
+        if not self._has_detail_payload(observation):
+            return
+
         normalized_area = MySQLBronzeMapper.parse_numeric_area(
             observation.area_raw
         )

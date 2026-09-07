@@ -132,6 +132,57 @@ class CardProcessingProcessor:
         if detail_was_parsed:
             state.detail_address_parse_failed += 1
 
+    def _address_expected(self) -> bool:
+        """Return the source contract for required detail-address enrichment."""
+        capabilities = getattr(self._adapter, "CAPABILITIES", None)
+        custom_flags = getattr(capabilities, "custom_flags", None)
+        if not isinstance(custom_flags, dict):
+            return True
+        return bool(custom_flags.get("detail_address_expected", True))
+
+    def _defer_detail(
+        self,
+        *,
+        card: ListingCardRaw,
+        state: CrawlSessionState,
+        run_id: str,
+        target_id: str,
+        listing_id: str,
+        now: datetime,
+        reason: str,
+        fingerprint: str,
+        last_detailed_at: str | None,
+        previous_metadata: dict[str, str | None],
+    ) -> None:
+        """Persist a lightweight observation and enqueue one enrichment job."""
+        self._append_lightweight(
+            card=card,
+            state=state,
+            run_id=run_id,
+            listing_id=listing_id,
+            last_detailed_at=last_detailed_at,
+            fingerprint=fingerprint,
+            previous_metadata=previous_metadata,
+        )
+        item = DeferredDetailItem(
+            source=self._adapter.SOURCE_NAME,
+            platform_post_id=listing_id,
+            detail_url=card.detail_url,
+            origin_run_id=run_id,
+            first_deferred_at=now.isoformat(),
+            reason=reason,
+            card_title=card.title_raw,
+            card_price=card.price_raw,
+            card_area=card.area_raw,
+            card_location=card.location_raw,
+            card_fingerprint=fingerprint,
+        )
+        state.deferred_added += self._deferred_repository.enqueue(
+            self._adapter.SOURCE_NAME,
+            target_id,
+            [item],
+        )
+
     async def execute(
         self,
         *,
@@ -231,38 +282,18 @@ class CardProcessingProcessor:
         elif defer_details_for_discovery:
             state.detail_skipped += 1
             state.skipped_deferred_for_discovery += 1
-            self._append_lightweight(
+            self._defer_detail(
                 card=card,
                 state=state,
                 run_id=run_id,
+                target_id=target_id,
                 listing_id=listing_id,
+                now=now,
+                reason="DISCOVERY_FIRST_ENRICHMENT",
                 last_detailed_at=last_detailed_at,
                 fingerprint=fingerprint,
                 previous_metadata=previous,
             )
-            item = DeferredDetailItem(
-                source=self._adapter.SOURCE_NAME,
-                platform_post_id=listing_id,
-                detail_url=card.detail_url,
-                origin_run_id=run_id,
-                first_deferred_at=now.isoformat(),
-                reason="DISCOVERY_FIRST_ENRICHMENT",
-                card_title=getattr(card, "title_raw", None)
-                or getattr(card, "title", None),
-                card_price=getattr(card, "price_raw", None)
-                or getattr(card, "price", None),
-                card_area=getattr(card, "area_raw", None)
-                or getattr(card, "area", None),
-                card_location=getattr(card, "location_raw", None)
-                or getattr(card, "location", None),
-                card_fingerprint=fingerprint,
-            )
-            if hasattr(self._deferred_repository, "enqueue"):
-                state.deferred_added += self._deferred_repository.enqueue(
-                    self._adapter.SOURCE_NAME,
-                    target_id,
-                    [item],
-                )
             outcome = CardProcessingOutcome.DEFERRED
         elif (
             max_details_per_run is not None
@@ -274,38 +305,18 @@ class CardProcessingProcessor:
             )
             state.detail_skipped += 1
             state.skipped_request_budget += 1
-            self._append_lightweight(
+            self._defer_detail(
                 card=card,
                 state=state,
                 run_id=run_id,
+                target_id=target_id,
                 listing_id=listing_id,
+                now=now,
+                reason="REQUEST_BUDGET_EXHAUSTED",
                 last_detailed_at=last_detailed_at,
                 fingerprint=fingerprint,
                 previous_metadata=previous,
             )
-            item = DeferredDetailItem(
-                source=self._adapter.SOURCE_NAME,
-                platform_post_id=listing_id,
-                detail_url=card.detail_url,
-                origin_run_id=run_id,
-                first_deferred_at=now.isoformat(),
-                reason="REQUEST_BUDGET_EXHAUSTED",
-                card_title=getattr(card, "title_raw", None)
-                or getattr(card, "title", None),
-                card_price=getattr(card, "price_raw", None)
-                or getattr(card, "price", None),
-                card_area=getattr(card, "area_raw", None)
-                or getattr(card, "area", None),
-                card_location=getattr(card, "location_raw", None)
-                or getattr(card, "location", None),
-                card_fingerprint=fingerprint,
-            )
-            if hasattr(self._deferred_repository, "enqueue"):
-                state.deferred_added += self._deferred_repository.enqueue(
-                    self._adapter.SOURCE_NAME,
-                    target_id,
-                    [item],
-                )
             outcome = CardProcessingOutcome.DEFERRED
         else:
             state.detail_requested += 1
@@ -332,20 +343,38 @@ class CardProcessingProcessor:
                 address_extracted = bool(
                     detail_raw.address_raw and str(detail_raw.address_raw).strip()
                 )
+                address_expected = self._address_expected()
+                enrichment_completed = address_extracted or not address_expected
                 state.updated_seen_meta[listing_id] = {
                     "last_detailed_at": now.isoformat() if address_extracted else None,
                     "card_fingerprint": fingerprint,
                     "detail_status": (
                         "SUCCESS_WITH_ADDRESS"
                         if address_extracted
-                        else "ADDRESS_MISSING_RETRY"
+                        else (
+                            "SUCCESS_WITHOUT_ADDRESS"
+                            if enrichment_completed
+                            else "ADDRESS_MISSING_RETRY"
+                        )
                     ),
                 }
-                if hasattr(self._deferred_repository, "record_success"):
+                if enrichment_completed and hasattr(
+                    self._deferred_repository,
+                    "record_success",
+                ):
                     self._deferred_repository.record_success(
                         self._adapter.SOURCE_NAME,
                         target_id,
                         listing_id,
+                    )
+                elif hasattr(self._deferred_repository, "record_failure"):
+                    self._deferred_repository.record_failure(
+                        self._adapter.SOURCE_NAME,
+                        target_id,
+                        listing_id,
+                        error="ADDRESS_EXTRACTION_MISSING",
+                        is_terminal=False,
+                        now=now,
                     )
                 outcome = CardProcessingOutcome.DETAIL_SUCCEEDED
             else:

@@ -6,12 +6,12 @@ choices, URL identity rules and source capabilities remain in each source.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from html.parser import HTMLParser
 import json
 import re
 from urllib.parse import parse_qs, urlencode, urljoin, urlparse, urlunparse
-from dataclasses import dataclass
 
 from roombeacon_crawler.models.listing_card_raw import ListingCardRaw
 from roombeacon_crawler.models.listing_detail_raw import ListingDetailRaw
@@ -86,8 +86,6 @@ def first_text(node: HtmlNode, classes: tuple[str, ...]) -> str | None:
             return found.text()
     return None
 
-
-
 @dataclass
 class LocationCandidate:
     address: str | None = None
@@ -95,11 +93,11 @@ class LocationCandidate:
     longitude: float | None = None
     source_url: str | None = None
 
+
 def extract_google_maps_info(
     root: "HtmlNode | None", html: str | None = None
 ) -> LocationCandidate:
-    import re
-    from urllib.parse import urlparse, parse_qs
+    """Extract a map address or coordinates from structured HTML attributes."""
     cand = LocationCandidate()
     if not root:
         return cand
@@ -109,7 +107,7 @@ def extract_google_maps_info(
         if "google.com/maps" in src or "maps.google.com" in src:
             parsed = urlparse(src)
             qs = parse_qs(parsed.query)
-            
+
             if "q" in qs:
                 q_val = qs["q"][0]
                 coords_match = re.search(r"(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)", q_val)
@@ -160,68 +158,58 @@ def extract_google_maps_info(
                             cand.latitude = float(lat)
                             cand.longitude = float(lng)
                             return cand
-            except Exception:
-                pass
+            except (json.JSONDecodeError, TypeError, ValueError):
+                continue
 
     return cand
-
-
-
-
-    m = re.search(r"(\+84|0)[0-9\.\s-]+", text)
-    if m: return m.group(0).strip()
-    return None
-    match = re.search(r"(\+84|0)[-. ]?[0-9]{2,3}[-. ]?[0-9]{3}[-. ]?[0-9]{3,4}", text)
-    if match: return match.group(0)
-    return None
 
 
 def normalize_vietnamese_phone(phone: str | None) -> str | None:
     """Normalize Vietnamese phone to 09xxxxxxxx."""
     if not phone:
         return None
-    import re
-    cleaned = re.sub(r'[\s\.\-\((\)]', '', phone)
-    if cleaned.startswith('+84'):
-        cleaned = '0' + cleaned[3:]
-    elif cleaned.startswith('84'):
-        cleaned = '0' + cleaned[2:]
-    if len(cleaned) >= 9 and cleaned.startswith('0'):
+    cleaned = re.sub(r"[\s.\-()]", "", phone)
+    if cleaned.startswith("+84"):
+        cleaned = "0" + cleaned[3:]
+    elif cleaned.startswith("84"):
+        cleaned = "0" + cleaned[2:]
+    if len(cleaned) >= 9 and cleaned.startswith("0"):
         return cleaned
     return None
+
 
 def extract_phone_from_text(text: str | None) -> str | None:
     """Extract raw phone string from text."""
     if not text:
         return None
-    import re
-    match = re.search(r'(?:\+?84|0)[\d\s\.\-\((\)]{7,15}', text)
+    match = re.search(r"(?:\+?84|0)[\d\s.\-()]{7,15}", text)
     if match:
         candidate = match.group(0).strip(" .")
-        if len(re.sub(r'[\s\.\-\((\)]', '', candidate)) >= 9:
-            return candidate
-    return None
-    import re
-    match = re.search(r'(?:\+?84|0)[\d\s\.\-\((\)]{7,15}', text)
-    if match:
-        candidate = match.group(0).strip()
-        if len(re.sub(r'[\s\.\-\((\)]', '', candidate)) >= 9:
+        if len(re.sub(r"[\s.\-()]", "", candidate)) >= 9:
             return candidate
     return None
 
-def extract_scoped_phone(root, fallback_text: str | None = None, **kwargs) -> str | None:
+
+def extract_scoped_phone(
+    root: HtmlNode | None,
+    fallback_text: str | None = None,
+    **_kwargs,
+) -> str | None:
     """Extract phone strictly within a specific container."""
     if not root:
         return extract_phone_from_text(fallback_text)
-    
+
     for script in root.find_all(tag="script"):
         text = script.text()
         if text:
-            import re
-            match = re.search(r'(?:phone|mobile|hotline)["\']?\s*[:=]\s*["\']([0-9\s\.\+]+)["\']', text, re.I)
+            match = re.search(
+                r"(?:phone|mobile|hotline)[\"']?\s*[:=]\s*[\"']([0-9\s.+]+)[\"']",
+                text,
+                re.IGNORECASE,
+            )
             if match:
                 phone = match.group(1).strip()
-                if len(re.sub(r'[\s\.\-\((\)]', '', phone)) >= 9:
+                if len(re.sub(r"[\s.\-()]", "", phone)) >= 9:
                     return phone
 
     for a in root.find_all(tag="a"):
@@ -230,60 +218,35 @@ def extract_scoped_phone(root, fallback_text: str | None = None, **kwargs) -> st
             phone = href[4:].strip()
             if phone.startswith("1900") or phone.startswith("1800"):
                 continue
-            if phone and '*' not in phone:
+            if phone and "*" not in phone:
                 return phone
-                
+
     for el in root.find_all():
         phone = el.attrs.get("data-phone") or el.attrs.get("data-mobile")
         if phone:
             phone_str = str(phone).strip()
-            if '*' not in phone_str and not phone_str.startswith("1900") and not phone_str.startswith("1800"):
+            is_service_number = phone_str.startswith(("1800", "1900"))
+            if "*" not in phone_str and not is_service_number:
                 return phone_str
-            
+
     text = root.text()
     found = extract_phone_from_text(text)
     if found and not found.startswith("1900") and not found.startswith("1800"):
         return found
-        
+
     found = extract_phone_from_text(fallback_text)
     if found and not found.startswith("1900") and not found.startswith("1800"):
         return found
     return None
 
-    
-    # 1. Check for tel: links
-    for a in root.find_all(tag="a"):
-        href = a.attrs.get("href", "").strip()
-        if href.startswith("tel:"):
-            phone = href[4:].strip()
-            if phone:
-                return phone
-                
-    # 2. Check for data attributes (data-phone, data-mobile)
-    for el in root.find_all():
-        phone = el.attrs.get("data-phone") or el.attrs.get("data-mobile")
-        if phone:
-            return str(phone).strip()
-            
-    # 3. Check text inside container
-    text = root.text()
-    found = extract_phone_from_text(text)
-    if found:
-        return found
-        
-    # 4. Fallback to passed text (e.g. description) if nothing found
-    return extract_phone_from_text(fallback_text)
 
-import json
-from urllib.parse import urljoin
-
-def extract_best_image_url(attrs: dict, base_url: str) -> str | None:
+def extract_best_image_url(attrs: dict[str, str], base_url: str) -> str | None:
     """Extract best image URL respecting priority and srcset resolution."""
     for attr in ("data-original", "data-lazy-src", "data-src"):
         val = attrs.get(attr)
         if val and isinstance(val, str) and not val.startswith("data:"):
             return urljoin(base_url, val.strip())
-            
+
     srcset = attrs.get("srcset")
     if srcset and isinstance(srcset, str):
         candidates = []
@@ -297,35 +260,37 @@ def extract_best_image_url(attrs: dict, base_url: str) -> str | None:
                 continue
             size = 0
             if len(pieces) > 1:
-                import re
-                match = re.match(r'^(\d+)[wx]$', pieces[1])
+                match = re.match(r"^(\d+)[wx]$", pieces[1])
                 if match:
                     size = int(match.group(1))
             candidates.append((size, url))
         if candidates:
-            candidates.sort(key=lambda x: x[0], reverse=True)
+            candidates.sort(key=lambda candidate: candidate[0], reverse=True)
             return urljoin(base_url, candidates[0][1])
-            
+
     src = attrs.get("src")
     if src and isinstance(src, str) and not src.startswith("data:"):
         return urljoin(base_url, src.strip())
-        
+
     return None
 
+
 def deduplicate_images(urls: list[str]) -> list[str]:
-    seen = set()
-    result = []
-    for u in urls:
-        if u not in seen:
-            seen.add(u)
-            result.append(u)
+    """Keep image order while removing duplicate URLs."""
+    seen: set[str] = set()
+    result: list[str] = []
+    for url in urls:
+        if url not in seen:
+            seen.add(url)
+            result.append(url)
     return result
 
-def extract_json_ld_images(root, base_url: str) -> list[str]:
+
+def extract_json_ld_images(root: HtmlNode | None, base_url: str) -> list[str]:
     """Extract images from JSON-LD representing the listing."""
     if not root:
         return []
-    images = []
+    images: list[str] = []
     for script in root.find_all(tag="script"):
         t = script.attrs.get("type")
         if t != "application/ld+json":
@@ -338,10 +303,21 @@ def extract_json_ld_images(root, base_url: str) -> list[str]:
             if isinstance(data, dict):
                 data = [data]
             for item in data:
-                t = item.get("@type", "")
-                if isinstance(t, list):
-                    t = t[0]
-                if t in ("Product", "RealEstateListing", "Apartment", "House", "Accommodation", "Room", "Place"):
+                if not isinstance(item, dict):
+                    continue
+                item_type = item.get("@type", "")
+                if isinstance(item_type, list):
+                    item_type = item_type[0]
+                supported_types = {
+                    "Product",
+                    "RealEstateListing",
+                    "Apartment",
+                    "House",
+                    "Accommodation",
+                    "Room",
+                    "Place",
+                }
+                if item_type in supported_types:
                     img = item.get("image")
                     if isinstance(img, str):
                         images.append(urljoin(base_url, img))
@@ -353,15 +329,19 @@ def extract_json_ld_images(root, base_url: str) -> list[str]:
                                 images.append(urljoin(base_url, i["url"]))
                     elif isinstance(img, dict) and "url" in img:
                         images.append(urljoin(base_url, img["url"]))
-        except Exception:
+        except (json.JSONDecodeError, TypeError, ValueError):
             continue
     return deduplicate_images(images)
 
-def extract_scoped_images(container, base_url: str) -> list[str]:
+
+def extract_scoped_images(
+    container: HtmlNode | None,
+    base_url: str,
+) -> list[str]:
     """Extract deduplicated images strictly within a specific container."""
     if not container:
         return []
-    images = []
+    images: list[str] = []
     for img in container.find_all(tag="img"):
         url = extract_best_image_url(img.attrs, base_url)
         if url:

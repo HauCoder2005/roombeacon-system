@@ -12,7 +12,7 @@ class ChothuenhaListingParser(SourceListingParser):
     DATE_CLASSES = ("date", "time")
     IMAGE_CLASSES = ("home-thumb",)
     ID_PATTERN = re.compile(r"-(\d+)(?:$|[/?#])")
-    DETAIL_PATH_PATTERN = re.compile(r"^/(?:phong-tro|nha-tro)-[^/]+-\d+$", re.I)
+    DETAIL_PATH_PATTERN = re.compile(r"^/(?:cho-thue-phong-tro|cho-thue-nha-tro|phong-tro|nha-tro)-[^/]+-\d+$", re.I)
 
     def _detail_link(self, card, source_url):
         """Select room-listing details and skip other rental-property links."""

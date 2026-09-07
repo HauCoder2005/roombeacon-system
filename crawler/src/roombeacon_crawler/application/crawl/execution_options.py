@@ -46,20 +46,13 @@ class CrawlExecutionOptions:
         
         caps = capabilities if capabilities is not None else SourceCapabilities()
         
-        # Validation instead of silent coercion
-        is_bootstrap_mode = mode in (CrawlMode.BOOTSTRAP_FULL.value, CrawlMode.BOOTSTRAP_CONTINUE.value, CrawlMode.FORCE_FULL.value)
-        is_forward_only_mode = mode in (CrawlMode.FORWARD_ONLY_INCREMENTAL.value, "FORWARD_ONLY_INCREMENTAL")
-        
-        if is_bootstrap_mode and not caps.historical_backfill_supported:
-            raise ValueError(
-                f"Requested mode {mode} is not supported because the source does not support historical backfill"
-            )
-            
-        if not caps.supports_pagination and (max_pages is not None and max_pages > 1):
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.warning("Source does not support pagination, but max_pages > 1 was requested. Only 1 page will be crawled.")
-            max_pages = 1
+        # A source that cannot backfill must never construct historical page
+        # URLs.  Coerce every entry point (including direct/manual execution)
+        # to the safe seed-page acquisition contract.
+        if not caps.historical_backfill_supported:
+            mode = CrawlMode.FORWARD_ONLY_INCREMENTAL.value
+
+        is_forward_only_mode = mode == CrawlMode.FORWARD_ONLY_INCREMENTAL.value
 
         if is_forward_only_mode:
             return cls(

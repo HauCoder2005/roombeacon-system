@@ -249,6 +249,7 @@ class TestPostAddressesAndSchemaMapping(unittest.TestCase):
         statements = [str(call.args[0]) for call in mock_conn.execute.call_args_list]
         self.assertFalse(any("SELECT full_address_text" in sql for sql in statements))
         self.assertFalse(any("INSERT INTO post_addresses" in sql for sql in statements))
+        self.assertFalse(any("INSERT INTO post_details" in sql for sql in statements))
 
     def test_child_insert_count_and_order_remain_stable(self):
         from roombeacon_crawler.infrastructure.mysql.repositories.post_children_repository import MySQLPostChildrenRepository

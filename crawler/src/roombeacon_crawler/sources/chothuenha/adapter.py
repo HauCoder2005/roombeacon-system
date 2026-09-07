@@ -34,7 +34,7 @@ class ChothuenhaSourceAdapter(ScheduledHtmlSourceAdapter):
     DETAIL_PARSER = ChothuenhaDetailParser
     PAGINATION = QueryPagination
     DETAIL_PATH_PATTERN = re.compile(
-        r"^/(?:phong-tro|nha-tro)-[^/]+-\d+$",
+        r"^/(?:cho-thue-phong-tro|cho-thue-nha-tro|phong-tro|nha-tro)-[^/]+-\d+$",
         re.IGNORECASE,
     )
 

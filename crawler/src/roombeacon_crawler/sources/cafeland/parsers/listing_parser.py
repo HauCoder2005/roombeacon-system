@@ -6,7 +6,7 @@ from roombeacon_crawler.sources.common_html import SourceListingParser
 
 class CafelandListingParser(SourceListingParser):
     """Apply this source's listing-card HTML contract without semantic cleaning."""
-    CARD_CLASSES=("row-item",); PRICE_CLASSES=("price", "reals-price"); AREA_CLASSES=("reals-area", "acreage")
+    CARD_CLASSES=("row-item-new",); PRICE_CLASSES=("price", "reals-price"); AREA_CLASSES=("reals-area", "acreage")
     LOCATION_CLASSES=("info-location", "location"); DATE_CLASSES=("reals-date", "date"); IMAGE_CLASSES=("image-frame",)
     ID_PATTERN=re.compile(r"-(\d+)\.html", re.I)
     DETAIL_PATH_PATTERN = re.compile(r"^/cho-thue-phong-tro-[^/]+-\d+\.html$", re.I)

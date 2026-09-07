@@ -190,6 +190,9 @@ class FrontierDecisionProcessor:
             state.bootstrap_next_page = None
             return self._stop(FrontierTransition.SOURCE_END)
 
+        # The frontier owns its transition.  Advancing here keeps the processor
+        # self-contained and makes callers observe the next page immediately.
+        state.current_page += 1
         return FrontierDecision(
             FrontierAction.CONTINUE,
             FrontierTransition.NEXT_PAGE,

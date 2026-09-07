@@ -370,6 +370,63 @@ class TestProgressiveDeferredCoverage(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(set(attempted_runs[0]).isdisjoint(attempted_runs[1]))
             self.assertTrue(set(attempted_runs[1]).isdisjoint(attempted_runs[2]))
 
+    async def test_full_discovery_batch_does_not_starve_older_backlog(self):
+        source = "phongtro123"
+        target_id = "independent-budgets"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = LocalDeferredDetailRepository(base_data_dir=temp_dir)
+            repository.enqueue(
+                source,
+                target_id,
+                [
+                    DeferredDetailItem(
+                        source=source,
+                        platform_post_id=f"backlog-{index}",
+                        detail_url=f"https://example.test/detail/{index}",
+                        origin_run_id="older-run",
+                        first_deferred_at=f"2026-08-24T00:00:0{index}+00:00",
+                    )
+                    for index in range(2)
+                ],
+            )
+            discovery_records = [
+                SimpleNamespace(source=source, listing_id=f"current-{index}")
+                for index in range(1_000)
+            ]
+
+            async def execute(*, target, card, run_id):
+                enriched = SimpleNamespace(
+                    source=source,
+                    listing_id=target.listing_id,
+                    address_raw="1 Test Street",
+                )
+                detail = SimpleNamespace(address_raw="1 Test Street")
+                return enriched, detail, SimpleNamespace(status_code=200)
+
+            processor = DeferredDetailProcessor(
+                adapter=SimpleNamespace(SOURCE_NAME=source),
+                detail_pipeline=SimpleNamespace(execute=AsyncMock(side_effect=execute)),
+                repository=repository,
+                scheduler=DeferredBudgetScheduler(),
+            )
+
+            result = await processor.execute(
+                run_id="current-run",
+                target_id=target_id,
+                now=datetime(2026, 8, 24, tzinfo=timezone.utc),
+                crawl_details=True,
+                max_details_per_run=2,
+                bronze_records=discovery_records,
+                detail_records=[],
+                metadata=[],
+                updated_seen_meta={},
+            )
+
+            self.assertEqual(result.attempted, 2)
+            self.assertEqual(result.succeeded, 2)
+            self.assertEqual(len(discovery_records), 1_002)
+            self.assertEqual(repository.count_backlog(source, target_id), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

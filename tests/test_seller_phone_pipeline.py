@@ -110,9 +110,6 @@ def test_bronze_mapper_preserves_seller_phone():
     assert bronze.seller_phone_raw == "0901234567"
 
 
-import pytest
-
-@pytest.mark.skip(reason="Out of scope for Phone Phase. Location parser broken in Phase 4.")
 def test_chothuephongtro_uses_listing_location_not_footer_office():
     detail = ChothuephongtroDetailParser("chothuephongtro").parse(
         """

@@ -214,6 +214,15 @@ class TestCardProcessingProcessor(unittest.IsolatedAsyncioTestCase):
             state.updated_seen_meta["listing-1"]["detail_status"],
             "ADDRESS_MISSING_RETRY",
         )
+        self.deferred_repository.record_success.assert_not_called()
+        self.deferred_repository.record_failure.assert_called_once_with(
+            "example",
+            "target-1",
+            "listing-1",
+            error="ADDRESS_EXTRACTION_MISSING",
+            is_terminal=False,
+            now=self.now,
+        )
 
     async def test_exhausted_budget_enqueues_deferred_detail(self):
         state = CrawlSessionState(details_crawled_count=2)

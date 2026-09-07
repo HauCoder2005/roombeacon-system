@@ -158,11 +158,11 @@ class DeferredDetailProcessor:
         return backlog_before, pending_details
 
     def _address_expected(self) -> bool:
-        return getattr(
-            getattr(self.adapter, "CAPABILITIES", None),
-            "custom_flags",
-            {},
-        ).get("detail_address_expected", True)
+        capabilities = getattr(self.adapter, "CAPABILITIES", None)
+        custom_flags = getattr(capabilities, "custom_flags", None)
+        if not isinstance(custom_flags, dict):
+            return True
+        return bool(custom_flags.get("detail_address_expected", True))
 
     async def _fetch_pending_detail(
         self,
@@ -291,32 +291,19 @@ class DeferredDetailProcessor:
         detail_records: list,
         metadata: list,
         updated_seen_meta: dict[str, dict],
-        max_output_records: int | None = None,
     ) -> DeferredDetailResult:
-        """Process the eligible backlog slice and return its aggregate outcome."""
+        """Process a bounded backlog slice independently of discovery output.
+
+        ``max_details_per_run`` is the network/enrichment safety bound.  The
+        listing discovery record cap must not filter older queue items because
+        those items intentionally belong to earlier discovery runs.
+        """
         backlog_before, pending_details = self._select_pending_details(
             target_id=target_id,
             now=now,
             crawl_details=crawl_details,
             max_details_per_run=max_details_per_run,
         )
-
-        if max_output_records is not None:
-            existing_ids = {
-                str(getattr(record, "listing_id", ""))
-                for record in bronze_records
-            }
-            remaining_slots = max(0, max_output_records - len(bronze_records))
-            bounded_pending_details = []
-            for pending_detail in pending_details:
-                listing_id = str(pending_detail.platform_post_id)
-                if listing_id in existing_ids:
-                    bounded_pending_details.append(pending_detail)
-                elif remaining_slots > 0:
-                    bounded_pending_details.append(pending_detail)
-                    existing_ids.add(listing_id)
-                    remaining_slots -= 1
-            pending_details = bounded_pending_details
 
         metrics = _DeferredDetailMetrics(attempted=len(pending_details))
 

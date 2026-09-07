@@ -203,8 +203,7 @@ class Phongtro123DetailParser:
                         break
 
             from roombeacon_crawler.sources.common_html import extract_scoped_images
-            from roombeacon_crawler.sources.common_html_location import extract_google_maps_info
-            
+
             gallery = root.find(class_contains="post-images") or root.find(class_contains="image-gallery") or root.find(class_contains="post-slider")
             image_urls = extract_scoped_images(gallery, effective_url)
 
@@ -213,7 +212,6 @@ class Phongtro123DetailParser:
             # For simplicity, let's extract the iframe directly from the HTML text
             latitude = None
             longitude = None
-            import re
             map_match = re.search(r'q=(-?\d+\.\d+)%2C(-?\d+\.\d+)', html)
             if not map_match:
                 map_match = re.search(r'q=(-?\d+\.\d+),(-?\d+\.\d+)', html)
@@ -222,9 +220,8 @@ class Phongtro123DetailParser:
                 longitude = float(map_match.group(2))
             
             # Pack coordinates into location_raw as JSON
-            import json
             location_raw = address_raw
-            if latitude and longitude:
+            if latitude is not None and longitude is not None:
                 location_raw = json.dumps({"address": address_raw, "latitude": latitude, "longitude": longitude})
 
             return ListingDetailRaw(
