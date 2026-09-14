@@ -2,22 +2,11 @@
 set -eu
 
 alias_name="roombeacon"
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> origin/feature/codeser
 crawler_alias="roombeacon-crawler"
 assets_policy="roombeacon-assets-writer"
 policy_file="/bootstrap/policies/roombeacon-assets-writer.json"
 verification_file="/tmp/roombeacon-minio-permission-check"
 verification_key=".roombeacon-bootstrap/permission-check"
-<<<<<<< HEAD
-=======
-assets_policy="roombeacon-assets-writer"
-policy_file="/bootstrap/policies/roombeacon-assets-writer.json"
->>>>>>> feature/codeser
-=======
->>>>>>> origin/feature/codeser
 
 required_variables="MINIO_ROOT_USER MINIO_ROOT_PASSWORD MINIO_CRAWLER_ACCESS_KEY MINIO_CRAWLER_SECRET_KEY MINIO_BUCKET_RAW MINIO_BUCKET_ASSETS MINIO_BUCKET_QUARANTINE MINIO_BUCKET_EXPORTS"
 for variable_name in ${required_variables}; do
@@ -64,10 +53,6 @@ fi
     "${assets_policy}" \
     --user "${MINIO_CRAWLER_ACCESS_KEY}" >/dev/null
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> origin/feature/codeser
 /usr/bin/mc alias set \
     "${crawler_alias}" \
     "http://minio:9000" \
@@ -104,7 +89,7 @@ verify_crawler_permissions() {
             < "${verification_file}" >/dev/null 2>&1 || return 1
 
         # Root stat proves PutObject created the canary. Crawler cat proves
-        # GetObject can read it without requiring ListBucket or DeleteObject.
+        # GetObject can read it without requiring DeleteObject.
         /usr/bin/mc stat \
             "${alias_name}/${bucket_name}/${verification_key}" \
             >/dev/null 2>&1 || return 1
@@ -140,9 +125,4 @@ fi
 cleanup_verification
 trap - EXIT INT TERM
 
-<<<<<<< HEAD
-=======
->>>>>>> feature/codeser
-=======
->>>>>>> origin/feature/codeser
 echo "MinIO buckets and scoped crawler asset policy provisioned successfully."

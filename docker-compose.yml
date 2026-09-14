@@ -23,6 +23,12 @@ services:
     networks:
       - "${ROOMBEACON_DATA_NETWORK}"
 
+    entrypoint:
+      - "bash"
+      - "-c"
+      - "rm -f /var/lib/mysql/mysql.sock && exec docker-entrypoint.sh \"$$@\""
+      - "--"
+
     command:
       - "--character-set-server=${MYSQL_CHARSET}"
       - "--collation-server=${MYSQL_COLLATION}"
@@ -70,6 +76,12 @@ services:
 
     networks:
       - "${ROOMBEACON_ORCHESTRATION_NETWORK}"
+
+    entrypoint:
+      - "bash"
+      - "-c"
+      - "rm -f /var/lib/mysql/mysql.sock && exec docker-entrypoint.sh \"$$@\""
+      - "--"
 
     command:
       - "--character-set-server=utf8mb4"
