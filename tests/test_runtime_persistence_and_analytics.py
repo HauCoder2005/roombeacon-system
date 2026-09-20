@@ -2,7 +2,12 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
+
+from roombeacon_crawler.application.orchestration.errors import CrawlerWorkflowError
+from roombeacon_crawler.application.orchestration.persistence import (
+    persist_bronze_mysql,
+)
 
 from roombeacon_crawler.application.persistence.persist_observations import (
     BronzeImportResult,
@@ -17,6 +22,7 @@ from roombeacon_crawler.domain.ports.persistence_port import (
     RentalPostRepositoryPort,
     TransactionManagerPort,
 )
+from roombeacon_crawler.enums.crawl_status import CrawlStatus
 from roombeacon_crawler.mappers.bronze_observation_loader import (
     BronzeObservationLoader,
     compute_observation_content_hash,
@@ -79,6 +85,88 @@ class TestBronzeObservationLoaderAndHash(unittest.TestCase):
             self.assertEqual(obs.address_raw, "123 Đường 3/2")
             self.assertEqual(obs.amenities_raw, ["Wifi", "Máy lạnh"])
             self.assertIn("content_hash", obs.attributes)
+
+
+class TestScheduledPersistenceBoundary(unittest.TestCase):
+    def test_successful_persistence_result_is_returned_after_post_commit_reporting(self):
+        payload = {
+            "source": "phongtro123",
+            "target_id": "hcm_phongtro",
+            "run_id": "run_post_commit_reporting",
+            "action": "CRAWLED",
+            "crawl_status": CrawlStatus.SUCCESS.value,
+            "bronze_path": "/tmp/bronze",
+        }
+        import_result = BronzeImportResult(
+            total_observations=1,
+            posts_created=1,
+            observations_inserted=1,
+        )
+
+        with (
+            patch(
+                "roombeacon_crawler.infrastructure.storage.minio.raw_artifact_mirror.MinIORawArtifactMirror.mirror_directory",
+                return_value=[],
+            ),
+            patch(
+                "roombeacon_crawler.infrastructure.mysql.schema.ensure_mysql_schema"
+            ),
+            patch(
+                "roombeacon_crawler.mappers.bronze_observation_loader.BronzeObservationLoader.load_from_bronze_dir",
+                return_value=[object()],
+            ),
+            patch(
+                "roombeacon_crawler.infrastructure.mysql.transaction.MySQLTransactionManager"
+            ) as transaction_manager,
+            patch(
+                "roombeacon_crawler.application.persistence.persist_observations.PersistBronzeObservationsUseCase"
+            ) as use_case,
+            patch(
+                "roombeacon_crawler.infrastructure.mysql.query_profiler.MySQLQueryProfiler"
+            ) as query_profiler,
+        ):
+            transaction_manager.return_value.connection = MagicMock()
+            use_case.return_value.execute.return_value = import_result
+            query_profiler.return_value.as_dict.return_value = {}
+
+            result = persist_bronze_mysql(payload)
+
+        self.assertEqual(result["status"], "SUCCESS")
+        self.assertEqual(result["observations_inserted"], 1)
+        self.assertEqual(result["raw_objects_mirrored"], 0)
+
+    def test_confirmed_first_page_source_end_is_successful_without_bronze(self):
+        payload = {
+            "source": "muaban",
+            "target_id": "hcm_phongtro",
+            "run_id": "run_confirmed_empty",
+            "action": "CRAWLED",
+            "crawl_status": CrawlStatus.SUCCESS.value,
+            "stop_reason": "SOURCE_END",
+            "source_end_confirmed": True,
+            "bronze_path": None,
+            "observations_written": 0,
+        }
+
+        result = persist_bronze_mysql(payload)
+
+        self.assertEqual(result["status"], "SUCCESS")
+        self.assertEqual(result["observations_inserted"], 0)
+        self.assertEqual(result["technical_duplicates"], 0)
+
+    def test_successful_crawl_without_bronze_data_is_not_persistence_success(self):
+        payload = {
+            "source": "muaban",
+            "target_id": "hcm_phongtro",
+            "run_id": "run_404",
+            "action": "CRAWLED",
+            "crawl_status": CrawlStatus.SUCCESS.value,
+            "bronze_path": None,
+            "observations_written": 0,
+        }
+
+        with self.assertRaises(CrawlerWorkflowError):
+            persist_bronze_mysql(payload)
 
 
 class TestPersistBronzeObservationsUseCase(unittest.TestCase):

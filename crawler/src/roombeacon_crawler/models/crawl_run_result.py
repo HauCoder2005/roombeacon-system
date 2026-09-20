@@ -67,6 +67,8 @@ class CrawlRunResult:
     bootstrap_next_page: int | None = None
     observed_listing_ids: list[str] = field(default_factory=list)
     new_listing_ids: list[str] = field(default_factory=list)
+    seen_metadata_updates: dict[str, dict] = field(default_factory=dict)
+    source_end_confirmed: bool = False
     errors: list[str] = field(default_factory=list)
     manifest_path: str | None = None
     bronze_path: str | None = None

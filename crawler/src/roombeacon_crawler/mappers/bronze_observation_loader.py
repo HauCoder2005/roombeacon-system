@@ -109,6 +109,7 @@ class BronzeObservationLoader:
                 dt = details_by_id[lid]
                 description_raw = dt.get("description_raw") or dt.get("description") or description_raw
                 address_raw = dt.get("address_raw") or dt.get("address") or address_raw
+                location_raw = dt.get("location_raw") or dt.get("location") or location_raw
                 furnishing_raw = dt.get("furnishing_raw") or dt.get("furnishing") or furnishing_raw
                 deposit_raw = dt.get("deposit_raw") or dt.get("deposit") or deposit_raw
                 seller_phone_raw = dt.get("seller_phone_raw") or dt.get("seller_phone") or seller_phone_raw
@@ -122,6 +123,9 @@ class BronzeObservationLoader:
                 dt_attrs = dt.get("attributes") or {}
                 if dt_attrs:
                     attributes.update(dt_attrs)
+
+                # IMPORTANT: Update item with dt so source_payload captures the rich detail data including map_location
+                item.update(dt)
 
             content_hash = compute_observation_content_hash(
                 title_raw=title_raw,

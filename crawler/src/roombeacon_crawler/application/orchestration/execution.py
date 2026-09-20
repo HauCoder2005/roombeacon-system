@@ -97,6 +97,7 @@ def execute_crawl(qual_payload: dict, **context) -> dict:
 
     # Technical Failure Check
     if result.status in (
+        CrawlStatus.NOT_FOUND,
         CrawlStatus.CONNECTION_ERROR,
         CrawlStatus.SERVER_ERROR,
         CrawlStatus.TIMEOUT,
@@ -145,6 +146,8 @@ def execute_crawl(qual_payload: dict, **context) -> dict:
         "plan": plan_dict,
         "observed_listing_ids": getattr(result, "observed_listing_ids", []),
         "new_listing_ids": getattr(result, "new_listing_ids", []),
+        "seen_metadata_updates": getattr(result, "seen_metadata_updates", {}),
+        "source_end_confirmed": getattr(result, "source_end_confirmed", False),
         "observations_written": getattr(result, "observations_written", len(getattr(result, "observed_listing_ids", []))),
         "records_changed": getattr(result, "records_changed", 0),
         "detail_requests_skipped": getattr(result, "detail_requests_skipped", 0),

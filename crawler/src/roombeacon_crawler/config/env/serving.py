@@ -10,6 +10,6 @@ class BackendEnv:
 
 def load_backend_env() -> BackendEnv:
     return BackendEnv(
-        host=get_str("BACKEND_HOST", default="0.0.0.0") or "0.0.0.0",
+        host=get_str("BACKEND_HOST", default="backend") or "backend",
         port=get_int("BACKEND_PORT", default=8000) or 8000,
     )

@@ -18,6 +18,7 @@ from roombeacon_crawler.application.crawl.frontier_decision import (
     FrontierDecisionProcessor,
 )
 from roombeacon_crawler.application.crawl.page_acquisition import (
+    PageAcquisitionOutcome,
     PageAcquisitionProcessor,
 )
 from roombeacon_crawler.application.crawl.session_state import CrawlSessionState
@@ -148,6 +149,7 @@ class CrawlRunner:
             fetch_coordinator=self.fetch_coordinator,
             robots_policy=self.robots_policy,
             fetch_policy=self.fetch_policy,
+            failure_artifact_writer=self.storage_writer,
         )
         self.page_acquisition_processor = PageAcquisitionProcessor(
             adapter=self.adapter,
@@ -330,6 +332,7 @@ class CrawlRunner:
 
     async def _run_async(self, run_id: str, started_at: str, start_time: float, target_id: str, mode: str, effective_max_pages: int, effective_max_records: int, crawl_details: bool, max_details_per_run: int, stop_after_known_pages: int, start_page: int=1) -> tuple[list[RentalBronzeRecord], CrawlRunResult]:
         """Coordinate session initialization, processors and final publication."""
+        deadline = time.monotonic() + self.settings.max_run_seconds
         state = CrawlSessionState()
         now = datetime.now(timezone.utc)
         if hasattr(self.state_repository, 'get_seen_metadata'):
@@ -360,6 +363,13 @@ class CrawlRunner:
             else 0
         )
         while state.current_page <= state.effective_end_page:
+            # Finish the current page before yielding, so no card is skipped.
+            if state.pages_success > 0 and time.monotonic() >= deadline:
+                state.stop_reason = "TIME_BUDGET_REACHED"
+                if state.is_bootstrap:
+                    state.bootstrap_completed = False
+                    state.bootstrap_next_page = state.current_page
+                break
             page_started = time.perf_counter()
             page = await self.page_acquisition_processor.execute(
                 run_id=run_id,
@@ -373,6 +383,8 @@ class CrawlRunner:
             cards = page.cards
             meta = page.metadata
             raw_html = page.raw_html
+            if page.outcome == PageAcquisitionOutcome.SOURCE_END:
+                state.source_end_confirmed = page.source_end_confirmed
             state.metadata.append(meta)
             state.pages_attempted += int(page.counts_as_attempt)
             state.pages_success += int(page.counts_as_success)
@@ -445,6 +457,7 @@ class CrawlRunner:
         deferred_started = time.perf_counter()
         metadata_start = len(state.metadata)
         deferred = await self.deferred_detail_processor.execute(
+            deadline=deadline,
             run_id=run_id,
             target_id=target_id,
             now=now,
@@ -469,8 +482,6 @@ class CrawlRunner:
         state.detail_address_extracted += deferred.detail_address_extracted
         state.detail_address_parse_failed += deferred.detail_address_parse_failed
         state.details_crawled_count = deferred.attempted
-        if hasattr(self.state_repository, 'record_seen_details') and state.updated_seen_meta:
-            self.state_repository.record_seen_details(self.adapter.SOURCE_NAME, target_id, state.updated_seen_meta)
         elapsed_seconds = time.perf_counter() - start_time
         finished_at = datetime.now(timezone.utc).isoformat()
         records_seen = len(state.observed_listing_ids)
@@ -484,7 +495,7 @@ class CrawlRunner:
         detailed_count = sum((1 for m in all_seen_meta_combined.values() if m.get('last_detailed_at')))
         detail_coverage = detailed_count / total_unique_seen * 100.0 if total_unique_seen > 0 else 0.0
         lightweight_only_listings = max(0, total_unique_seen - detailed_count)
-        result = CrawlRunResult(run_id=run_id, source=self.adapter.SOURCE_NAME, target_id=target_id, mode=mode, target_url=self.adapter.base_url, started_at=started_at, finished_at=finished_at, status=state.final_status, stop_reason=state.stop_reason, failure_reason=state.failure_reason, max_pages=effective_max_pages, max_records=effective_max_records, crawl_details=crawl_details, pages_attempted=state.pages_attempted, pages_success=state.pages_success, pages_failed=state.pages_failed, details_success=state.detail_succeeded + state.deferred_succeeded, details_failed=state.detail_failed + state.deferred_failed, detail_requests_skipped=state.detail_skipped, detail_requests_forced_by_change=state.detail_requests_forced_by_change, detail_required=state.detail_required, detail_requested=state.detail_requested, detail_succeeded=state.detail_succeeded, detail_failed=state.detail_failed, detail_skipped=state.detail_skipped, skipped_known_unchanged_ttl=state.skipped_known_unchanged_ttl, skipped_no_detail_url=state.skipped_no_detail_url, skipped_request_budget=state.skipped_request_budget, skipped_deferred_for_discovery=state.skipped_deferred_for_discovery, skipped_source_policy=state.skipped_source_policy, skipped_other=state.skipped_other, full_address_present=state.full_address_present, full_address_missing=state.full_address_missing, coarse_only_address=state.coarse_only_address, detail_address_extracted=state.detail_address_extracted, detail_address_parse_failed=state.detail_address_parse_failed, deferred_backlog_before=state.deferred_backlog_before, deferred_added=state.deferred_added, deferred_attempted=state.deferred_attempted, deferred_succeeded=state.deferred_succeeded, deferred_failed=state.deferred_failed, deferred_terminal=state.deferred_terminal, deferred_remaining=deferred_remaining, detail_coverage=round(detail_coverage, 2), lightweight_only_listings=lightweight_only_listings, unique_yield=round(unique_yield, 2), change_rate=round(change_rate, 2), records_created=len(state.new_listing_ids), observations_written=len(state.bronze_records), duplicates_skipped=state.duplicates_skipped, records_seen=records_seen, records_new=records_new, records_known=records_known, records_changed=state.records_changed, known_pages_streak_at_stop=state.known_page_streak, bootstrap_completed=state.bootstrap_completed, bootstrap_start_page=start_page if state.is_bootstrap else 1, bootstrap_next_page=state.bootstrap_next_page, observed_listing_ids=state.observed_listing_ids, new_listing_ids=state.new_listing_ids, errors=state.errors, page_acquisition_seconds=state.page_acquisition_seconds, listing_parse_seconds=state.listing_parse_seconds, card_processing_seconds=state.card_processing_seconds, detail_fetch_seconds=state.detail_fetch_seconds, deferred_detail_seconds=state.deferred_detail_seconds, frontier_seconds=state.frontier_seconds, discovery_seconds=state.discovery_seconds, http_client_count=self.http_fetcher.client_count, browser_launch_count=self.browser_fetcher.launch_count, browser_context_count=self.browser_fetcher.context_count, browser_page_count=self.browser_fetcher.page_count)
+        result = CrawlRunResult(run_id=run_id, source=self.adapter.SOURCE_NAME, target_id=target_id, mode=mode, target_url=self.adapter.base_url, started_at=started_at, finished_at=finished_at, status=state.final_status, stop_reason=state.stop_reason, source_end_confirmed=state.source_end_confirmed, failure_reason=state.failure_reason, max_pages=effective_max_pages, max_records=effective_max_records, crawl_details=crawl_details, pages_attempted=state.pages_attempted, pages_success=state.pages_success, pages_failed=state.pages_failed, details_success=state.detail_succeeded + state.deferred_succeeded, details_failed=state.detail_failed + state.deferred_failed, detail_requests_skipped=state.detail_skipped, detail_requests_forced_by_change=state.detail_requests_forced_by_change, detail_required=state.detail_required, detail_requested=state.detail_requested, detail_succeeded=state.detail_succeeded, detail_failed=state.detail_failed, detail_skipped=state.detail_skipped, skipped_known_unchanged_ttl=state.skipped_known_unchanged_ttl, skipped_no_detail_url=state.skipped_no_detail_url, skipped_request_budget=state.skipped_request_budget, skipped_deferred_for_discovery=state.skipped_deferred_for_discovery, skipped_source_policy=state.skipped_source_policy, skipped_other=state.skipped_other, full_address_present=state.full_address_present, full_address_missing=state.full_address_missing, coarse_only_address=state.coarse_only_address, detail_address_extracted=state.detail_address_extracted, detail_address_parse_failed=state.detail_address_parse_failed, deferred_backlog_before=state.deferred_backlog_before, deferred_added=state.deferred_added, deferred_attempted=state.deferred_attempted, deferred_succeeded=state.deferred_succeeded, deferred_failed=state.deferred_failed, deferred_terminal=state.deferred_terminal, deferred_remaining=deferred_remaining, detail_coverage=round(detail_coverage, 2), lightweight_only_listings=lightweight_only_listings, unique_yield=round(unique_yield, 2), change_rate=round(change_rate, 2), records_created=len(state.new_listing_ids), observations_written=len(state.bronze_records), duplicates_skipped=state.duplicates_skipped, records_seen=records_seen, records_new=records_new, records_known=records_known, records_changed=state.records_changed, known_pages_streak_at_stop=state.known_page_streak, bootstrap_completed=state.bootstrap_completed, bootstrap_start_page=start_page if state.is_bootstrap else 1, bootstrap_next_page=state.bootstrap_next_page, observed_listing_ids=state.observed_listing_ids, new_listing_ids=state.new_listing_ids, seen_metadata_updates=state.updated_seen_meta, errors=state.errors, page_acquisition_seconds=state.page_acquisition_seconds, listing_parse_seconds=state.listing_parse_seconds, card_processing_seconds=state.card_processing_seconds, detail_fetch_seconds=state.detail_fetch_seconds, deferred_detail_seconds=state.deferred_detail_seconds, frontier_seconds=state.frontier_seconds, discovery_seconds=state.discovery_seconds, http_client_count=self.http_fetcher.client_count, browser_launch_count=self.browser_fetcher.launch_count, browser_context_count=self.browser_fetcher.context_count, browser_page_count=self.browser_fetcher.page_count)
         bronze_started = time.perf_counter()
         bronze_dir = self.storage_writer.save_bronze_dataset(run_id=run_id, source=self.adapter.SOURCE_NAME, records=state.bronze_records, metadata=state.metadata, details=state.detail_records if crawl_details and state.detail_records else None)
         result.bronze_serialization_seconds = time.perf_counter() - bronze_started

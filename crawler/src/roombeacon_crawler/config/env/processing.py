@@ -25,23 +25,23 @@ class PipelineEnv:
 
 def load_duckdb_env() -> DuckDBEnv:
     return DuckDBEnv(
-        database=get_str("DUCKDB_DATABASE", default="data/duckdb/roombeacon_analytics.duckdb") or "data/duckdb/roombeacon_analytics.duckdb",
-        temp_directory=get_str("DUCKDB_TEMP_DIRECTORY", default="data/duckdb/tmp") or "data/duckdb/tmp",
-        memory_limit=get_str("DUCKDB_MEMORY_LIMIT", default="2GB") or "2GB",
+        database=get_str("DUCKDB_DATABASE", default="/data/duckdb/roombeacon_analytics.duckdb") or "/data/duckdb/roombeacon_analytics.duckdb",
+        temp_directory=get_str("DUCKDB_TEMP_DIRECTORY", default="/data/duckdb/tmp") or "/data/duckdb/tmp",
+        memory_limit=get_str("DUCKDB_MEMORY_LIMIT", default="4GB") or "4GB",
         threads=get_int("DUCKDB_THREADS", default=4) or 4,
     )
 
 
 def load_processing_env() -> ProcessingEnv:
     return ProcessingEnv(
-        silver_dir=get_str("PROCESSING_SILVER_DIR", default="data/silver") or "data/silver",
+        silver_dir=get_str("PROCESSING_SILVER_DIR", default="/data/silver") or "/data/silver",
     )
 
 
 def load_pipeline_env() -> PipelineEnv:
     return PipelineEnv(
-        raw_dir=get_str("RAW_DATA_DIR", default="data/raw") or "data/raw",
-        bronze_dir=get_str("BRONZE_DATA_DIR", default="data/bronze") or "data/bronze",
-        silver_dir=get_str("SILVER_DATA_DIR", default="data/silver") or "data/silver",
-        gold_dir=get_str("GOLD_DATA_DIR", default="data/gold") or "data/gold",
+        raw_dir=get_str("RAW_DATA_DIR", default="./data/raw") or "./data/raw",
+        bronze_dir=get_str("BRONZE_DATA_DIR", default="./data/bronze") or "./data/bronze",
+        silver_dir=get_str("SILVER_DATA_DIR", default="./data/silver") or "./data/silver",
+        gold_dir=get_str("GOLD_DATA_DIR", default="./data/gold") or "./data/gold",
     )

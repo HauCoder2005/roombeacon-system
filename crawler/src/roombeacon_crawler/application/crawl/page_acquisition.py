@@ -48,6 +48,7 @@ class PageAcquisitionResult:
     counts_as_attempt: bool
     counts_as_success: bool
     counts_as_failure: bool
+    source_end_confirmed: bool = False
 
 
 class PageAcquisitionProcessor:
@@ -59,6 +60,7 @@ class PageAcquisitionProcessor:
 
     _FETCH_FAILURES = frozenset(
         {
+            CrawlStatus.NOT_FOUND,
             CrawlStatus.CONNECTION_ERROR,
             CrawlStatus.SERVER_ERROR,
             CrawlStatus.TIMEOUT,
@@ -122,6 +124,17 @@ class PageAcquisitionProcessor:
         else:
             outcome = PageAcquisitionOutcome.SOURCE_END
 
+        source_end_confirmed = (
+            outcome == PageAcquisitionOutcome.SOURCE_END
+            and metadata.crawl_status == CrawlStatus.SUCCESS
+            and getattr(
+                getattr(self._adapter, "listing_parser", None),
+                "validates_source_structure",
+                False,
+            )
+            is True
+        )
+
         return PageAcquisitionResult(
             page_url=page_url,
             cards=cards,
@@ -135,4 +148,5 @@ class PageAcquisitionProcessor:
                 PageAcquisitionOutcome.ACCESS_CHALLENGE,
                 PageAcquisitionOutcome.FETCH_ERROR,
             },
+            source_end_confirmed=source_end_confirmed,
         )

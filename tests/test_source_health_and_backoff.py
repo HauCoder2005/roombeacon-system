@@ -176,6 +176,53 @@ class TestSourceHealthAndAdaptiveBackoff(unittest.TestCase):
         self.assertEqual(health.last_outcome, SourceHealthOutcome.ACCESS_CHALLENGE)
         self.assertIsNotNone(health.cooldown_until)
 
+    def test_checkpoint_does_not_advance_when_persistence_skipped_no_data(self) -> None:
+        """Crawl success alone cannot authorize durable progress."""
+        from roombeacon_crawler.application.orchestration.checkpoint import (
+            update_checkpoint,
+        )
+
+        initial_state = CrawlTargetState(
+            source="muaban",
+            target_id="hcm_phongtro",
+            bootstrap_completed=False,
+            bootstrap_next_page=1,
+            last_success_at="2026-09-14T00:00:00+00:00",
+        )
+        self.state_repo.save_state(initial_state)
+        persist_payload = {
+            "source": "muaban",
+            "target_id": "hcm_phongtro",
+            "status": "SKIPPED_NO_DATA",
+            "crawl_result": {
+                "source": "muaban",
+                "target_id": "hcm_phongtro",
+                "crawl_status": CrawlStatus.SUCCESS.value,
+                "action": "CRAWLED",
+                "plan": {"mode": "BOOTSTRAP_FULL", "interval_minutes": 60},
+                "observed_listing_ids": ["not-durable"],
+                "bootstrap_completed": True,
+            },
+        }
+
+        with patch(
+            "roombeacon_crawler.application.orchestration.checkpoint.LocalCrawlStateRepository",
+            return_value=self.state_repo,
+        ), patch(
+            "roombeacon_crawler.application.orchestration.checkpoint.LocalSourceHealthRepository",
+            return_value=self.health_repo,
+        ):
+            result = update_checkpoint(persist_payload=persist_payload)
+
+        saved = self.state_repo.get_state("muaban", "hcm_phongtro")
+        self.assertFalse(result["success_checkpoint_advanced"])
+        self.assertEqual(saved.last_success_at, initial_state.last_success_at)
+        self.assertEqual(saved.bootstrap_next_page, 1)
+        self.assertNotIn(
+            "not-durable",
+            self.state_repo.get_seen_listing_ids("muaban", "hcm_phongtro"),
+        )
+
     def test_robots_fetch_error_and_root_cause_preservation(self) -> None:
         """Test Section 24: Robots.txt trả về HTTP 403 lưu đúng root cause ROBOTS_FETCH_ERROR và không advance success checkpoint."""
         from airflow.dags.crawler.roombeacon_crawler import qualify_target, update_checkpoint

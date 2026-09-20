@@ -7,6 +7,7 @@ acquire listing pages, decide the crawl frontier, or persist run checkpoints.
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
+import time
 
 from roombeacon_crawler.enums.crawl_target_type import CrawlTargetType
 from roombeacon_crawler.models.crawl_target import CrawlTarget
@@ -295,6 +296,7 @@ class DeferredDetailProcessor:
         detail_records: list,
         metadata: list,
         updated_seen_meta: dict[str, dict],
+        deadline: float | None = None,
     ) -> DeferredDetailResult:
         """Process the eligible backlog slice and return its aggregate outcome."""
         backlog_before, pending_details = self._select_pending_details(
@@ -303,9 +305,12 @@ class DeferredDetailProcessor:
             crawl_details=crawl_details,
             max_details_per_run=max_details_per_run,
         )
-        metrics = _DeferredDetailMetrics(attempted=len(pending_details))
+        metrics = _DeferredDetailMetrics()
 
         for pending_detail in pending_details:
+            if deadline is not None and time.monotonic() >= deadline:
+                break  # Remaining items stay pending in the durable queue.
+            metrics.attempted += 1
             outcome = await self._fetch_pending_detail(
                 pending_detail=pending_detail,
                 run_id=run_id,

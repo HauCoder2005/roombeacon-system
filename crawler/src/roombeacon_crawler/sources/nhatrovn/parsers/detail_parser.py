@@ -1,3 +1,4 @@
+from roombeacon_crawler.sources.map_extractor import MapLocationExtractor
 """Extract NhaTroVN detail attributes from an acquired detail document."""
 
 import logging
@@ -66,6 +67,7 @@ class NhatroVNDetailParser:
         """Bóc tách dữ liệu chi tiết của phòng trọ từ HTML."""
         if not html:
             return ListingDetailRaw(
+            map_location=MapLocationExtractor.extract_map_from_html(html),
                 source=self.source_name,
                 listing_id=listing_id,
                 detail_url=detail_url,
@@ -205,6 +207,7 @@ class NhatroVNDetailParser:
         total_rooms_raw = total_badge.get_text() if total_badge else None
 
         return ListingDetailRaw(
+            map_location=MapLocationExtractor.extract_map_from_html(html),
             source=self.source_name,
             listing_id=listing_id,
             detail_url=detail_url,

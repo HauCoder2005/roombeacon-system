@@ -1,6 +1,7 @@
 """Declare CafeLand HTTP source policy and audited path pagination."""
 
 from urllib.parse import urlparse
+import re
 
 from roombeacon_crawler.enums.crawl_target_type import CrawlTargetType
 from roombeacon_crawler.enums.fetch_strategy import FetchStrategy
@@ -23,6 +24,30 @@ class CafelandPagination(PathPagination):
         if page_number <= 1:
             return base_url
         return f"{base_url.rstrip('/')}/page-{page_number}/"
+
+    def has_next_page(
+        self,
+        current_page: int,
+        max_pages: int,
+        current_items_count: int,
+        raw_html: str | None = None,
+        **kwargs,
+    ) -> bool:
+        """Advance only when Caféland renders the precise next-page link.
+
+        Out-of-range ``/page-N/`` requests redirect to page one with valid
+        cards, so item count alone cannot establish that another page exists.
+        """
+        if current_page >= max_pages or current_items_count <= 0 or not raw_html:
+            return False
+        next_page = current_page + 1
+        return bool(
+            re.search(
+                rf"href=[\"'][^\"']*/page-{next_page}/[\"']",
+                raw_html,
+                re.IGNORECASE,
+            )
+        )
 
 
 class CafelandSourceAdapter(ScheduledHtmlSourceAdapter):

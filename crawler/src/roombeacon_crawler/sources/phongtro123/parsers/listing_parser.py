@@ -150,7 +150,7 @@ class Phongtro123ListingParser:
                 if detail_url in seen_urls:
                     continue
 
-                title_raw = title_node.get_text() if title_node else link_node.attrs.get("title") or link_node.get_text()
+                title_raw = link_node.attrs.get("title", "").strip() or link_node.get_text()
                 if not title_raw:
                     continue
 

@@ -10,18 +10,25 @@ BOOTSTRAP_PATH = ROOT / "infrastructure/minio/bootstrap.sh"
 COMPOSE_PATH = ROOT / "docker-compose.yml"
 
 
-def test_asset_policy_is_object_scoped_and_least_privilege():
+def test_asset_policy_is_scoped_to_runtime_operations():
     policy = json.loads(POLICY_PATH.read_text(encoding="utf-8"))
     statements = policy["Statement"]
-    assert len(statements) == 1
-    assert statements[0]["Effect"] == "Allow"
-    assert set(statements[0]["Action"]) == {"s3:GetObject", "s3:PutObject"}
-    assert statements[0]["Resource"] == ["arn:aws:s3:::roombeacon-assets/*"]
+    assert len(statements) == 2
+    listing, objects = statements
+    assert listing == {
+        "Effect": "Allow", "Action": ["s3:ListBucket"],
+        "Resource": ["arn:aws:s3:::roombeacon-assets"],
+    }
+    assert objects["Effect"] == "Allow"
+    assert set(objects["Action"]) == {"s3:GetObject", "s3:PutObject"}
+    assert set(objects["Resource"]) == {
+        "arn:aws:s3:::roombeacon-assets/*", "arn:aws:s3:::roombeacon-raw/*",
+    }
 
 
-def test_asset_policy_grants_no_admin_list_or_delete_actions():
+def test_asset_policy_grants_no_admin_or_delete_actions():
     text = POLICY_PATH.read_text(encoding="utf-8")
-    for forbidden in ("s3:*", "ListBucket", "DeleteObject", "CreateBucket", "arn:aws:s3:::*"):
+    for forbidden in ("s3:*", "DeleteObject", "CreateBucket", "arn:aws:s3:::*"):
         assert forbidden not in text
 
 

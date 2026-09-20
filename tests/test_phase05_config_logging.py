@@ -57,7 +57,7 @@ class TestSafeDAGImports(unittest.TestCase):
         import roombeacon_crawler.config.get_env as config
 
         dag_files = sorted((REPO_ROOT / "airflow" / "dags").rglob("*.py"))
-        self.assertEqual(len(dag_files), 5)
+        self.assertEqual(len(dag_files), 6)
         config.reset_environment()
 
         with patch.object(

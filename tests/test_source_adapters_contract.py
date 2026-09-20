@@ -1,6 +1,8 @@
+import json
 import unittest
 
 from roombeacon_crawler.enums.crawl_target_type import CrawlTargetType
+from roombeacon_crawler.domain.errors.domain_error import ParseError
 from roombeacon_crawler.sources.base import BaseSourceAdapter, SourcePagination
 from roombeacon_crawler.sources.batdongsan.adapter import (
     BatDongSanSourceAdapter,
@@ -17,6 +19,9 @@ from roombeacon_crawler.sources.muaban.discovery.date_interpreter import (
 )
 from roombeacon_crawler.sources.muaban.discovery.pagination import (
     MuabanPagination,
+)
+from roombeacon_crawler.sources.muaban.parsers.listing_parser import (
+    MuabanListingParser,
 )
 from roombeacon_crawler.sources.nhatot.adapter import NhatotSourceAdapter
 from roombeacon_crawler.sources.nhatrovn.adapter import NhatroVNSourceAdapter
@@ -94,6 +99,10 @@ class TestSourceAdaptersContract(unittest.TestCase):
         self.assertTrue(MuabanSourceAdapter.supports("https://muaban.net/bat-dong-san/cho-thue-phong-tro-nha-tro"))
         self.assertTrue(MuabanSourceAdapter.supports("https://www.muaban.net/cho-thue-nha-dat"))
         self.assertFalse(MuabanSourceAdapter.supports("https://batdongsan.com.vn/"))
+        self.assertEqual(
+            adapter.scheduled_targets()[0].url,
+            "https://muaban.net/bat-dong-san/cho-thue-nha-tro-phong-tro-ho-chi-minh",
+        )
 
         # Listing classification
         self.assertEqual(
@@ -112,6 +121,91 @@ class TestSourceAdaptersContract(unittest.TestCase):
             adapter.classify_url("https://muaban.net/viec-lam/tuyen-dung-nhan-vien"),
             CrawlTargetType.UNSUPPORTED,
         )
+
+    def test_muaban_parser_reads_current_embedded_listing_payload(self) -> None:
+        payload = {
+            "props": {
+                "pageProps": {
+                    "classified": {
+                        "items": [
+                            {
+                                "id": 71228278,
+                                "url": "/bat-dong-san/example-id71228278",
+                                "title": "Rental title",
+                                "price_display": "3 million",
+                                "location": "District 4",
+                                "publish_display": "Today",
+                                "covers": ["/images/example.jpg"],
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+        html = (
+            '<html><script id="__NEXT_DATA__" type="application/json">'
+            + json.dumps(payload)
+            + "</script></html>"
+        )
+
+        cards = MuabanListingParser().parse(
+            html,
+            "https://muaban.net/bat-dong-san/rentals",
+        )
+
+        self.assertEqual(len(cards), 1)
+        self.assertEqual(cards[0].listing_id, "71228278")
+        self.assertEqual(
+            cards[0].detail_url,
+            "https://muaban.net/bat-dong-san/example-id71228278",
+        )
+
+    def test_muaban_parser_accepts_structurally_valid_empty_payload(self) -> None:
+        payload = {
+            "props": {"pageProps": {"classified": {"items": []}}}
+        }
+        html = (
+            '<html><script id="__NEXT_DATA__" type="application/json">'
+            + json.dumps(payload)
+            + "</script></html>"
+        )
+
+        cards = MuabanListingParser().parse(
+            html,
+            "https://muaban.net/bat-dong-san/rentals",
+        )
+
+        self.assertEqual(cards, [])
+
+    def test_muaban_parser_rejects_missing_or_incompatible_schema(self) -> None:
+        with self.assertRaises(ParseError):
+            MuabanListingParser().parse(
+                "",
+                "https://muaban.net/bat-dong-san/rentals",
+            )
+        with self.assertRaises(ParseError):
+            MuabanListingParser().parse(
+                "<html><body>no embedded listing structure</body></html>",
+                "https://muaban.net/bat-dong-san/rentals",
+            )
+
+        invalid_payloads = (
+            {"props": {"pageProps": {}}},
+            {"props": {"pageProps": {"classified": {"items": {}}}}},
+        )
+
+        for payload in invalid_payloads:
+            with self.subTest(payload=payload):
+                html = (
+                    '<html><script id="__NEXT_DATA__" type="application/json">'
+                    + json.dumps(payload)
+                    + "</script></html>"
+                )
+                with self.assertRaises(ParseError):
+                    MuabanListingParser().parse(
+                        html,
+                        "https://muaban.net/bat-dong-san/rentals",
+                    )
 
     def test_nhatrovn_url_classification_and_support(self) -> None:
         adapter = NhatroVNSourceAdapter()

@@ -4,7 +4,7 @@ Task wrappers delegate business behavior to Airflow-free application workflows
 and translate only the final scheduler failure boundary.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import logging
 
 from airflow.exceptions import AirflowException
@@ -47,7 +47,7 @@ def _translate_failure(operation: str, callback, *args, **kwargs):
             operation,
             type(exc).__name__,
         )
-        raise AirflowException(str(exc)) from None
+        raise AirflowException(str(exc)) from exc
 
 
 @task(task_id="01_config_load_sources")
@@ -68,7 +68,7 @@ def qualify_target(plan: dict, **context) -> dict:
     return _translate_failure("qualify_target", workflow.qualify_target, plan, **context)
 
 
-@task(task_id="04_crawl_execute_source")
+@task(task_id="04_crawl_execute_source", execution_timeout=timedelta(minutes=10))
 def execute_crawl(qual_payload: dict, **context) -> dict:
     """Execute one qualified crawl through the application boundary."""
     return _translate_failure("execute_crawl", workflow.execute_crawl, qual_payload, **context)
@@ -140,16 +140,16 @@ def summarize_run(
             task_ids="02_config_plan_crawls"
         )
         qualifications = qualifications if qualifications is not None else task_instance.xcom_pull(
-            task_ids="03_crawl_check_eligibility"
+            task_ids=["03_crawl_check_eligibility"]
         )
         crawl_results = crawl_results if crawl_results is not None else task_instance.xcom_pull(
-            task_ids="04_crawl_execute_source"
+            task_ids=["04_crawl_execute_source"]
         )
         persistence_results = persistence_results if persistence_results is not None else task_instance.xcom_pull(
-            task_ids="05_storage_save_bronze"
+            task_ids=["05_storage_save_bronze"]
         )
         checkpoints = checkpoints if checkpoints is not None else task_instance.xcom_pull(
-            task_ids="06_state_update_checkpoint"
+            task_ids=["06_state_update_checkpoint"]
         )
         analytics_summary = (
             analytics_summary

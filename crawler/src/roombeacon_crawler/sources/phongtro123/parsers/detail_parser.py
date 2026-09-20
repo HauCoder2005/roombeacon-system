@@ -1,3 +1,4 @@
+from roombeacon_crawler.sources.map_extractor import MapLocationExtractor
 """Extract PhongTro123 detail fields into the raw detail model."""
 
 from datetime import datetime, timezone
@@ -183,15 +184,18 @@ class Phongtro123DetailParser:
                 if src and not src.startswith("data:"):
                     image_urls.append(urljoin(source_url, src))
 
+            map_location = MapLocationExtractor.extract_map_from_html(html)
+
             return ListingDetailRaw(
+                map_location=map_location,
                 source=self.source_name,
                 listing_id=listing_id,
                 detail_url=effective_url,
                 title_raw=title_raw,
                 price_raw=price_raw,
                 area_raw=area_raw,
-                address_raw=address_raw,
-                location_raw=address_raw,
+                address_raw=address_raw or (map_location.query_raw if map_location else None),
+                location_raw=address_raw or (map_location.query_raw if map_location else None),
                 description_raw=description_raw,
                 seller_name_raw=seller_name_raw,
                 image_urls_raw=image_urls,

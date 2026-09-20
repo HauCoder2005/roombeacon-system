@@ -2,7 +2,7 @@
 
 import re
 
-from roombeacon_crawler.sources.common_html import HtmlNode, SourceDetailParser
+from roombeacon_crawler.sources.common_html import HtmlNode, SourceDetailParser, parse_html
 
 
 class CafelandDetailParser(SourceDetailParser):
@@ -27,7 +27,25 @@ class CafelandDetailParser(SourceDetailParser):
         if detail is not None and "/moi-gioi/" in detail_url.casefold():
             detail.address_raw = None
             detail.location_raw = None
+
+        if detail is not None:
+            detail.area_raw = detail.area_raw or self._extract_labeled_area(
+                parse_html(html)
+            )
+
         return detail
+
+    @staticmethod
+    def _extract_labeled_area(root: HtmlNode) -> str | None:
+        """Read the area value paired with CafeLand's ``Diện tích`` label."""
+        for item in root.find_all(class_token="col-item"):
+            label = item.first(class_token="infor-note")
+            value = item.first(class_token="infor-data")
+            if label and value and label.text().strip().casefold() == "diện tích":
+                area = value.text().strip()
+                if area:
+                    return area
+        return None
 
     def _valid_address(self, raw_address: str) -> str | None:
         address_candidate = raw_address.strip().strip(",").strip()

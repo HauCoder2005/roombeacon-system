@@ -34,6 +34,7 @@ class CrawlerSettings:
     max_total_records: int = field(
         default_factory=lambda: env.crawler.max_total_records
     )
+    max_run_seconds: float = field(default_factory=lambda: env.crawler.max_run_seconds)
     max_details_per_run: int = 20
     crawl_date_mode: CrawlDateMode = field(
         default_factory=lambda: CrawlDateMode.from_str(env.crawler.date_mode)

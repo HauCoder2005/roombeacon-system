@@ -55,7 +55,34 @@ ranked_posts AS (
         price.price_amount,
         detail.area_value,
         address.full_address_text,
-        address.full_address_text AS location_raw,
+        NULLIF(
+            TRIM(json_extract_string(version.source_payload, '$.location_raw')),
+            ''
+        ) AS location_raw,
+        json_extract_string(version.source_payload, '$.map_location.provider') AS map_provider,
+        CASE WHEN (
+            platform.code = 'cafeland'
+            AND TRY_CAST(json_extract_string(version.source_payload, '$.map_location.latitude') AS DOUBLE) = 10.876248
+            AND TRY_CAST(json_extract_string(version.source_payload, '$.map_location.longitude') AS DOUBLE) = 106.660338
+        ) OR (
+            platform.code = 'nhatrovn'
+            AND TRY_CAST(json_extract_string(version.source_payload, '$.map_location.latitude') AS DOUBLE) = 10.6979911
+            AND TRY_CAST(json_extract_string(version.source_payload, '$.map_location.longitude') AS DOUBLE) = 106.7168188
+        ) THEN NULL ELSE
+            TRY_CAST(json_extract_string(version.source_payload, '$.map_location.latitude') AS DOUBLE)
+        END AS map_latitude,
+        CASE WHEN (
+            platform.code = 'cafeland'
+            AND TRY_CAST(json_extract_string(version.source_payload, '$.map_location.latitude') AS DOUBLE) = 10.876248
+            AND TRY_CAST(json_extract_string(version.source_payload, '$.map_location.longitude') AS DOUBLE) = 106.660338
+        ) OR (
+            platform.code = 'nhatrovn'
+            AND TRY_CAST(json_extract_string(version.source_payload, '$.map_location.latitude') AS DOUBLE) = 10.6979911
+            AND TRY_CAST(json_extract_string(version.source_payload, '$.map_location.longitude') AS DOUBLE) = 106.7168188
+        ) THEN NULL ELSE
+            TRY_CAST(json_extract_string(version.source_payload, '$.map_location.longitude') AS DOUBLE)
+        END AS map_longitude,
+        json_extract_string(version.source_payload, '$.map_location.query_raw') AS map_query_raw,
         COALESCE(
             address.rental_post_version_id <> version.id,
             FALSE
@@ -83,20 +110,35 @@ ranked_posts AS (
         ON detail.rental_post_version_id = version.id
 )
 SELECT
-    source_code,
-    rental_post_id,
-    source_listing_id,
-    title_raw,
-    url,
-    price_amount,
-    area_value,
-    full_address_text,
-    location_raw,
-    full_address_inherited,
-    observed_at AS latest_observed_at,
-    first_observed_at,
-    last_observed_at,
-    active_days
-FROM ranked_posts
-WHERE row_number = 1
-ORDER BY last_observed_at DESC;
+    rp.source_code,
+    rp.rental_post_id,
+    rp.source_listing_id,
+    rp.title_raw,
+    rp.url,
+    rp.price_amount,
+    rp.area_value,
+    rp.full_address_text,
+    rp.location_raw,
+    rp.full_address_inherited,
+    rp.map_provider,
+    rp.map_latitude,
+    rp.map_longitude,
+    rp.map_query_raw,
+
+    COALESCE(
+        rp.full_address_text,
+        rp.location_raw
+    ) AS best_address_text,
+    CASE
+        WHEN rp.full_address_text IS NOT NULL THEN 'source_detail'
+        WHEN rp.location_raw IS NOT NULL THEN 'source_card'
+        ELSE 'none'
+    END AS best_address_source,
+
+    rp.observed_at AS latest_observed_at,
+    rp.first_observed_at,
+    rp.last_observed_at,
+    rp.active_days
+FROM ranked_posts rp
+WHERE rp.row_number = 1
+ORDER BY rp.last_observed_at DESC;

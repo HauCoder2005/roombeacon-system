@@ -1,3 +1,4 @@
+from roombeacon_crawler.sources.map_extractor import MapLocationExtractor
 """Extract the primary NhaTot detail, including its scoped full address."""
 
 import json
@@ -103,6 +104,7 @@ class NhatotDetailParser:
 
         if not html:
             return ListingDetailRaw(
+            map_location=MapLocationExtractor.extract_map_from_html(html),
                 source=self.source_name,
                 listing_id=listing_id,
                 detail_url=detail_url,
@@ -122,6 +124,7 @@ class NhatotDetailParser:
         except Exception as exc:
             logger.error("NhaTot detail DOM parse failed (error_class=%s)", type(exc).__name__)
             return ListingDetailRaw(
+            map_location=MapLocationExtractor.extract_map_from_html(html),
                 source=self.source_name,
                 listing_id=listing_id,
                 detail_url=detail_url,
@@ -250,6 +253,7 @@ class NhatotDetailParser:
                     amenities_raw.append(amenity_text)
 
         return ListingDetailRaw(
+            map_location=MapLocationExtractor.extract_map_from_html(html),
             source=self.source_name,
             listing_id=listing_id,
             detail_url=detail_url,

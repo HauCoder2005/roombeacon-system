@@ -1,3 +1,4 @@
+from roombeacon_crawler.models.map_location import MapLocation
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -41,7 +42,16 @@ class ListingDetailRaw:
     image_urls_raw: list[str] = field(default_factory=list)
     amenities_raw: list[str] = field(default_factory=list)
 
+    map_location: "MapLocation | None" = None
+
     crawl_run_id: str | None = None
     crawled_at: str | None = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
+
+    def __post_init__(self):
+        if self.map_location and self.map_location.query_raw:
+            if not self.address_raw:
+                self.address_raw = self.map_location.query_raw
+            if not self.location_raw:
+                self.location_raw = self.map_location.query_raw

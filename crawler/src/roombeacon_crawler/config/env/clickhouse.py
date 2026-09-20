@@ -19,5 +19,5 @@ def load_clickhouse_env() -> ClickHouseEnv:
         native_port=get_int("CLICKHOUSE_NATIVE_PORT", default=9000) or 9000,
         user=get_str("CLICKHOUSE_USER", default="default") or "default",
         password=get_str("CLICKHOUSE_PASSWORD", default="") or "",
-        database=get_str("CLICKHOUSE_DATABASE", default="default") or "default",
+        database=get_str("CLICKHOUSE_DATABASE", default="roombeacon_analytics") or "roombeacon_analytics",
     )

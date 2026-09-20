@@ -1,3 +1,4 @@
+from roombeacon_crawler.sources.map_extractor import MapLocationExtractor
 """Extract BatDongSan detail fields without persistence side effects."""
 
 import logging
@@ -25,6 +26,7 @@ class BatDongSanDetailParser:
         """Extract one source-near detail record from the supplied response."""
         if not html:
             return ListingDetailRaw(
+            map_location=MapLocationExtractor.extract_map_from_html(html),
                 source=self.source_name,
                 listing_id=listing_id,
                 detail_url=detail_url,
@@ -49,6 +51,7 @@ class BatDongSanDetailParser:
         description_raw = desc_elem.get_text() if desc_elem else None
 
         return ListingDetailRaw(
+            map_location=MapLocationExtractor.extract_map_from_html(html),
             source=self.source_name,
             listing_id=listing_id,
             detail_url=detail_url,

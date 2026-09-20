@@ -11,6 +11,7 @@ from typing import Sequence
 
 from roombeacon_crawler.domain.errors.domain_error import PersistenceError
 from roombeacon_crawler.domain.models.bronze_observation import BronzeObservation
+from roombeacon_crawler.models.persistence_context import PersistenceContext
 from roombeacon_crawler.domain.ports.persistence_port import (
     ObservationRepositoryPort,
     PlatformRepositoryPort,
@@ -69,7 +70,7 @@ class PersistBronzeObservationsUseCase:
         self.children_repo = children_repo
         self.transaction_mgr = transaction_mgr
 
-    def execute(self, observations: Sequence[BronzeObservation]) -> BronzeImportResult:
+    def execute(self, observations: Sequence[BronzeObservation], context: PersistenceContext | None = None) -> BronzeImportResult:
         """Thực thi persist danh sách BronzeObservation."""
         if not observations:
             return BronzeImportResult(total_observations=0)
@@ -120,7 +121,7 @@ class PersistBronzeObservationsUseCase:
                     # 3. Quản lý Phiên bản Quan sát (rental_post_versions)
                     phase_started = time.perf_counter()
                     version_id, is_inserted = self.observation_repo.insert_observation(
-                        obs, post_id=post_id
+                        obs, post_id=post_id, context=context
                     )
                     result.rental_post_versions_seconds += time.perf_counter() - phase_started
 

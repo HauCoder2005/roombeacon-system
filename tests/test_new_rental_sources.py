@@ -80,6 +80,39 @@ def test_new_source_missing_fields_are_not_invented(source):
     assert detail.address_raw is None
 
 
+def test_chothuephongtro_extracts_address_from_location_section():
+    adapter = SourceRegistry().get("chothuephongtro")()
+    detail = adapter.detail_parser.parse(
+        """
+        <section class="post-section">
+          <div class="section-header">Vị trí phòng trọ</div>
+          <div class="section-content">
+            Đường Sông Đáy, Phường 2, Tân Bình, Hồ Chí Minh
+          </div>
+        </section>
+        <footer><div class="location">Công ty TNHH Cho Thuê Phòng Trọ</div></footer>
+        """,
+        detail_url="https://chothuephongtro.me/phong-pr123456.html",
+        listing_id="123456",
+    )
+
+    assert detail.address_raw == (
+        "Đường Sông Đáy, Phường 2, Tân Bình, Hồ Chí Minh"
+    )
+
+
+def test_chothuephongtro_does_not_use_footer_location_as_listing_address():
+    adapter = SourceRegistry().get("chothuephongtro")()
+    detail = adapter.detail_parser.parse(
+        '<h1>Phòng trọ</h1><footer><div class="location">'
+        "Công ty TNHH Cho Thuê Phòng Trọ</div></footer>",
+        detail_url="https://chothuephongtro.me/phong-pr123456.html",
+        listing_id="123456",
+    )
+
+    assert detail.address_raw is None
+
+
 @pytest.mark.parametrize("source", SOURCE_CASES)
 def test_new_source_pagination_matches_audited_policy(source):
     adapter = SourceRegistry().get(source)()
@@ -153,6 +186,68 @@ def test_cafeland_broker_profile_is_not_a_rental_detail():
     assert adapter.classify_url(
         "https://nhadat.cafeland.vn/moi-gioi/profile.html"
     ) is CrawlTargetType.UNSUPPORTED
+
+
+def test_cafeland_listing_parser_rejects_broker_profile_cards():
+    adapter = SourceRegistry().get("cafeland")()
+    rows = adapter.listing_parser.parse(
+        '''
+        <div class="row-item">
+          <a href="/moi-gioi/cat-binh-276014.html">Cát Bình</a>
+        </div>
+        <div class="row-item">
+          <a href="/phong-tro-hoc-mon-3144910.html">Phòng trọ Hóc Môn</a>
+        </div>
+        ''',
+        adapter.DEFAULT_BASE_URL,
+    )
+
+    assert [(row.listing_id, row.title_raw) for row in rows] == [
+        ("3144910", "Phòng trọ Hóc Môn")
+    ]
+
+
+def test_cafeland_detail_parser_extracts_labeled_area_from_information_block():
+    adapter = SourceRegistry().get("cafeland")()
+    detail = adapter.detail_parser.parse(
+        '''
+        <div class="reals-info-group">
+          <div class="col-item">
+            <div class="infor-note">Giá bán</div><div class="infor-data">8 triệu</div>
+          </div>
+          <div class="col-item">
+            <div class="infor-note">Diện tích</div><div class="infor-data">91m2</div>
+          </div>
+        </div>
+        ''',
+        detail_url="https://nhadat.cafeland.vn/listing-3132271.html",
+    )
+
+    assert detail.price_raw == "8 triệu"
+    assert detail.area_raw == "91m2"
+
+
+def test_cafeland_pagination_uses_source_next_anchor_and_stops_at_last_page():
+    adapter = SourceRegistry().get("cafeland")()
+
+    assert adapter.pagination.build_page_url(adapter.DEFAULT_BASE_URL, 2).endswith(
+        "/page-2/"
+    )
+    assert adapter.pagination.build_page_url(adapter.DEFAULT_BASE_URL, 3).endswith(
+        "/page-3/"
+    )
+    assert adapter.pagination.has_next_page(
+        current_page=1,
+        max_pages=10,
+        current_items_count=20,
+        raw_html='<ul class="pagination"><li><a href="/page-2/">2</a></li></ul>',
+    )
+    assert not adapter.pagination.has_next_page(
+        current_page=3,
+        max_pages=10,
+        current_items_count=20,
+        raw_html='<ul class="pagination"><li><a href="/page-2/">2</a></li><li class="active"><a>3</a></li></ul>',
+    )
 
 
 def test_crawler_dag_declares_operator_facing_task_ids():

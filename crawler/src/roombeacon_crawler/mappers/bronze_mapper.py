@@ -92,6 +92,7 @@ class BronzeMapper:
             seller_type_raw=seller_type_raw,
             image_urls_raw=image_urls_raw,
             amenities_raw=amenities_raw,
+            map_location=detail.map_location if detail else None,
             crawl_run_id=run_id,
             crawled_at=datetime.now(timezone.utc).isoformat(),
         )

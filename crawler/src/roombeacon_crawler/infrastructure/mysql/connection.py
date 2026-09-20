@@ -25,17 +25,17 @@ class MySQLConnectionFactory:
     def get_engine(cls):
         """Khởi tạo hoặc trả về singleton SQLAlchemy Engine."""
         if cls._engine is None:
+            mysql_cfg = env.mysql_bronze
+
+            # Fail-closed guard: Disallow creating engine targeting production DB during test runtime
+            if is_test_runtime() and mysql_cfg.database == "roombeacon_bronze":
+                raise TestEnvironmentIsolationError(
+                    "FAIL-CLOSED ISOLATION GUARD: Refusing to create MySQL engine targeting production database "
+                    f"'{mysql_cfg.database}' during test execution! Tests must use an isolated test database."
+                )
+
             try:
                 from sqlalchemy import create_engine
-
-                mysql_cfg = env.mysql_bronze
-
-                # Fail-closed guard: Disallow creating engine targeting production DB during test runtime
-                if is_test_runtime() and mysql_cfg.database == "roombeacon_bronze":
-                    raise TestEnvironmentIsolationError(
-                        "FAIL-CLOSED ISOLATION GUARD: Refusing to create MySQL engine targeting production database "
-                        f"'{mysql_cfg.database}' during test execution! Tests must use an isolated test database."
-                    )
 
                 db_url = mysql_cfg.sqlalchemy_url
                 cls._engine = create_engine(

@@ -14,6 +14,9 @@ from urllib.parse import parse_qs, urlencode, urljoin, urlparse, urlunparse
 
 from roombeacon_crawler.models.listing_card_raw import ListingCardRaw
 from roombeacon_crawler.models.listing_detail_raw import ListingDetailRaw
+from roombeacon_crawler.sources.map_extractor import MapLocationExtractor
+from roombeacon_crawler.sources.address_quality import most_specific_address
+import re
 
 
 class HtmlNode:
@@ -313,15 +316,11 @@ class SourceDetailParser:
         return None
 
     def _extract_address(self, root: HtmlNode) -> str | None:
-        structured_address = self._extract_structured_address(root)
-        if structured_address:
-            return structured_address
-
-        semantic_address = self._semantic_address(root)
-        if semantic_address:
-            return semantic_address
-
-        return self._extract_scoped_address(root)
+        return most_specific_address(
+            self._extract_structured_address(root),
+            self._semantic_address(root),
+            self._extract_scoped_address(root),
+        )
 
     def parse(self, html: str, detail_url: str = "", source_url: str = "", listing_id: str | None = None, **kwargs):
         """Extract one source-near detail record without semantic cleaning."""
@@ -344,15 +343,19 @@ class SourceDetailParser:
         if not title:
             h1 = root.first(tag="h1")
             title = h1.text() if h1 else None
+
+        map_location = MapLocationExtractor.extract_map_from_html(html)
+
         return ListingDetailRaw(
+            map_location=map_location,
             source=self.source_name,
             listing_id=listing_id,
             detail_url=effective_url,
             title_raw=title,
             price_raw=first_text(root, self.PRICE_CLASSES),
             area_raw=first_text(root, self.AREA_CLASSES),
-            address_raw=address,
-            location_raw=address,
+            address_raw=address or (map_location.query_raw if map_location else None),
+            location_raw=address or (map_location.query_raw if map_location else None),
             description_raw=first_text(root, self.DESCRIPTION_CLASSES),
             seller_name_raw=first_text(root, self.SELLER_CLASSES),
             image_urls_raw=images,

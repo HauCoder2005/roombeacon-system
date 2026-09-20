@@ -248,77 +248,87 @@ class AssetReconcilerService:
             with conn.cursor() as cur:
                 for s in active_sources:
                     seen_asset_ids: set[str] = set()
-                    cur.execute(
-                        """
-                        SELECT
-                            MIN(pi.id) AS image_id,
-                            MIN(pi.rental_post_id) AS rental_post_id,
-                            pi.image_url,
-                            MIN(pi.position) AS position,
-                            p.platform_post_id,
-                            pl.code AS source
-                        FROM post_images pi
-                        JOIN rental_posts p ON pi.rental_post_id = p.id
-                        JOIN platforms pl ON p.platform_id = pl.id
-                        WHERE pl.code = %s 
-                          AND (pi.image_url LIKE 'http://%%' OR pi.image_url LIKE 'https://%%')
-                        GROUP BY pl.code, p.platform_post_id, pi.image_url
-                        ORDER BY MIN(pi.id) ASC
-                        LIMIT %s
-                        """,
-                        (s, max_per_source * 2),
-                    )
-                    rows = cur.fetchall()
+                    page_size = max_per_source * 2
+                    last_image_id = 0
+                    while len(candidates_by_source[s]) < max_per_source:
+                        cur.execute(
+                            """
+                            SELECT
+                                MIN(pi.id) AS image_id,
+                                MIN(pi.rental_post_id) AS rental_post_id,
+                                pi.image_url,
+                                MIN(pi.position) AS position,
+                                p.platform_post_id,
+                                pl.code AS source
+                            FROM post_images pi
+                            JOIN rental_posts p ON pi.rental_post_id = p.id
+                            JOIN platforms pl ON p.platform_id = pl.id
+                            WHERE pl.code = %s
+                              AND (pi.image_url LIKE 'http://%%' OR pi.image_url LIKE 'https://%%')
+                            GROUP BY pl.code, p.platform_post_id, pi.image_url
+                            HAVING MIN(pi.id) > %s
+                            ORDER BY MIN(pi.id) ASC
+                            LIMIT %s
+                            """,
+                            (s, last_image_id, page_size),
+                        )
+                        rows = cur.fetchall()
+                        if not rows:
+                            break
+                        last_image_id = int(rows[-1]["image_id"])
 
-                    for row in rows:
-                        source = row["source"]
-                        platform_post_id = str(row["platform_post_id"])
-                        image_url = row["image_url"]
-                        position = int(row.get("position", 1))
+                        for row in rows:
+                            source = row["source"]
+                            platform_post_id = str(row["platform_post_id"])
+                            image_url = row["image_url"]
+                            position = int(row.get("position", 1))
 
-                        asset_id = AssetItem.generate_asset_id(source, platform_post_id, image_url)
-                        object_key = AssetItem.generate_object_key(source, platform_post_id, position, image_url)
+                            asset_id = AssetItem.generate_asset_id(source, platform_post_id, image_url)
+                            object_key = AssetItem.generate_object_key(source, platform_post_id, position, image_url)
 
-                        # Multiple observations may repeat the same canonical image.
-                        # Schedule the identity at most once in this reconciliation run.
-                        if asset_id in seen_asset_ids:
-                            continue
-                        seen_asset_ids.add(asset_id)
-
-                        existing_state = self.state_repo.get_asset(source, asset_id)
-
-                        if existing_state and existing_state.status == AssetStatus.SUCCESS:
-                            if s3 is None or self._object_exists(s3, existing_state.object_key):
-                                self._last_already_stored_by_source[source] += 1
+                            # Multiple observations may repeat the same canonical image.
+                            # Schedule the identity at most once in this reconciliation run.
+                            if asset_id in seen_asset_ids:
                                 continue
-                            # Durable state is not sufficient when the referenced object
-                            # was removed externally; make the item actionable again.
-                            existing_state.status = AssetStatus.PENDING
-                        if existing_state and existing_state.status == AssetStatus.TERMINAL_FAILURE:
-                            continue
-                        if (
-                            existing_state
-                            and existing_state.status == AssetStatus.RETRYABLE_FAILURE
-                            and existing_state.attempt_count >= self.max_retries
-                        ):
-                            continue
+                            seen_asset_ids.add(asset_id)
 
-                        if existing_state:
-                            item = existing_state
-                        else:
-                            item = AssetItem(
-                                asset_id=asset_id,
-                                source=source,
-                                platform_post_id=platform_post_id,
-                                rental_post_id=row["rental_post_id"],
-                                image_url=image_url,
-                                position=position,
-                                object_key=object_key,
-                                max_retries=self.max_retries,
-                            )
+                            existing_state = self.state_repo.get_asset(source, asset_id)
 
-                        candidates_by_source[source].append(item)
-                        if len(candidates_by_source[source]) >= max_per_source:
+                            if existing_state and existing_state.status == AssetStatus.SUCCESS:
+                                if s3 is None or self._object_exists(s3, existing_state.object_key):
+                                    self._last_already_stored_by_source[source] += 1
+                                    continue
+                                # Durable state is not sufficient when the referenced object
+                                # was removed externally; make the item actionable again.
+                                existing_state.status = AssetStatus.PENDING
+                            if existing_state and existing_state.status == AssetStatus.TERMINAL_FAILURE:
+                                continue
+                            if (
+                                existing_state
+                                and existing_state.status == AssetStatus.RETRYABLE_FAILURE
+                                and existing_state.attempt_count >= self.max_retries
+                            ):
+                                continue
+
+                            if existing_state:
+                                item = existing_state
+                            else:
+                                item = AssetItem(
+                                    asset_id=asset_id,
+                                    source=source,
+                                    platform_post_id=platform_post_id,
+                                    rental_post_id=row["rental_post_id"],
+                                    image_url=image_url,
+                                    position=position,
+                                    object_key=object_key,
+                                    max_retries=self.max_retries,
+                                )
+
+                            candidates_by_source[source].append(item)
+                            if len(candidates_by_source[source]) >= max_per_source:
+                                break
+
+                        if len(rows) < page_size:
                             break
 
         return candidates_by_source

@@ -13,11 +13,12 @@ SELECT
     pr.price_amount,
     dt.area_raw,
     dt.area_value,
-    addr.full_address_text AS location_raw,
-    addr.full_address_text AS address_raw,
+    COALESCE(addr.full_address_text, v.source_payload->>'$.location_raw') AS location_raw,
+    COALESCE(addr.full_address_text, v.source_payload->>'$.address_raw', v.source_payload->>'$.location_raw') AS address_raw,
     dt.posted_at_raw,
     dt.property_type_raw,
-    v.content_hash
+    v.content_hash,
+    v.ingestion_origin
 FROM mysql_db.rental_post_versions v
 JOIN mysql_db.rental_posts p ON v.rental_post_id = p.id
 JOIN mysql_db.platforms pl ON p.platform_id = pl.id

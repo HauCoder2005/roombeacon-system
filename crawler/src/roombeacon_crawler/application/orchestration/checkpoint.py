@@ -59,6 +59,32 @@ def update_checkpoint(persist_payload: dict = None, result_payload: dict = None,
             "next_run_at": state.next_run_at,
         }
 
+    # Defense in depth for manually replayed or legacy payloads. In the mapped
+    # DAG a failed persistence task prevents this task from running at all, but
+    # a non-success persistence result must never authorize success progress.
+    if (
+        crawl_status == CrawlStatus.SUCCESS.value
+        and persist_status not in {"SUCCESS", "UNKNOWN"}
+    ):
+        logger.error(
+            "Checkpoint not advanced because persistence was not durable "
+            "(source=%s, target=%s, persist_status=%s)",
+            source,
+            target_id,
+            persist_status,
+        )
+        return {
+            "source": source,
+            "target_id": target_id,
+            "checkpoint_updated": False,
+            "target_state_persisted": False,
+            "success_checkpoint_advanced": False,
+            "health_state_updated": False,
+            "deferred_cooldown": False,
+            "last_success_at": state.last_success_at,
+            "next_run_at": state.next_run_at,
+        }
+
     # 2. Trường hợp crawl thành công (hoặc hoàn thành phân trang hợp lệ)
     if crawl_status == CrawlStatus.SUCCESS.value:
         state.last_started_at = result_payload.get("started_at") or now_iso
@@ -120,6 +146,9 @@ def update_checkpoint(persist_payload: dict = None, result_payload: dict = None,
         observed_ids = result_payload.get("observed_listing_ids", [])
         if observed_ids:
             repo.record_seen_listing_ids(source, target_id, observed_ids)
+        seen_metadata_updates = result_payload.get("seen_metadata_updates", {})
+        if seen_metadata_updates and hasattr(repo, "record_seen_details"):
+            repo.record_seen_details(source, target_id, seen_metadata_updates)
 
         repo.save_state(state)
         # Thành công: Reset Health State về HEALTHY

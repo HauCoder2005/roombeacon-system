@@ -150,3 +150,51 @@ class LocalStorageWriter:
             len(details) if details else 0,
         )
         return str(output_dir)
+
+    def save_failure_artifact(
+        self,
+        *,
+        source: str,
+        run_id: str,
+        url: str,
+        raw_html: str,
+        failure_reason: str,
+        page_number: int,
+        fetched_at: str | None = None,
+    ) -> str:
+        """Retain a fetched response and safe metadata for parser diagnostics."""
+        timestamp = fetched_at or datetime.now(timezone.utc).isoformat()
+        date_str = timestamp[:10]
+        target_dir = self._ensure_dir(
+            self.base_data_dir
+            / "quarantine"
+            / source
+            / date_str
+            / run_id
+            / f"page-{page_number}"
+        )
+        response_path = target_dir / "response.html"
+        metadata_path = target_dir / "metadata.json"
+        with open(response_path, "w", encoding="utf-8") as response_file:
+            response_file.write(raw_html)
+        with open(metadata_path, "w", encoding="utf-8") as metadata_file:
+            json.dump(
+                {
+                    "source": source,
+                    "url": url,
+                    "crawl_run_id": run_id,
+                    "page_number": page_number,
+                    "fetched_at": timestamp,
+                    "failure_reason": failure_reason,
+                },
+                metadata_file,
+                ensure_ascii=False,
+                indent=2,
+            )
+        logger.warning(
+            "Retained parser failure artifact (source=%s, run_id=%s, page=%d)",
+            source,
+            run_id,
+            page_number,
+        )
+        return str(target_dir)
