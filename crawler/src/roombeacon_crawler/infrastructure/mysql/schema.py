@@ -203,7 +203,7 @@ def ensure_mysql_schema(engine=None) -> None:
                 raise
 
     from roombeacon_crawler.infrastructure.mysql.repositories.geocode_repository import MySQLGeocodeRepository
-    MySQLGeocodeRepository(connection=eng).ensure_table()
+    MySQLGeocodeRepository().ensure_table()
 
     logger.info("MySQL Bronze Schema đã được khởi tạo/kiểm tra thành công.")
 
