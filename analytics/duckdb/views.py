@@ -72,7 +72,12 @@ class DuckDBViewManager:
                 )
                 conn.execute("""
                     CREATE OR REPLACE VIEW v_latest_posts AS
-                    SELECT * EXCLUDE (best_address_text, best_address_source),
+                    SELECT * EXCLUDE (
+                        best_address_text, best_address_source,
+                        full_address_inherited, map_provider, map_latitude, map_longitude, map_query_raw,
+                        geocoded_address_text, geocode_provider, geocode_precision, geocode_attribution,
+                        enriched_address_text, enriched_address_source
+                    ),
                            enriched_address_text AS best_address_text,
                            enriched_address_source AS best_address_source
                     FROM v_latest_posts_enriched
