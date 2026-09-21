@@ -47,11 +47,19 @@ def roombeacon_bronze_reconciler():
 
         runs = BronzeRunDiscoveryService.discover_bronze_runs("/data/bronze")
         mysql_before = BronzeReconcilerService.get_mysql_observations_count()
-        logger.info("Đã tìm thấy %d Bronze runs trên đĩa. MySQL observations before: %d", len(runs), mysql_before)
-        return {
-            "discovered_runs": [r.to_dict() for r in runs],
-            "mysql_before": mysql_before,
-        }
+        discovery_payload = BronzeReconcilerService.build_bounded_discovery_payload(
+            discovered_runs=runs,
+            mysql_before=mysql_before,
+            batch_limit=25,
+        )
+        logger.info(
+            "Đã tìm thấy %d Bronze runs trên đĩa; chuyển %d run qua XCom. "
+            "MySQL observations before: %d",
+            len(runs),
+            len(discovery_payload["selected_runs"]),
+            mysql_before,
+        )
+        return discovery_payload
 
     # --------------------------------------------------------------------------
     # Task 2: Audit & Identify Missing Runs
@@ -59,29 +67,25 @@ def roombeacon_bronze_reconciler():
     @task
     def identify_missing_runs(discovery_data: dict, **context) -> list[dict]:
         """2. So sánh danh sách Bronze runs với MySQL để chọn ra batch các run cần nạp bù."""
-        from roombeacon_crawler.application.reconciliation.discovery import BronzeRunInfo
-        from roombeacon_crawler.application.reconciliation.reconciler import BronzeReconcilerService
-
         logger.info("=" * 60)
         logger.info("STAGE 2: AUDIT & IDENTIFY MISSING RUNS")
         logger.info("=" * 60)
 
-        discovered_list = discovery_data.get("discovered_runs", [])
-        runs_obj = [BronzeRunInfo.from_dict(d) for d in discovered_list]
-        batch, audit_meta = BronzeReconcilerService.audit_and_identify_missing_runs(
-            discovered_runs=runs_obj,
-            batch_limit=25,
-        )
+        selected_runs = discovery_data.get("selected_runs", [])
+        audit_meta = discovery_data.get("audit_meta", {})
+        batch_limit = int(discovery_data.get("batch_limit", 25))
+        if len(selected_runs) > batch_limit:
+            raise ValueError("Bronze reconciliation XCom batch exceeds its declared limit")
 
         logger.info(
             "Audit: %d discovered | %d reconciled | %d partially missing | %d fully missing | Selected batch: %d runs",
-            audit_meta["runs_discovered"],
-            audit_meta["already_reconciled"],
-            audit_meta["partially_missing"],
-            audit_meta["fully_missing"],
-            audit_meta["runs_selected"],
+            audit_meta.get("runs_discovered", 0),
+            audit_meta.get("already_reconciled", 0),
+            audit_meta.get("partially_missing", 0),
+            audit_meta.get("fully_missing", 0),
+            len(selected_runs),
         )
-        return [r.to_dict() for r in batch]
+        return selected_runs
 
     # --------------------------------------------------------------------------
     # Task 3: Persist Missing Runs (Mapped)
@@ -159,13 +163,14 @@ def roombeacon_bronze_reconciler():
         **context,
     ) -> dict:
         """6. Tổng kết số liệu đối soát độc lập của riêng DAG run này theo đúng định dạng chuẩn."""
+        from roombeacon_crawler.application.reconciliation.discovery import BronzeRunDiscoveryService
         from roombeacon_crawler.application.reconciliation.reconciler import BronzeReconcilerService
 
         dag_run = context.get("dag_run")
         dag_run_id = dag_run.run_id if dag_run else "UNKNOWN"
 
-        discovered_list = discovery_data.get("discovered_runs", [])
-        runs_discovered = len(discovered_list)
+        discovered_runs = BronzeRunDiscoveryService.discover_bronze_runs("/data/bronze")
+        runs_discovered = len(discovered_runs)
         runs_selected = len(selected_runs or [])
 
         # Kiểm tra audit chi tiết dựa trên trạng thái MySQL hiện tại
@@ -173,9 +178,9 @@ def roombeacon_bronze_reconciler():
         already_reconciled = 0
         partially_missing = 0
         fully_missing = 0
-        for r in discovered_list:
-            cnt = persisted_counts.get(r["run_id"], 0)
-            rec = r.get("record_count", 0)
+        for run in discovered_runs:
+            cnt = persisted_counts.get(run.run_id, 0)
+            rec = run.record_count
             if cnt >= rec > 0 or (cnt > 0 and rec == 0):
                 already_reconciled += 1
             elif 0 < cnt < rec:

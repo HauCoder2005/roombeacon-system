@@ -87,6 +87,83 @@ class TestBronzeReconciliation(unittest.TestCase):
             self.assertEqual(total_missing, 30)
             self.assertEqual(already_complete, 0)
 
+    def test_discovery_payload_is_bounded_for_large_backlog(self):
+        """The Airflow XCom contract must not contain every discovered run."""
+        runs = [
+            BronzeRunInfo(
+                source=f"source_{i % 11:02d}",
+                date="2026-09-15",
+                run_id=f"run_{i:06d}",
+                run_path=f"/data/bronze/source_{i % 11:02d}/2026-09-15/run_{i:06d}",
+                listings_path=(
+                    f"/data/bronze/source_{i % 11:02d}/2026-09-15/"
+                    f"run_{i:06d}/listings.json"
+                ),
+                details_path=(
+                    f"/data/bronze/source_{i % 11:02d}/2026-09-15/"
+                    f"run_{i:06d}/details.json"
+                ),
+                metadata_path=(
+                    f"/data/bronze/source_{i % 11:02d}/2026-09-15/"
+                    f"run_{i:06d}/metadata.json"
+                ),
+                record_count=20,
+            )
+            for i in range(654)
+        ]
+
+        payload = BronzeReconcilerService.build_bounded_discovery_payload(
+            discovered_runs=runs,
+            mysql_before=12_345,
+            batch_limit=25,
+            persisted_counts={},
+        )
+
+        serialized = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        self.assertNotIn("discovered_runs", payload)
+        self.assertEqual(payload["audit_meta"]["runs_discovered"], 654)
+        self.assertEqual(len(payload["selected_runs"]), 25)
+        self.assertLess(len(serialized), 32_768)
+
+    def test_successive_bounded_batches_eventually_reach_entire_backlog(self):
+        """Completed early batches must expose later deterministic work."""
+        runs = [
+            BronzeRunInfo(
+                source="phongtro123",
+                date="2026-09-15",
+                run_id=f"run_{i:03d}",
+                run_path=f"/data/bronze/phongtro123/2026-09-15/run_{i:03d}",
+                listings_path=(
+                    f"/data/bronze/phongtro123/2026-09-15/run_{i:03d}/listings.json"
+                ),
+                record_count=1,
+            )
+            for i in reversed(range(60))
+        ]
+        persisted_counts: dict[str, int] = {}
+        selected_batches: list[list[str]] = []
+
+        while len(persisted_counts) < len(runs):
+            payload = BronzeReconcilerService.build_bounded_discovery_payload(
+                discovered_runs=runs,
+                mysql_before=len(persisted_counts),
+                batch_limit=25,
+                persisted_counts=persisted_counts,
+            )
+            selected = [item["run_id"] for item in payload["selected_runs"]]
+            self.assertTrue(selected)
+            selected_batches.append(selected)
+            persisted_counts.update({run_id: 1 for run_id in selected})
+
+        self.assertEqual(
+            selected_batches,
+            [
+                [f"run_{i:03d}" for i in range(25)],
+                [f"run_{i:03d}" for i in range(25, 50)],
+                [f"run_{i:03d}" for i in range(50, 60)],
+            ],
+        )
+
     def test_idempotent_reconciliation_mock_usecase(self):
         """Kiểm thử quy trình reconcile_single_run gọi Clean Architecture use case."""
         run_dir = self.bronze_root / "phongtro123" / "2026-08-21" / "run_test_import"

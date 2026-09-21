@@ -27,18 +27,29 @@ class MySQLBronzeMapper:
             return None
         if not isinstance(price_raw, str):
             price_raw = str(price_raw)
-            
+
         cleaned = price_raw.strip().lower()
         if not cleaned or cleaned in ("thỏa thuận", "thoa thuan", "thương lượng", "thuong luong", "liên hệ", "lien he", "n/a", "none", "null"):
             return None
 
-        cleaned_num = cleaned.replace(",", ".").replace(" ", "")
-        match = re.search(r"(\d+(?:\.\d+)?)", cleaned_num)
+        cleaned_num = cleaned.replace(" ", "")
+        match = re.search(r"(\d{1,3}(?:[.,]\d{3})+|\d+(?:[.,]\d+)?)", cleaned_num)
         if not match:
             return None
-            
+
         try:
-            val = float(match.group(1))
+            numeric_token = match.group(1)
+            has_magnitude_unit = any(
+                unit in cleaned for unit in ("triệu", "tr", "nghìn", "k", "tỷ", "ty")
+            )
+            if (
+                not has_magnitude_unit
+                and re.fullmatch(r"\d{1,3}(?:[.,]\d{3})+", numeric_token)
+            ):
+                numeric_token = numeric_token.replace(".", "").replace(",", "")
+            else:
+                numeric_token = numeric_token.replace(",", ".")
+            val = float(numeric_token)
             if "triệu" in cleaned or "tr" in cleaned:
                 val = val * 1_000_000.0
             elif "nghìn" in cleaned or "k" in cleaned:

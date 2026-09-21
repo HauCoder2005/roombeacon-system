@@ -12,6 +12,8 @@ from pathlib import Path
 from sqlalchemy import text
 
 from roombeacon_crawler.application.persistence.persist_observations import PersistBronzeObservationsUseCase
+from roombeacon_crawler.models.persistence_context import PersistenceContext
+from roombeacon_crawler.enums.ingestion_origin import IngestionOrigin
 from roombeacon_crawler.application.reconciliation.discovery import BronzeRunInfo
 from roombeacon_crawler.infrastructure.mysql.connection import MySQLConnectionFactory
 from roombeacon_crawler.infrastructure.mysql.repositories.observation_repository import MySQLObservationRepository
@@ -145,6 +147,33 @@ class BronzeReconcilerService:
         return batch, audit_meta
 
     @classmethod
+    def build_bounded_discovery_payload(
+        cls,
+        discovered_runs: list[BronzeRunInfo],
+        mysql_before: int,
+        batch_limit: int = 25,
+        engine=None,
+        persisted_counts: dict[str, int] | None = None,
+    ) -> dict:
+        """Return deterministic bounded work and scalar audit metadata for XCom."""
+        ordered_runs = sorted(
+            discovered_runs,
+            key=lambda run: (run.source, run.date, run.run_id, run.run_path),
+        )
+        batch, audit_meta = cls.audit_and_identify_missing_runs(
+            discovered_runs=ordered_runs,
+            batch_limit=batch_limit,
+            engine=engine,
+            persisted_counts=persisted_counts,
+        )
+        return {
+            "selected_runs": [run.to_dict() for run in batch],
+            "audit_meta": audit_meta,
+            "mysql_before": int(mysql_before),
+            "batch_limit": int(batch_limit),
+        }
+
+    @classmethod
     def identify_missing_runs(
         cls,
         discovered_runs: list[BronzeRunInfo],
@@ -182,7 +211,7 @@ class BronzeReconcilerService:
             transaction_mgr=tx_mgr,
         )
 
-        import_res = use_case.execute(observations)
+        import_res = use_case.execute(observations, context=PersistenceContext(ingestion_origin=IngestionOrigin.BRONZE_RECONCILER))
         logger.info(
             "Reconciled run %s: %d inserted, %d duplicate, %d posts new, %d posts exist",
             run_info.run_id,

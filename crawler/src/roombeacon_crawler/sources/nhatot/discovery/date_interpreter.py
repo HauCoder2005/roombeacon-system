@@ -19,35 +19,28 @@ class NhatotDateInterpreter:
 
         text = posted_at_raw.strip().lower()
 
-        # 1. "vừa xong", "hôm nay"
         if "vừa xong" in text or "hôm nay" in text:
             return reference_now
 
-        # 2. "hôm qua"
         if "hôm qua" in text:
             return reference_now - timedelta(days=1)
 
-        # 3. "\d+ phút trước"
         m_min = re.search(r"(\d+)\s*phút\s*trước", text)
         if m_min:
             return reference_now - timedelta(minutes=int(m_min.group(1)))
 
-        # 4. "\d+ giờ trước"
         m_hour = re.search(r"(\d+)\s*giờ\s*trước", text)
         if m_hour:
             return reference_now - timedelta(hours=int(m_hour.group(1)))
 
-        # 5. "\d+ ngày trước"
         m_day = re.search(r"(\d+)\s*ngày\s*trước", text)
         if m_day:
             return reference_now - timedelta(days=int(m_day.group(1)))
 
-        # 6. "\d+ tháng trước"
         m_month = re.search(r"(\d+)\s*tháng\s*trước", text)
         if m_month:
             return reference_now - timedelta(days=int(m_month.group(1)) * 30)
 
-        # 7. Định dạng ngày cụ thể: DD/MM/YYYY hoặc YYYY-MM-DD
         m_date = re.search(r"(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})", text)
         if m_date:
             try:

@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS rental_post_versions (
     title_raw VARCHAR(500) NULL,
     content_hash VARCHAR(64) NOT NULL,
     source_payload JSON NULL,
+    ingestion_origin VARCHAR(32) NOT NULL DEFAULT 'UNKNOWN',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uk_post_run (rental_post_id, crawl_run_id),
     KEY idx_observed_at (observed_at),
@@ -191,6 +192,19 @@ def ensure_mysql_schema(engine=None) -> None:
                 stmt_clean = stmt.strip()
                 if stmt_clean:
                     conn.execute(text(stmt_clean))
+
+        # Ensure ingestion_origin column exists in existing deployments
+        try:
+            with conn.begin():
+                conn.execute(text("ALTER TABLE rental_post_versions ADD COLUMN ingestion_origin VARCHAR(32) NOT NULL DEFAULT 'UNKNOWN'"))
+                logger.info("Migrated rental_post_versions: added ingestion_origin")
+        except Exception as e:
+            if "Duplicate column name" not in str(e):
+                raise
+
+    from roombeacon_crawler.infrastructure.mysql.repositories.geocode_repository import MySQLGeocodeRepository
+    MySQLGeocodeRepository().ensure_table()
+
     logger.info("MySQL Bronze Schema đã được khởi tạo/kiểm tra thành công.")
 
 

@@ -65,6 +65,20 @@ class TestPageAcquisitionProcessor(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(result.counts_as_success)
         self.assertTrue(result.counts_as_failure)
 
+    async def test_http_not_found_is_a_fetch_failure_not_source_end(self):
+        """A missing target page must not become a successful empty crawl."""
+        metadata = MagicMock(crawl_status=CrawlStatus.NOT_FOUND)
+        self.pipeline.execute.return_value = ([], [], metadata, None)
+
+        result = await self.processor.execute(
+            run_id="run-404", page_number=1, forward_only=True
+        )
+
+        self.assertEqual(result.outcome, PageAcquisitionOutcome.FETCH_ERROR)
+        self.assertTrue(result.counts_as_attempt)
+        self.assertFalse(result.counts_as_success)
+        self.assertTrue(result.counts_as_failure)
+
     async def test_parse_failure_is_not_swallowed(self):
         self.pipeline.execute.side_effect = ValueError("synthetic parser failure")
 
@@ -86,6 +100,18 @@ class TestPageAcquisitionProcessor(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result.counts_as_attempt)
         self.assertFalse(result.counts_as_success)
         self.assertFalse(result.counts_as_failure)
+
+    async def test_validated_empty_page_confirms_source_end(self):
+        self.adapter.listing_parser.validates_source_structure = True
+        metadata = MagicMock(crawl_status=CrawlStatus.SUCCESS)
+        self.pipeline.execute.return_value = ([], [], metadata, "<html />")
+
+        result = await self.processor.execute(
+            run_id="run-confirmed-empty", page_number=1, forward_only=True
+        )
+
+        self.assertEqual(result.outcome, PageAcquisitionOutcome.SOURCE_END)
+        self.assertTrue(result.source_end_confirmed)
 
 
 if __name__ == "__main__":

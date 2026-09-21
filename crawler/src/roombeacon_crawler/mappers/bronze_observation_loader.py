@@ -21,8 +21,6 @@ def compute_observation_content_hash(
     area_raw: str | None = None,
     location_raw: str | None = None,
     address_raw: str | None = None,
-    latitude: float | None = None,
-    longitude: float | None = None,
     description_raw: str | None = None,
     property_type_raw: str | None = None,
     furnishing_raw: str | None = None,
@@ -43,8 +41,6 @@ def compute_observation_content_hash(
         "area": (area_raw or "").strip(),
         "location": (location_raw or "").strip(),
         "address": (address_raw or "").strip(),
-        "latitude": latitude,
-        "longitude": longitude,
         "description": (description_raw or "").strip(),
         "property_type": (property_type_raw or "").strip(),
         "furnishing": (furnishing_raw or "").strip(),
@@ -99,8 +95,6 @@ class BronzeObservationLoader:
             seller_name_raw = item.get("seller_name_raw") or item.get("seller_name")
             seller_type_raw = item.get("seller_type_raw") or item.get("seller_type")
             seller_phone_raw = item.get("seller_phone_raw") or item.get("seller_phone")
-            latitude = item.get("latitude")
-            longitude = item.get("longitude")
             observed_at = str(item.get("crawled_at") or item.get("observed_at") or "")
 
             image_urls_raw = list(item.get("image_urls_raw") or item.get("images") or [])
@@ -110,14 +104,11 @@ class BronzeObservationLoader:
             furnishing_raw = item.get("furnishing_raw") or item.get("furnishing")
             deposit_raw = item.get("deposit_raw") or item.get("deposit")
 
-            # Merge thông tin từ details.json nếu có
             if lid in details_by_id:
                 dt = details_by_id[lid]
                 description_raw = dt.get("description_raw") or dt.get("description") or description_raw
                 address_raw = dt.get("address_raw") or dt.get("address") or address_raw
                 location_raw = dt.get("location_raw") or dt.get("location") or location_raw
-                latitude = dt.get("latitude") if dt.get("latitude") is not None else latitude
-                longitude = dt.get("longitude") if dt.get("longitude") is not None else longitude
                 furnishing_raw = dt.get("furnishing_raw") or dt.get("furnishing") or furnishing_raw
                 deposit_raw = dt.get("deposit_raw") or dt.get("deposit") or deposit_raw
                 seller_phone_raw = dt.get("seller_phone_raw") or dt.get("seller_phone") or seller_phone_raw
@@ -132,14 +123,15 @@ class BronzeObservationLoader:
                 if dt_attrs:
                     attributes.update(dt_attrs)
 
+                # Giữ dữ liệu chi tiết, gồm map_location, trong source_payload.
+                item.update(dt)
+
             content_hash = compute_observation_content_hash(
                 title_raw=title_raw,
                 price_raw=price_raw,
                 area_raw=area_raw,
                 location_raw=location_raw,
                 address_raw=address_raw,
-                latitude=latitude,
-                longitude=longitude,
                 description_raw=description_raw,
                 property_type_raw=property_type_raw,
                 furnishing_raw=furnishing_raw,
@@ -161,8 +153,6 @@ class BronzeObservationLoader:
                 area_raw=area_raw,
                 location_raw=location_raw,
                 address_raw=address_raw,
-                latitude=latitude,
-                longitude=longitude,
                 description_raw=description_raw,
                 posted_at_raw=posted_at_raw,
                 property_type_raw=property_type_raw,
@@ -176,7 +166,6 @@ class BronzeObservationLoader:
                 attributes=attributes,
                 source_payload=item,
             )
-            # Lưu content_hash vào attributes hoặc trường riêng
             obs.attributes["content_hash"] = content_hash
             observations.append(obs)
 

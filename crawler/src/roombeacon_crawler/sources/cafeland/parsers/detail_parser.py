@@ -2,7 +2,7 @@
 
 import re
 
-from roombeacon_crawler.sources.common_html import HtmlNode, SourceDetailParser
+from roombeacon_crawler.sources.common_html import HtmlNode, SourceDetailParser, parse_html
 
 
 class CafelandDetailParser(SourceDetailParser):
@@ -24,23 +24,28 @@ class CafelandDetailParser(SourceDetailParser):
     def parse(self, html: str, detail_url: str = "", **kwargs):
         """Parse a rental detail while refusing broker-profile locations."""
         detail = super().parse(html, detail_url=detail_url, **kwargs)
+        if detail is not None and "/moi-gioi/" in detail_url.casefold():
+            detail.address_raw = None
+            detail.location_raw = None
+
         if detail is not None:
-            if "/moi-gioi/" in detail_url.casefold():
-                detail.address_raw = None
-                detail.location_raw = None
-            else:
-                lat_match = re.search(r"_latitude\s*=\s*(-?\d+\.\d+);", html)
-                lng_match = re.search(r"_longitude\s*=\s*(-?\d+\.\d+);", html)
-                if lat_match and lng_match:
-                    from roombeacon_crawler.validators.location_validator import LocationValidator
-                    v_lat, v_lng = LocationValidator.validate_coordinates(
-                        float(lat_match.group(1)),
-                        float(lng_match.group(1)),
-                        self.source_name
-                    )
-                    detail.latitude = v_lat
-                    detail.longitude = v_lng
+            detail.area_raw = detail.area_raw or self._extract_labeled_area(
+                parse_html(html)
+            )
+
         return detail
+
+    @staticmethod
+    def _extract_labeled_area(root: HtmlNode) -> str | None:
+        """Read the area value paired with CafeLand's ``Diện tích`` label."""
+        for item in root.find_all(class_token="col-item"):
+            label = item.first(class_token="infor-note")
+            value = item.first(class_token="infor-data")
+            if label and value and label.text().strip().casefold() == "diện tích":
+                area = value.text().strip()
+                if area:
+                    return area
+        return None
 
     def _valid_address(self, raw_address: str) -> str | None:
         address_candidate = raw_address.strip().strip(",").strip()

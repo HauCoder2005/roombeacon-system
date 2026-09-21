@@ -6,30 +6,23 @@ from roombeacon_crawler.sources.common_html import SourceListingParser
 
 class CafelandListingParser(SourceListingParser):
     """Apply this source's listing-card HTML contract without semantic cleaning."""
-    CARD_CLASSES=("row-item-new",); PRICE_CLASSES=("price", "reals-price"); AREA_CLASSES=("reals-area", "acreage")
-    LOCATION_CLASSES=("info-location", "location"); DATE_CLASSES=("reals-date", "date"); IMAGE_CLASSES=("image-frame",)
+    CARD_CLASSES=("row-item",); PRICE_CLASSES=("price", "reales-price"); AREA_CLASSES=("reales-area", "acreage")
+    LOCATION_CLASSES=("reales-address", "location"); DATE_CLASSES=("reales-date", "date"); IMAGE_CLASSES=("image-frame",)
     ID_PATTERN=re.compile(r"-(\d+)\.html", re.I)
-    DETAIL_PATH_PATTERN = re.compile(r"^/cho-thue-phong-tro-[^/]+-\d+\.html$", re.I)
 
     def _detail_link(self, card, source_url):
-        """Select only CafeLand room-listing details, never broker profiles."""
+        """Exclude CafeLand broker profiles from rental-card identity selection."""
         candidates = []
         for class_name in self.LINK_CLASSES:
             candidates.extend(card.find_all(tag="a", class_token=class_name))
         candidates.extend(card.find_all(tag="a"))
-
-        source_host = (urlparse(source_url).hostname or "").removeprefix("www.")
         for node in candidates:
             href = node.attrs.get("href", "").strip()
             title = node.attrs.get("title", "").strip() or node.text()
-            detail_url = urljoin(source_url, href)
-            parsed = urlparse(detail_url)
-            candidate_host = (parsed.hostname or "").removeprefix("www.")
-            if (
-                href
-                and title
-                and candidate_host == source_host
-                and self.DETAIL_PATH_PATTERN.fullmatch(parsed.path)
+            if "/moi-gioi/" in urlparse(href).path.casefold():
+                continue
+            if href and title and not href.startswith(
+                ("#", "javascript:", "tel:", "mailto:")
             ):
-                return node, detail_url
+                return node, urljoin(source_url, href)
         return None

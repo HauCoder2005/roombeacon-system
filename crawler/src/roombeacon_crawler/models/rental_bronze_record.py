@@ -1,3 +1,4 @@
+from roombeacon_crawler.models.map_location import MapLocation
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -31,6 +32,8 @@ class RentalBronzeRecord:
 
     image_urls_raw: list[str] = field(default_factory=list)
     amenities_raw: list[str] = field(default_factory=list)
+
+    map_location: "MapLocation | None" = None
 
     crawl_run_id: str = ""
     crawled_at: str = field(

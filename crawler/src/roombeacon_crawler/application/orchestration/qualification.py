@@ -1,7 +1,6 @@
 """Qualify target safety, source health, adapter support, and robots access.
 
-This module is deliberately Airflow-free. Runtime adapters are composed inside the
-relevant use-case boundary until Phase 3 introduces explicit composition roots.
+This module is Airflow-free and composes runtime adapters at the use-case boundary.
 """
 
 from datetime import datetime, timezone
@@ -17,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 def qualify_target(plan: dict, **context) -> dict:
-    """3. Thẩm định URL an toàn và kiểm tra RobotsPolicy theo từng CrawlPlan."""
+    """Thẩm định URL an toàn và kiểm tra RobotsPolicy theo từng CrawlPlan."""
     source = plan.get("source", "unknown")
     target_id = plan.get("target_id", "default")
     url = plan.get("target_url", "")
@@ -38,7 +37,7 @@ def qualify_target(plan: dict, **context) -> dict:
     logger.info("Access Profile : %s", access_profile)
     logger.info("=" * 60)
 
-    # 1. Source Health Gate: Kiểm tra Cooldown trước khi gửi bất kỳ request mạng nào
+    # Source Health Gate: Kiểm tra Cooldown trước khi gửi bất kỳ request mạng nào
     health_repo = LocalSourceHealthRepository()
     health_state = health_repo.get_health(source, target_id)
     if health_state and health_state.is_in_cooldown(now):
@@ -65,7 +64,7 @@ def qualify_target(plan: dict, **context) -> dict:
             "is_cooldown": True,
         }
 
-    # 2. URL Safety & SSRF Check
+    # URL Safety & SSRF Check
     is_valid, error_reason = URLValidator.validate(url)
     if not is_valid:
         logger.error("URL KHÔNG HỢP LỆ HOẶC BỊ TỪ CHỐI BẢO MẬT: %s", error_reason)
@@ -81,7 +80,7 @@ def qualify_target(plan: dict, **context) -> dict:
             "reason": f"Invalid URL: {error_reason}",
         }
 
-    # 3. Robots.txt Preflight Check
+    # Robots.txt Preflight Check
     robots_policy = RobotsPolicy()
     eval_res = robots_policy.evaluate(url)
     if isinstance(eval_res, tuple) and not hasattr(eval_res, "decision"):
@@ -175,8 +174,3 @@ def qualify_target(plan: dict, **context) -> dict:
         "action": "QUALIFIED",
         "reason": "Target qualified and ready to crawl",
     }
-
-
-# --------------------------------------------------------------------------
-# Task 4: Execute Crawl (Mapped per Qualified Plan)
-# --------------------------------------------------------------------------

@@ -64,7 +64,7 @@ class NhatroVNListingParser:
         card_position: int,
         page_number: int,
     ) -> ListingCardRaw | None:
-        # 1. Tìm thẻ <a> chứa liên kết đến trang chi tiết
+        # Tìm thẻ <a> chứa liên kết đến trang chi tiết
         parent_a = element.find_parent(tag="a")
         link_elem = parent_a or element.find(tag="a", attr_has=("href", "/chi-tiet/")) or element.find(tag="a")
 
@@ -77,10 +77,10 @@ class NhatroVNListingParser:
         if not parsed_url.hostname or "nhatrovn.vn" not in parsed_url.hostname.lower():
             return None
 
-        # 2. Bóc tách listing_id
+        # Bóc tách listing_id
         listing_id = self._extract_listing_id(href, detail_url, element)
 
-        # 3. Bóc tách hình ảnh & tiêu đề (từ thuộc tính alt hoặc address)
+        # Bóc tách hình ảnh & tiêu đề (từ thuộc tính alt hoặc address)
         img_elem = element.find(tag="img")
         thumbnail_url = None
         alt_title = None
@@ -91,14 +91,14 @@ class NhatroVNListingParser:
                 thumbnail_url = urljoin(source_url, src.strip())
             alt_title = img_elem.get("alt", "").strip() or None
 
-        # 4. Bóc tách địa chỉ / location
+        # Bóc tách địa chỉ / location
         address_elem = element.find(class_contains="rn-property-address")
         address_raw = address_elem.get_text() if address_elem else None
 
         # Tiêu đề ưu tiên alt text nếu có, hoặc dùng địa chỉ
         title_raw = alt_title or address_raw or f"Phòng trọ NhatroVN {listing_id or ''}".strip()
 
-        # 5. Bóc tách giá
+        # Bóc tách giá
         price_elem = element.find(class_contains="property-card-price")
         price_raw = price_elem.get_text() if price_elem else None
 

@@ -5,8 +5,11 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 from botocore.exceptions import ClientError
+from pymysql.err import ProgrammingError
 import requests
 
+from roombeacon_crawler.application.orchestration import assets as asset_orchestration
+from roombeacon_crawler.application.orchestration.errors import CrawlerWorkflowError
 from roombeacon_crawler.application.assets.asset_reconciler import (
     DEFAULT_ASSET_BATCH_SIZE,
     AssetReconcilerService,
@@ -99,6 +102,50 @@ class TestFairAssetScheduler(unittest.TestCase):
         batch_1 = FairAssetScheduler.allocate_fair_batch(candidates, batch_size=20)
         pt_in_b1 = [x for x in batch_1 if x.startswith("pt_")]
         self.assertEqual(len(pt_in_b1), 10)  # Lấy đều 10 pt và 10 nv
+
+
+class TestAssetOrchestration(unittest.TestCase):
+
+    def test_sync_ensures_mysql_schema_before_reconciliation(self):
+        call_order = []
+        service = MagicMock()
+        service.reconcile_batch.side_effect = lambda **_kwargs: (
+            call_order.append("reconcile") or AssetBatchResult()
+        )
+
+        with patch.object(
+            asset_orchestration,
+            "ensure_mysql_schema",
+            side_effect=lambda: call_order.append("schema"),
+        ), patch.object(
+            asset_orchestration,
+            "AssetReconcilerService",
+            return_value=service,
+        ):
+            asset_orchestration.sync_assets_minio()
+
+        self.assertEqual(call_order, ["schema", "reconcile"])
+
+    def test_sync_preserves_underlying_programming_error_traceback(self):
+        database_error = ProgrammingError(
+            1146,
+            "Table 'roombeacon_bronze.platforms' doesn't exist",
+        )
+        service = MagicMock()
+        service.reconcile_batch.side_effect = database_error
+
+        with patch.object(
+            asset_orchestration,
+            "ensure_mysql_schema",
+        ), patch.object(
+            asset_orchestration,
+            "AssetReconcilerService",
+            return_value=service,
+        ):
+            with self.assertRaises(CrawlerWorkflowError) as raised:
+                asset_orchestration.sync_assets_minio()
+
+        self.assertIs(raised.exception.__cause__, database_error)
 
 
 class TestAssetReconciler(unittest.TestCase):
@@ -357,6 +404,59 @@ class TestAssetReconciler(unittest.TestCase):
         with patch.object(self.reconciler, "get_mysql_connection", return_value=connection):
             candidates = self.reconciler.discover_actionable_candidates_per_source(["nhatrovn"])
         self.assertEqual(len(candidates["nhatrovn"]), 1)
+
+    def test_discovery_pages_past_finalized_window_to_find_actionable_asset(self):
+        finalized_rows = [
+            {
+                "image_id": index,
+                "rental_post_id": index,
+                "image_url": f"https://images.example.test/{index}.jpg",
+                "position": 1,
+                "platform_post_id": f"listing-{index}",
+                "source": "nhatrovn",
+            }
+            for index in (1, 2)
+        ]
+        actionable_row = {
+            "image_id": 3,
+            "rental_post_id": 3,
+            "image_url": "https://images.example.test/3.jpg",
+            "position": 1,
+            "platform_post_id": "listing-3",
+            "source": "nhatrovn",
+        }
+        for row in finalized_rows:
+            self.state_repo.save_asset(
+                AssetItem(
+                    asset_id=AssetItem.generate_asset_id(
+                        row["source"], row["platform_post_id"], row["image_url"]
+                    ),
+                    source=row["source"],
+                    platform_post_id=row["platform_post_id"],
+                    rental_post_id=row["rental_post_id"],
+                    image_url=row["image_url"],
+                    position=row["position"],
+                    object_key=f"nhatrovn/{row['platform_post_id']}/image.jpg",
+                    status=AssetStatus.TERMINAL_FAILURE,
+                )
+            )
+
+        cursor = MagicMock()
+        cursor.fetchall.side_effect = [finalized_rows, [actionable_row]]
+        cursor.__enter__.return_value = cursor
+        connection = MagicMock()
+        connection.__enter__.return_value = connection
+        connection.cursor.return_value = cursor
+
+        with patch.object(self.reconciler, "get_mysql_connection", return_value=connection):
+            candidates = self.reconciler.discover_actionable_candidates_per_source(
+                ["nhatrovn"], max_per_source=1
+            )
+
+        self.assertEqual(
+            [item.platform_post_id for item in candidates["nhatrovn"]],
+            ["listing-3"],
+        )
 
     def test_success_state_across_runs_skips_verified_object(self):
         url = "https://images.example.test/one.jpg"

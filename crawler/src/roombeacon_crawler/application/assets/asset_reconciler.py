@@ -248,77 +248,87 @@ class AssetReconcilerService:
             with conn.cursor() as cur:
                 for s in active_sources:
                     seen_asset_ids: set[str] = set()
-                    cur.execute(
-                        """
-                        SELECT
-                            MIN(pi.id) AS image_id,
-                            MIN(pi.rental_post_id) AS rental_post_id,
-                            pi.image_url,
-                            MIN(pi.position) AS position,
-                            p.platform_post_id,
-                            pl.code AS source
-                        FROM post_images pi
-                        JOIN rental_posts p ON pi.rental_post_id = p.id
-                        JOIN platforms pl ON p.platform_id = pl.id
-                        WHERE pl.code = %s 
-                          AND (pi.image_url LIKE 'http://%%' OR pi.image_url LIKE 'https://%%')
-                        GROUP BY pl.code, p.platform_post_id, pi.image_url
-                        ORDER BY MIN(pi.id) ASC
-                        LIMIT %s
-                        """,
-                        (s, max_per_source * 2),
-                    )
-                    rows = cur.fetchall()
+                    page_size = max_per_source * 2
+                    last_image_id = 0
+                    while len(candidates_by_source[s]) < max_per_source:
+                        cur.execute(
+                            """
+                            SELECT
+                                MIN(pi.id) AS image_id,
+                                MIN(pi.rental_post_id) AS rental_post_id,
+                                pi.image_url,
+                                MIN(pi.position) AS position,
+                                p.platform_post_id,
+                                pl.code AS source
+                            FROM post_images pi
+                            JOIN rental_posts p ON pi.rental_post_id = p.id
+                            JOIN platforms pl ON p.platform_id = pl.id
+                            WHERE pl.code = %s
+                              AND (pi.image_url LIKE 'http://%%' OR pi.image_url LIKE 'https://%%')
+                            GROUP BY pl.code, p.platform_post_id, pi.image_url
+                            HAVING MIN(pi.id) > %s
+                            ORDER BY MIN(pi.id) ASC
+                            LIMIT %s
+                            """,
+                            (s, last_image_id, page_size),
+                        )
+                        rows = cur.fetchall()
+                        if not rows:
+                            break
+                        last_image_id = int(rows[-1]["image_id"])
 
-                    for row in rows:
-                        source = row["source"]
-                        platform_post_id = str(row["platform_post_id"])
-                        image_url = row["image_url"]
-                        position = int(row.get("position", 1))
+                        for row in rows:
+                            source = row["source"]
+                            platform_post_id = str(row["platform_post_id"])
+                            image_url = row["image_url"]
+                            position = int(row.get("position", 1))
 
-                        asset_id = AssetItem.generate_asset_id(source, platform_post_id, image_url)
-                        object_key = AssetItem.generate_object_key(source, platform_post_id, position, image_url)
+                            asset_id = AssetItem.generate_asset_id(source, platform_post_id, image_url)
+                            object_key = AssetItem.generate_object_key(source, platform_post_id, position, image_url)
 
-                        # Multiple observations may repeat the same canonical image.
-                        # Schedule the identity at most once in this reconciliation run.
-                        if asset_id in seen_asset_ids:
-                            continue
-                        seen_asset_ids.add(asset_id)
-
-                        existing_state = self.state_repo.get_asset(source, asset_id)
-
-                        if existing_state and existing_state.status == AssetStatus.SUCCESS:
-                            if s3 is None or self._object_exists(s3, existing_state.object_key):
-                                self._last_already_stored_by_source[source] += 1
+                            # Multiple observations may repeat the same canonical image.
+                            # Schedule the identity at most once in this reconciliation run.
+                            if asset_id in seen_asset_ids:
                                 continue
-                            # Durable state is not sufficient when the referenced object
-                            # was removed externally; make the item actionable again.
-                            existing_state.status = AssetStatus.PENDING
-                        if existing_state and existing_state.status == AssetStatus.TERMINAL_FAILURE:
-                            continue
-                        if (
-                            existing_state
-                            and existing_state.status == AssetStatus.RETRYABLE_FAILURE
-                            and existing_state.attempt_count >= self.max_retries
-                        ):
-                            continue
+                            seen_asset_ids.add(asset_id)
 
-                        if existing_state:
-                            item = existing_state
-                        else:
-                            item = AssetItem(
-                                asset_id=asset_id,
-                                source=source,
-                                platform_post_id=platform_post_id,
-                                rental_post_id=row["rental_post_id"],
-                                image_url=image_url,
-                                position=position,
-                                object_key=object_key,
-                                max_retries=self.max_retries,
-                            )
+                            existing_state = self.state_repo.get_asset(source, asset_id)
 
-                        candidates_by_source[source].append(item)
-                        if len(candidates_by_source[source]) >= max_per_source:
+                            if existing_state and existing_state.status == AssetStatus.SUCCESS:
+                                if s3 is None or self._object_exists(s3, existing_state.object_key):
+                                    self._last_already_stored_by_source[source] += 1
+                                    continue
+                                # Durable state is not sufficient when the referenced object
+                                # was removed externally; make the item actionable again.
+                                existing_state.status = AssetStatus.PENDING
+                            if existing_state and existing_state.status == AssetStatus.TERMINAL_FAILURE:
+                                continue
+                            if (
+                                existing_state
+                                and existing_state.status == AssetStatus.RETRYABLE_FAILURE
+                                and existing_state.attempt_count >= self.max_retries
+                            ):
+                                continue
+
+                            if existing_state:
+                                item = existing_state
+                            else:
+                                item = AssetItem(
+                                    asset_id=asset_id,
+                                    source=source,
+                                    platform_post_id=platform_post_id,
+                                    rental_post_id=row["rental_post_id"],
+                                    image_url=image_url,
+                                    position=position,
+                                    object_key=object_key,
+                                    max_retries=self.max_retries,
+                                )
+
+                            candidates_by_source[source].append(item)
+                            if len(candidates_by_source[source]) >= max_per_source:
+                                break
+
+                        if len(rows) < page_size:
                             break
 
         return candidates_by_source
@@ -331,7 +341,7 @@ class AssetReconcilerService:
         """Thực thi một chu kỳ đối soát đa nguồn công bằng với dynamic spillover."""
         result = AssetBatchResult(batch_budget=batch_size)
 
-        # 1. Thu thập kiểm kê ban đầu
+        # Thu thập kiểm kê ban đầu
         accounting = self.get_source_accounting()
         result.per_source = accounting
         result.pending_before = sum(
@@ -354,7 +364,7 @@ class AssetReconcilerService:
 
         result.candidates_found = sum(len(items) for items in candidates_by_source.values())
 
-        # 2. Phân bổ batch công bằng qua FairAssetScheduler
+        # Phân bổ batch công bằng qua FairAssetScheduler
         scheduled_items = FairAssetScheduler.allocate_fair_batch(
             candidates_by_source, batch_size=batch_size
         )
@@ -365,7 +375,7 @@ class AssetReconcilerService:
             if item.source in result.per_source:
                 result.per_source[item.source].selected_this_run += 1
 
-        # 3. Tải và nạp MinIO
+        # Tải và nạp MinIO
         for item in scheduled_items:
             result.attempted += 1
             src_metrics = result.per_source.get(item.source)
@@ -383,7 +393,7 @@ class AssetReconcilerService:
             ).total_seconds(),
         )
 
-        # 4. Cập nhật lại remaining_actionable per source sau batch
+        # Cập nhật lại remaining_actionable per source sau batch
         updated_accounting = self.get_source_accounting()
         for s, m in updated_accounting.items():
             if s in result.per_source:
@@ -426,7 +436,7 @@ class AssetReconcilerService:
 
         url = item.image_url
 
-        # 1. Kiểm tra data URL (không phải HTTP)
+        # Kiểm tra data URL (không phải HTTP)
         if url.startswith("data:"):
             item.status = AssetStatus.TERMINAL_FAILURE
             item.last_error_category = AssetErrorCategory.INVALID_DATA_URL
@@ -449,7 +459,7 @@ class AssetReconcilerService:
                 src_metrics.terminal_failed_this_run += 1
             return
 
-        # 2. Validate every destination and follow redirects manually.
+        # Validate every destination and follow redirects manually.
         headers = {"User-Agent": USER_AGENT}
         try:
             resp = self._request_public_asset(url, headers=headers)
@@ -488,7 +498,7 @@ class AssetReconcilerService:
                 src_metrics.retryable_failed_this_run += 1
             return
 
-        # 3. Kiểm tra HTTP Status Code
+        # Kiểm tra HTTP Status Code
         status_code = resp.status_code
         if status_code in (400, 403, 404, 410):
             resp.close()
@@ -514,7 +524,7 @@ class AssetReconcilerService:
                 src_metrics.retryable_failed_this_run += 1
             return
 
-        # 4. Kiểm tra Content-Type
+        # Kiểm tra Content-Type
         content_type_header = resp.headers.get("Content-Type", "").lower()
         if "text/html" in content_type_header or "application/json" in content_type_header:
             resp.close()
@@ -528,7 +538,7 @@ class AssetReconcilerService:
                 src_metrics.terminal_failed_this_run += 1
             return
 
-        # 5. Stream body with a hard upper bound before buffering it in memory.
+        # Stream body with a hard upper bound before buffering it in memory.
         try:
             content_bytes = self._read_bounded_content(resp)
         except ValueError:
@@ -567,7 +577,7 @@ class AssetReconcilerService:
                 src_metrics.terminal_failed_this_run += 1
             return
 
-        # 6. Kiểm tra Magic Bytes
+        # Kiểm tra Magic Bytes
         ext, validated_mime = self._detect_image_format(content_bytes)
         if not ext:
             item.status = AssetStatus.TERMINAL_FAILURE
@@ -592,7 +602,7 @@ class AssetReconcilerService:
         if src_metrics:
             src_metrics.downloaded_valid += 1
 
-        # 7. Upload lên MinIO
+        # Upload lên MinIO
         try:
             s3.put_object(
                 Bucket=self.bucket_name,

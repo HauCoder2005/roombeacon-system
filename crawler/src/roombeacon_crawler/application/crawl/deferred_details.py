@@ -7,6 +7,7 @@ acquire listing pages, decide the crawl frontier, or persist run checkpoints.
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
+import time
 
 from roombeacon_crawler.enums.crawl_target_type import CrawlTargetType
 from roombeacon_crawler.models.crawl_target import CrawlTarget
@@ -135,13 +136,17 @@ class DeferredDetailProcessor:
         crawl_details: bool,
         max_details_per_run: int | None,
     ) -> tuple[int, list[DeferredDetailItem]]:
-        backlog_before = self.repository.count_backlog(self.adapter.SOURCE_NAME, target_id)
-        
+        backlog_before = (
+            self.repository.count_backlog(self.adapter.SOURCE_NAME, target_id)
+            if hasattr(self.repository, "count_backlog")
+            else 0
+        )
         can_process_backlog = (
             crawl_details
             and max_details_per_run is not None
             and max_details_per_run > 0
             and backlog_before > 0
+            and hasattr(self.repository, "get_backlog")
         )
         if not can_process_backlog:
             return backlog_before, []
@@ -158,11 +163,11 @@ class DeferredDetailProcessor:
         return backlog_before, pending_details
 
     def _address_expected(self) -> bool:
-        capabilities = getattr(self.adapter, "CAPABILITIES", None)
-        custom_flags = getattr(capabilities, "custom_flags", None)
-        if not isinstance(custom_flags, dict):
-            return True
-        return bool(custom_flags.get("detail_address_expected", True))
+        return getattr(
+            getattr(self.adapter, "CAPABILITIES", None),
+            "custom_flags",
+            {},
+        ).get("detail_address_expected", True)
 
     async def _fetch_pending_detail(
         self,
@@ -291,23 +296,21 @@ class DeferredDetailProcessor:
         detail_records: list,
         metadata: list,
         updated_seen_meta: dict[str, dict],
+        deadline: float | None = None,
     ) -> DeferredDetailResult:
-        """Process a bounded backlog slice independently of discovery output.
-
-        ``max_details_per_run`` is the network/enrichment safety bound.  The
-        listing discovery record cap must not filter older queue items because
-        those items intentionally belong to earlier discovery runs.
-        """
+        """Process the eligible backlog slice and return its aggregate outcome."""
         backlog_before, pending_details = self._select_pending_details(
             target_id=target_id,
             now=now,
             crawl_details=crawl_details,
             max_details_per_run=max_details_per_run,
         )
-
-        metrics = _DeferredDetailMetrics(attempted=len(pending_details))
+        metrics = _DeferredDetailMetrics()
 
         for pending_detail in pending_details:
+            if deadline is not None and time.monotonic() >= deadline:
+                break  # Remaining items stay pending in the durable queue.
+            metrics.attempted += 1
             outcome = await self._fetch_pending_detail(
                 pending_detail=pending_detail,
                 run_id=run_id,

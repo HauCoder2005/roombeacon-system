@@ -159,7 +159,7 @@ class FullAddressExtractionTests(unittest.TestCase):
     def test_cafeland_extracts_scoped_location_and_rejects_filter_menu(self) -> None:
         from roombeacon_crawler.sources.cafeland.parsers.detail_parser import CafelandDetailParser
         parser = CafelandDetailParser("cafeland")
-        
+
         # Valid rental detail HTML snippet
         html_valid = """
         <html>
@@ -233,6 +233,90 @@ class FullAddressExtractionTests(unittest.TestCase):
         )
         self.assertIsNone(company_only.address_raw)
 
+
+
+    def test_chothuephongtro_extracts_semantic_address_and_rejects_footer(self) -> None:
+        from roombeacon_crawler.sources.chothuephongtro.parsers.detail_parser import ChothuephongtroDetailParser
+        parser = ChothuephongtroDetailParser("chothuephongtro")
+        html = """
+        <html>
+            <body>
+                <div class="section">
+                    <div class="section-header"><h2>Vị trí phòng trọ</h2></div>
+                    <div class="section-content">
+                        Nhà Trọ An Bình hẻm 666 Nguyễn Văn Quá
+                    </div>
+                </div>
+                <footer>
+                    <div class="post-address">Footer Office Address</div>
+                </footer>
+            </body>
+        </html>
+        """
+        detail = parser.parse(html, detail_url="https://chothuephongtro.me/x-pr1.html")
+        self.assertEqual(detail.address_raw, "Nhà Trọ An Bình hẻm 666 Nguyễn Văn Quá")
+
+    def test_chothuephongtro_ignores_other_headers(self) -> None:
+        from roombeacon_crawler.sources.chothuephongtro.parsers.detail_parser import ChothuephongtroDetailParser
+        parser = ChothuephongtroDetailParser("chothuephongtro")
+        html = """
+        <html>
+            <body>
+                <div class="section">
+                    <div class="section-header"><h2>Thông tin khác</h2></div>
+                    <div class="section-content">
+                        Không lấy nội dung này
+                    </div>
+                </div>
+                <div class="post-address">Địa chỉ đúng ở đây</div>
+            </body>
+        </html>
+        """
+        detail = parser.parse(html, detail_url="https://chothuephongtro.me/x-pr1.html")
+        self.assertEqual(detail.address_raw, "Địa chỉ đúng ở đây")
+
+    def test_cafeland_extracts_map_location(self) -> None:
+        from roombeacon_crawler.sources.cafeland.parsers.detail_parser import CafelandDetailParser
+        parser = CafelandDetailParser("cafeland")
+        html_valid = """
+        <html>
+        <head>
+            <script>
+            var urlMapIframe = 'https://maps.google.com/maps?q=10.8452915,106.7795828&hl=es;z=12&output=embed';
+            </script>
+        </head>
+        <body>
+            <div class="reales-location">
+                <div class="col-left"><div class="infor">Vị trí: 123 Đường Số 1, Phường 2, Tân Bình TP. Hồ Chí Minh Lưu tin</div></div>
+            </div>
+            <div class="reals-description">Mô tả phòng trọ</div>
+        </body>
+        </html>
+        """
+        detail = parser.parse(html_valid, detail_url="https://nhadat.cafeland.vn/cho-thue-phong-cao-cap-123.html")
+        self.assertIsNotNone(detail)
+        self.assertEqual(detail.address_raw, "123 Đường Số 1, Phường 2, Tân Bình TP. Hồ Chí Minh")
+        self.assertIsNotNone(detail.map_location)
+        self.assertEqual(detail.map_location.provider, "google_maps_embed")
+        self.assertEqual(detail.map_location.latitude, 10.8452915)
+        self.assertEqual(detail.map_location.longitude, 106.7795828)
+
+    def test_cafeland_missing_map_location_is_safe(self) -> None:
+        from roombeacon_crawler.sources.cafeland.parsers.detail_parser import CafelandDetailParser
+        parser = CafelandDetailParser("cafeland")
+        html_valid = """
+        <html>
+        <body>
+            <div class="reales-location">
+                <div class="col-left"><div class="infor">Vị trí: 123 Đường Số 1, Phường 2, Tân Bình TP. Hồ Chí Minh Lưu tin</div></div>
+            </div>
+        </body>
+        </html>
+        """
+        detail = parser.parse(html_valid, detail_url="https://nhadat.cafeland.vn/cho-thue-phong-cao-cap-123.html")
+        self.assertIsNotNone(detail)
+        self.assertEqual(detail.address_raw, "123 Đường Số 1, Phường 2, Tân Bình TP. Hồ Chí Minh")
+        self.assertIsNone(detail.map_location)
 
 if __name__ == "__main__":
     unittest.main()

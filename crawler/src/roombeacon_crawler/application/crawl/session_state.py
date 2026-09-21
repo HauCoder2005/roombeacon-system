@@ -81,6 +81,7 @@ class CrawlSessionState:
     known_page_streak: int = 0
     final_status: CrawlStatus = CrawlStatus.SUCCESS
     stop_reason: str | CrawlStatus | None = None
+    source_end_confirmed: bool = False
     failure_reason: str | None = None
     errors: list[str] = field(default_factory=list)
 

@@ -18,7 +18,11 @@ def setup_project_path() -> Path:
 
             # Thư mục gốc cung cấp ``analytics``; crawler/src cung cấp package
             # ``roombeacon_crawler`` theo src-layout mà các module analytics sử dụng.
-            import_paths = (candidate, candidate / "crawler" / "src")
+            import_paths = (
+                candidate,
+                candidate / "crawler" / "src",
+                candidate / "notebooks",
+            )
             for import_path in import_paths:
                 import_path_text = str(import_path)
                 if import_path_text not in sys.path:

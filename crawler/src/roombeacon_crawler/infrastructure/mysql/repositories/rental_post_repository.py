@@ -44,7 +44,7 @@ class MySQLRentalPostRepository(RentalPostRepositoryPort):
                 "platform_id": platform_id,
                 "platform_post_id": observation.listing_id,
                 "url": observation.url,
-                "title_raw": observation.title_raw,
+                "title_raw": observation.title_raw[:500] if observation.title_raw else None,
                 "first_observed_at": obs_time,
                 "last_observed_at": obs_time,
             },

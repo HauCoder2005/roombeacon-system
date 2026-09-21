@@ -1,7 +1,6 @@
 """Execute a qualified crawl plan through the application runner boundary.
 
-This module is deliberately Airflow-free. Runtime adapters are composed inside the
-relevant use-case boundary until Phase 3 introduces explicit composition roots.
+This module is Airflow-free and composes runtime adapters at the use-case boundary.
 """
 
 import logging
@@ -15,7 +14,7 @@ from roombeacon_crawler.application.orchestration.errors import CrawlerWorkflowE
 
 
 def execute_crawl(qual_payload: dict, **context) -> dict:
-    """4. Thực thi cào dữ liệu cho từng plan đã qua bước thẩm định."""
+    """Thực thi cào dữ liệu cho từng plan đã qua bước thẩm định."""
     plan_dict = qual_payload.get("plan", {})
     source = qual_payload.get("source", "unknown")
     target_id = qual_payload.get("target_id", "default")
@@ -95,8 +94,8 @@ def execute_crawl(qual_payload: dict, **context) -> dict:
             f"CrawlRunner technical failure for {source}/{target_id}"
         ) from None
 
-    # Technical Failure Check
     if result.status in (
+        CrawlStatus.NOT_FOUND,
         CrawlStatus.CONNECTION_ERROR,
         CrawlStatus.SERVER_ERROR,
         CrawlStatus.TIMEOUT,
@@ -145,6 +144,8 @@ def execute_crawl(qual_payload: dict, **context) -> dict:
         "plan": plan_dict,
         "observed_listing_ids": getattr(result, "observed_listing_ids", []),
         "new_listing_ids": getattr(result, "new_listing_ids", []),
+        "seen_metadata_updates": getattr(result, "seen_metadata_updates", {}),
+        "source_end_confirmed": getattr(result, "source_end_confirmed", False),
         "observations_written": getattr(result, "observations_written", len(getattr(result, "observed_listing_ids", []))),
         "records_changed": getattr(result, "records_changed", 0),
         "detail_requests_skipped": getattr(result, "detail_requests_skipped", 0),
@@ -195,8 +196,3 @@ def execute_crawl(qual_payload: dict, **context) -> dict:
         "browser_context_count": result.browser_context_count,
         "browser_page_count": result.browser_page_count,
     }
-
-
-# --------------------------------------------------------------------------
-# Task 5: Persist Bronze to MySQL (Mapped per Crawl Result)
-# --------------------------------------------------------------------------

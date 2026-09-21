@@ -11,16 +11,18 @@ from roombeacon_crawler.application.assets.asset_reconciler import (
     AssetReconcilerService,
 )
 from roombeacon_crawler.application.orchestration.errors import CrawlerWorkflowError
+from roombeacon_crawler.infrastructure.mysql.schema import ensure_mysql_schema
 
 
 def sync_assets_minio(batch_size: int = DEFAULT_ASSET_BATCH_SIZE) -> dict:
     """Reconcile one fair, bounded batch and return scheduler-safe metrics."""
     try:
+        ensure_mysql_schema()
         result = AssetReconcilerService().reconcile_batch(batch_size=batch_size)
     except Exception as exc:
         raise CrawlerWorkflowError(
             f"Asset sync failed (error_class={type(exc).__name__})"
-        ) from None
+        ) from exc
 
     return {
         "batch_budget": result.batch_budget,

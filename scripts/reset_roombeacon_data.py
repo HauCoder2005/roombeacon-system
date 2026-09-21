@@ -104,9 +104,12 @@ def _pause_and_verify_idle() -> None:
             "--state", "running", "--output", "json",
         ])
         try:
-            active = json.loads(result.stdout or "[]")
-        except json.JSONDecodeError as exc:
-            raise ResetSafetyError("Cannot verify active Airflow runs") from exc
+            out_str = result.stdout or "[]"
+            # Extract JSON from stdout which may contain warnings
+            json_str = next((line for line in out_str.splitlines() if line.startswith("[") or line.startswith("{")), "[]")
+            active = json.loads(json_str)
+        except (json.JSONDecodeError, StopIteration) as exc:
+            raise ResetSafetyError(f"Cannot verify active Airflow runs: {result.stdout}") from exc
         if active:
             raise ResetSafetyError(f"Mutating DAG still has active runs: {dag_id}")
 

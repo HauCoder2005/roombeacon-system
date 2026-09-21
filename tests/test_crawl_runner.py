@@ -465,6 +465,42 @@ class TestCrawlRunnerExecution(unittest.TestCase):
         self.assertNotIn("Connection refused", rendered)
 
     @patch("roombeacon_crawler.pipeline.crawl_runner.CrawlRunner.execute_crawl")
+    def test_airflow_task_semantics_not_found_raises_airflow_exception(
+        self, mock_execute_crawl: MagicMock
+    ) -> None:
+        """HTTP 404 from a scheduled source is not a successful source end."""
+        mock_execute_crawl.return_value = (
+            [],
+            CrawlRunResult(
+                run_id="run_test_not_found",
+                source="muaban",
+                target_id="hcm_phongtro",
+                started_at="2026-09-14T00:00:00",
+                finished_at="2026-09-14T00:00:01",
+                status=CrawlStatus.NOT_FOUND,
+                pages_attempted=1,
+                pages_failed=1,
+                records_created=0,
+            ),
+        )
+        qual_payload = {
+            "plan": {
+                "source": "muaban",
+                "target_id": "hcm_phongtro",
+                "target_url": "https://muaban.net/rentals",
+                "mode": "BOOTSTRAP_FULL",
+            },
+            "source": "muaban",
+            "target_id": "hcm_phongtro",
+            "target_url": "https://muaban.net/rentals",
+            "qualification_status": "READY",
+            "action": "QUALIFIED",
+        }
+
+        with self.assertRaises(AirflowException):
+            airflow_execute_crawl.function(qual_payload=qual_payload)
+
+    @patch("roombeacon_crawler.pipeline.crawl_runner.CrawlRunner.execute_crawl")
     def test_airflow_task_semantics_success_returns_summary(
         self, mock_execute_crawl: MagicMock
     ) -> None:

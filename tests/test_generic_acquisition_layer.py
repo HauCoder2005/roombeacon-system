@@ -2,6 +2,7 @@ import asyncio
 from datetime import datetime, timezone
 import json
 import os
+from pathlib import Path
 import shutil
 import tempfile
 import unittest
@@ -16,9 +17,11 @@ from roombeacon_crawler.fetchers.browser_fetcher import BrowserFetcher
 from roombeacon_crawler.fetchers.http_fetcher import HttpFetcher
 from roombeacon_crawler.models.captured_response import CapturedResponse
 from roombeacon_crawler.models.crawl_target import CrawlTarget
+from roombeacon_crawler.models.crawl_metadata import CrawlMetadata
 from roombeacon_crawler.models.listing_card_raw import ListingCardRaw
 from roombeacon_crawler.models.listing_detail_raw import ListingDetailRaw
 from roombeacon_crawler.pipeline.crawl_runner import CrawlRunner
+from roombeacon_crawler.pipeline.listing_crawl import ListingCrawlPipeline
 from roombeacon_crawler.policies.rate_limit_policy import RateLimitPolicy
 from roombeacon_crawler.policies.retry_policy import RetryPolicy
 from roombeacon_crawler.policies.robots_policy import RobotsPolicy
@@ -27,6 +30,13 @@ from roombeacon_crawler.services.response_classifier import ResponseClassifier
 from roombeacon_crawler.services.strategy_selector import StrategySelector
 from roombeacon_crawler.sources.base import BaseSourceAdapter
 from roombeacon_crawler.sources.registry import SourceRegistry, source_registry
+from roombeacon_crawler.sources.muaban.adapter import MuabanSourceAdapter
+from roombeacon_crawler.infrastructure.storage.local.local_storage_writer import (
+    LocalStorageWriter,
+)
+from roombeacon_crawler.application.orchestration.persistence import (
+    persist_bronze_mysql,
+)
 
 
 # --------------------------------------------------------------------------
@@ -136,6 +146,149 @@ class TestGenericAcquisitionLayer(unittest.TestCase):
     def tearDown(self) -> None:
         source_registry.unregister(FakeSourceAdapter.SOURCE_NAME)
         shutil.rmtree(self.test_dir, ignore_errors=True)
+
+    def test_muaban_parse_failure_retains_raw_evidence(self) -> None:
+        html = (
+            '<html><script id="__NEXT_DATA__" type="application/json">'
+            '{"props":{"pageProps":{}}}'
+            "</script></html>"
+        )
+        response = CapturedResponse(
+            request_url="https://muaban.net/bat-dong-san/rentals",
+            final_url="https://muaban.net/bat-dong-san/rentals",
+            status_code=200,
+            html=html,
+            headers={"content-type": "text/html"},
+            fetch_strategy=FetchStrategy.HTTP,
+            fetched_at="2026-09-15T00:00:00+00:00",
+        )
+        metadata = CrawlMetadata(
+            run_id="run-schema-drift",
+            source="muaban",
+            target_type=CrawlTargetType.LISTING_PAGE,
+            request_url=response.request_url,
+            final_url=response.final_url,
+            page_number=1,
+            fetch_strategy=FetchStrategy.HTTP,
+            http_status=200,
+            content_type="text/html",
+            server=None,
+            cf_ray=None,
+            html_size=len(html),
+            started_at="2026-09-15T00:00:00+00:00",
+            finished_at="2026-09-15T00:00:01+00:00",
+            elapsed_ms=1.0,
+            retry_count=0,
+            robots_allowed=True,
+            crawl_status=CrawlStatus.SUCCESS,
+        )
+        coordinator = MagicMock()
+        coordinator.fetch = AsyncMock(
+            return_value=(response, CrawlStatus.SUCCESS, metadata)
+        )
+        robots_policy = MagicMock()
+        robots_policy.evaluate.return_value = (
+            "ALLOWED",
+            "https://muaban.net/robots.txt",
+        )
+        writer = LocalStorageWriter(base_data_dir=self.test_dir)
+        pipeline = ListingCrawlPipeline(
+            adapter=MuabanSourceAdapter(),
+            fetch_coordinator=coordinator,
+            robots_policy=robots_policy,
+            failure_artifact_writer=writer,
+        )
+        target = CrawlTarget(
+            url=response.request_url,
+            source="muaban",
+            target_type=CrawlTargetType.LISTING_PAGE,
+            page_number=1,
+        )
+
+        cards, detail_targets, result_meta, raw_html = asyncio.run(
+            pipeline.execute(target=target, run_id="run-schema-drift")
+        )
+
+        self.assertEqual(cards, [])
+        self.assertEqual(detail_targets, [])
+        self.assertEqual(result_meta.crawl_status, CrawlStatus.PARSE_ERROR)
+        self.assertEqual(raw_html, html)
+        failure_dir = (
+            Path(self.test_dir)
+            / "quarantine"
+            / "muaban"
+            / "2026-09-15"
+            / "run-schema-drift"
+            / "page-1"
+        )
+        self.assertEqual((failure_dir / "response.html").read_text(), html)
+        failure_metadata = json.loads(
+            (failure_dir / "metadata.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(failure_metadata["source"], "muaban")
+        self.assertEqual(failure_metadata["url"], response.final_url)
+        self.assertEqual(failure_metadata["crawl_run_id"], "run-schema-drift")
+        self.assertEqual(failure_metadata["failure_reason"], "SCHEMA_OR_PARSE_FAILURE")
+
+    @patch("roombeacon_crawler.policies.robots_policy.RobotsPolicy.evaluate")
+    @patch("roombeacon_crawler.fetchers.http_fetcher.HttpFetcher.fetch")
+    def test_muaban_confirmed_empty_first_page_completes_cleanly(
+        self,
+        mock_http_fetch: AsyncMock,
+        mock_robots_eval: MagicMock,
+    ) -> None:
+        target_url = (
+            "https://muaban.net/bat-dong-san/"
+            "cho-thue-nha-tro-phong-tro-ho-chi-minh"
+        )
+        mock_robots_eval.return_value = (
+            "ALLOWED",
+            "https://muaban.net/robots.txt",
+        )
+        mock_http_fetch.return_value = CapturedResponse(
+            request_url=target_url,
+            final_url=target_url,
+            status_code=200,
+            html=(
+                '<html><script id="__NEXT_DATA__" type="application/json">'
+                '{"props":{"pageProps":{"classified":{"items":[]}}}}'
+                "</script></html>"
+            ),
+            headers={"content-type": "text/html"},
+            fetch_strategy=FetchStrategy.HTTP,
+        )
+        settings = CrawlerSettings(
+            data_dir=self.test_dir,
+            request_delay_seconds=0.0,
+        )
+
+        records, crawl_result = CrawlRunner.execute_crawl(
+            url=target_url,
+            max_pages=1,
+            max_records=20,
+            crawl_details=False,
+            settings=settings,
+        )
+
+        self.assertEqual(records, [])
+        self.assertEqual(crawl_result.status, CrawlStatus.SUCCESS)
+        self.assertEqual(crawl_result.stop_reason, "SOURCE_END")
+        self.assertTrue(crawl_result.source_end_confirmed)
+        self.assertIsNone(crawl_result.bronze_path)
+        persistence = persist_bronze_mysql(
+            {
+                "source": crawl_result.source,
+                "target_id": crawl_result.target_id,
+                "run_id": crawl_result.run_id,
+                "action": "CRAWLED",
+                "crawl_status": crawl_result.status.value,
+                "stop_reason": crawl_result.stop_reason,
+                "source_end_confirmed": crawl_result.source_end_confirmed,
+                "bronze_path": crawl_result.bronze_path,
+                "observations_written": crawl_result.observations_written,
+            }
+        )
+        self.assertEqual(persistence["status"], "SUCCESS")
 
     @patch("roombeacon_crawler.fetchers.http_fetcher.HttpFetcher.fetch")
     def test_fetch_coordinator_http_flow(self, mock_http_fetch: AsyncMock) -> None:

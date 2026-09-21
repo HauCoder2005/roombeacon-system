@@ -1,0 +1,25 @@
+import os
+import re
+
+base_dir = '/home/codeser_server/Data/projects/roombeacon/source/roombeacon-system/crawler/src/roombeacon_crawler/sources'
+
+for root, dirs, files in os.walk(base_dir):
+    for f in files:
+        if f.endswith('_parser.py') and 'detail' in f:
+            path = os.path.join(root, f)
+            with open(path, 'r') as fp:
+                content = fp.read()
+            
+            if 'ListingDetailRaw(' in content and 'map_location' not in content:
+                print(f"Patching {path}")
+                # Add import
+                if 'from roombeacon_crawler.sources.map_extractor import MapLocationExtractor' not in content:
+                    content = 'from roombeacon_crawler.sources.map_extractor import MapLocationExtractor\n' + content
+                
+                # We need to find `ListingDetailRaw(` and inject `map_location=MapLocationExtractor.extract_map_from_html(html),`
+                # Assuming `html` is passed to the parser or available in the scope.
+                # In most `parse(self, html: str, ...)` the variable is `html`.
+                
+                content = re.sub(r'ListingDetailRaw\(', r'ListingDetailRaw(\n            map_location=MapLocationExtractor.extract_map_from_html(html),', content)
+                with open(path, 'w') as fp:
+                    fp.write(content)

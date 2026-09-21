@@ -1,3 +1,4 @@
+from roombeacon_crawler.sources.map_extractor import MapLocationExtractor
 """Extract MuaBan detail fields into the source-neutral raw detail model."""
 
 import logging
@@ -24,6 +25,7 @@ class MuabanDetailParser:
     ) -> ListingDetailRaw:
         if not html:
             return ListingDetailRaw(
+            map_location=MapLocationExtractor.extract_map_from_html(html),
                 source=self.source_name,
                 listing_id=listing_id,
                 detail_url=detail_url,
@@ -56,6 +58,7 @@ class MuabanDetailParser:
             image_urls_raw = extract_json_ld_images(root, detail_url)
 
         return ListingDetailRaw(
+            map_location=MapLocationExtractor.extract_map_from_html(html),
             source=self.source_name,
             listing_id=listing_id,
             detail_url=detail_url,

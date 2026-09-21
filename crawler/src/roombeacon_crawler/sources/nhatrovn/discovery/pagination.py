@@ -61,15 +61,15 @@ class NhatroVNPagination:
         **kwargs,
     ) -> bool:
         """Xác định xem trang hiện tại có trang tiếp theo không."""
-        # 1. Giới hạn nghiệp vụ cấu hình
+        # Giới hạn nghiệp vụ cấu hình
         if current_page >= max_pages:
             return False
 
-        # 2. Trang hiện tại rỗng (0 items) -> Không còn trang tiếp
+        # Trang hiện tại rỗng (0 items) -> Không còn trang tiếp
         if current_items_count == 0:
             return False
 
-        # 3. Không có HTML -> mặc định tiếp tục nếu chưa đạt max_pages
+        # Không có HTML -> mặc định tiếp tục nếu chưa đạt max_pages
         effective_html = html if html is not None else (raw_html or kwargs.get("raw_html"))
         if not effective_html:
             return current_page < max_pages
@@ -77,7 +77,7 @@ class NhatroVNPagination:
         try:
             root = DOMTreeBuilder.parse(effective_html)
 
-            # 4. Trích xuất thông tin Trang X / Y từ text: e.g. "(Trang 1 / 42)" hoặc "Trang 5/42"
+            # Trích xuất thông tin Trang X / Y từ text: e.g. "(Trang 1 / 42)" hoặc "Trang 5/42"
             text_nodes = root.find_all(
                 predicate=lambda n: "Trang" in n.get_text() and "/" in n.get_text()
             )
@@ -89,7 +89,7 @@ class NhatroVNPagination:
                     logger.debug("Phát hiện tổng số trang của nguồn: %d (Trang hiện tại: %d)", total_pages, current_page)
                     return current_page < total_pages
 
-            # 5. Kiểm tra sự tồn tại của nút Next Arrow không có class disabled
+            # Kiểm tra sự tồn tại của nút Next Arrow không có class disabled
             next_arrows = root.find_all(
                 tag="a",
                 class_contains="pagination-arrow",
@@ -100,7 +100,7 @@ class NhatroVNPagination:
                 if ">" in text or "gt;" in text or "next" in text.lower() or "chevron_right" in text:
                     return True
 
-            # 6. Kiểm tra số trang lớn nhất tìm thấy trong các pagination buttons
+            # Kiểm tra số trang lớn nhất tìm thấy trong các pagination buttons
             page_buttons = root.find_all(class_contains="pagination-btn")
             max_seen_page = current_page
             for btn in page_buttons:
@@ -113,5 +113,5 @@ class NhatroVNPagination:
         except Exception as exc:
             logger.warning("NhatroVN pagination parse failed; continuing within max-pages policy (page=%d, error_class=%s)", current_page, type(exc).__name__)
 
-        # 7. Nếu có items và không có chỉ dấu hết trang -> cho phép tiếp tục
+        # Nếu có items và không có chỉ dấu hết trang -> cho phép tiếp tục
         return current_page < max_pages

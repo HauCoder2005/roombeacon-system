@@ -1,0 +1,7 @@
+import urllib.parse
+from roombeacon_crawler.sources.map_extractor import MapLocationExtractor
+import base64
+
+url = "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d15676.634958189519!2d106.63001859999999!3d10.7991475!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x31752b1b369527a9%3A0x6420f18af78a1bc1!2zNzkgTmd1eeG7hW4gVGjDrSwgUGjGsOG7nW5nIDE0LCBUw6JuIELDrG5oLCBI4buTIENow60gTWluaCwgVmnhu4d0IE5hbQ!5e0!3m2!1svi!2s!4v1701337424072!5m2!1svi!2s"
+
+print(MapLocationExtractor.extract_from_url(url))

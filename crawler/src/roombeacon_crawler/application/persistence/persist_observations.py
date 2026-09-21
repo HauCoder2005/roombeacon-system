@@ -11,6 +11,7 @@ from typing import Sequence
 
 from roombeacon_crawler.domain.errors.domain_error import PersistenceError
 from roombeacon_crawler.domain.models.bronze_observation import BronzeObservation
+from roombeacon_crawler.models.persistence_context import PersistenceContext
 from roombeacon_crawler.domain.ports.persistence_port import (
     ObservationRepositoryPort,
     PlatformRepositoryPort,
@@ -69,7 +70,7 @@ class PersistBronzeObservationsUseCase:
         self.children_repo = children_repo
         self.transaction_mgr = transaction_mgr
 
-    def execute(self, observations: Sequence[BronzeObservation]) -> BronzeImportResult:
+    def execute(self, observations: Sequence[BronzeObservation], context: PersistenceContext | None = None) -> BronzeImportResult:
         """Thực thi persist danh sách BronzeObservation."""
         if not observations:
             return BronzeImportResult(total_observations=0)
@@ -94,7 +95,6 @@ class PersistBronzeObservationsUseCase:
 
                 platform_ids: dict[str, int] = {}
                 for obs in observations:
-                    # 1. Quản lý Platform
                     platform_id = platform_ids.get(obs.source)
                     if platform_id is None:
                         phase_started = time.perf_counter()
@@ -106,7 +106,6 @@ class PersistBronzeObservationsUseCase:
                         result.platform_seconds += time.perf_counter() - phase_started
                         platform_ids[obs.source] = platform_id
 
-                    # 2. Quản lý Rental Post Identity (Stable entity)
                     phase_started = time.perf_counter()
                     post_id, is_new_post = self.rental_post_repo.upsert_post(
                         obs, platform_id=platform_id
@@ -117,14 +116,12 @@ class PersistBronzeObservationsUseCase:
                     else:
                         result.posts_existing += 1
 
-                    # 3. Quản lý Phiên bản Quan sát (rental_post_versions)
                     phase_started = time.perf_counter()
                     version_id, is_inserted = self.observation_repo.insert_observation(
-                        obs, post_id=post_id
+                        obs, post_id=post_id, context=context
                     )
                     result.rental_post_versions_seconds += time.perf_counter() - phase_started
 
-                    # 4. Quản lý dữ liệu con liên kết (chỉ khi là observation mới)
                     if is_inserted:
                         result.observations_inserted += 1
                         phase_started = time.perf_counter()

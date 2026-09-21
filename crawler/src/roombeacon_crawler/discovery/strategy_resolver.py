@@ -30,7 +30,6 @@ class DiscoveryStrategyResolver:
 
         from roombeacon_crawler.sources.registry import source_registry
 
-        # 1. Kiểm tra năng lực qua Source Adapter Capabilities
         for adapter_cls in source_registry.get_registered_adapters():
             if getattr(adapter_cls, "SOURCE_NAME", None) == source:
                 caps = getattr(adapter_cls, "CAPABILITIES", None)
@@ -43,7 +42,6 @@ class DiscoveryStrategyResolver:
                     if caps.supports_sitemap_discovery and self.registry.has(source):
                         return DiscoveryStrategy.ENHANCED_DISCOVERY
 
-        # 2. Kiểm tra trực tiếp qua Discovery Registry
         if self.registry.has(source):
             return DiscoveryStrategy.ENHANCED_DISCOVERY
 

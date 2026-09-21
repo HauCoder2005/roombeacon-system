@@ -44,6 +44,26 @@ class TestAreaNormalizationAndPersistence(unittest.TestCase):
         self.assertEqual(MySQLBronzeMapper.parse_numeric_area("2000 m2"), 2000.0)
         self.assertEqual(MySQLBronzeMapper.parse_numeric_area("50000 m²"), 50000.0)
 
+    def test_vietnamese_dot_grouped_monthly_prices_are_vnd_amounts(self):
+        cases = {
+            "850.000 đồng/tháng": 850_000.0,
+            "900.000 đồng/tháng": 900_000.0,
+            "1.200.000 đồng/tháng": 1_200_000.0,
+        }
+        for raw, expected in cases.items():
+            with self.subTest(raw=raw):
+                self.assertEqual(MySQLBronzeMapper.parse_numeric_price(raw), expected)
+
+    def test_existing_million_price_formats_remain_unchanged(self):
+        cases = {
+            "3.2 triệu/tháng": 3_200_000.0,
+            "4,3 triệu/tháng": 4_300_000.0,
+            "1.2 tr/tháng": 1_200_000.0,
+        }
+        for raw, expected in cases.items():
+            with self.subTest(raw=raw):
+                self.assertEqual(MySQLBronzeMapper.parse_numeric_price(raw), expected)
+
     def test_persistence_defensive_guard_preserves_raw_and_nulls_invalid_area(self):
         mock_conn = MagicMock()
         repo = MySQLPostChildrenRepository(connection=mock_conn)
@@ -70,7 +90,7 @@ class TestAreaNormalizationAndPersistence(unittest.TestCase):
 
         self.assertIsNotNone(details_call, "INSERT INTO post_details không được gọi!")
         params = details_call[0][1]
-        
+
         # Bất biến cốt lõi: area_raw giữ nguyên vẹn 100%, area_val trở thành NULL
         self.assertEqual(params["area_raw"], "120202748m")
         self.assertIsNone(params["area_val"])
@@ -112,6 +132,39 @@ class TestAreaNormalizationAndPersistence(unittest.TestCase):
 
         # Kiểm tra chuẩn hóa diện tích
         self.assertEqual(MySQLBronzeMapper.parse_numeric_area(c.area_raw), 28.0)
+
+    def test_phongtro123_title_uses_anchor_metadata_when_text_breaks_dom(self):
+        from roombeacon_crawler.sources.phongtro123.parsers.listing_parser import Phongtro123ListingParser
+
+        html_sample = """
+        <ul class="post-listing">
+            <li class="post-item">
+                <h3 class="post-title">
+                    <a href="/phong-cao-cap-pr584711.html"
+                       title="Cho thuê phòng cao cấp &lt;giá rẻ mới xây&gt; gác cao 1m7">
+                        Cho thuê phòng cao cấp <giá rẻ mới xây> gác cao 1m7
+                    </a>
+                </h3>
+                <span class="post-price">3.2 triệu/tháng</span>
+                <span class="post-acreage">30 m2</span>
+                <div class="post-description">Nội dung tin không phải tiêu đề</div>
+                <script>document.onreadystatechange = function () { return "challenge"; };</script>
+            </li>
+        </ul>
+        """
+
+        cards = Phongtro123ListingParser().parse(
+            html_sample,
+            "https://phongtro123.com/tinh-thanh/ho-chi-minh",
+        )
+
+        self.assertEqual(len(cards), 1)
+        self.assertEqual(
+            cards[0].title_raw,
+            "Cho thuê phòng cao cấp <giá rẻ mới xây> gác cao 1m7",
+        )
+        self.assertNotIn("Nội dung tin", cards[0].title_raw)
+        self.assertNotIn("document", cards[0].title_raw)
 
 
 if __name__ == "__main__":

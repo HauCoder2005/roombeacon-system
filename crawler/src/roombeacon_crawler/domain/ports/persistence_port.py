@@ -21,11 +21,13 @@ class RentalPostRepositoryPort(ABC):
         pass
 
 
+from roombeacon_crawler.models.persistence_context import PersistenceContext
+
 class ObservationRepositoryPort(ABC):
     """Port giao tiếp ghi nhận bản ghi quan sát bất biến (raw_observations)."""
 
     @abstractmethod
-    def insert_observation(self, observation: BronzeObservation, post_id: int) -> int:
+    def insert_observation(self, observation: BronzeObservation, post_id: int, context: "PersistenceContext | None" = None) -> tuple[int, bool]:
         """Ghi nhận bản ghi quan sát theo phiên và trả về observation_id."""
         pass
 

@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 import logging
 
 from roombeacon_crawler.enums.crawl_status import CrawlStatus
+from roombeacon_crawler.domain.errors.domain_error import ParseError
 from roombeacon_crawler.enums.crawl_target_type import CrawlTargetType
 from roombeacon_crawler.enums.fetch_action import FetchAction
 from roombeacon_crawler.fetchers.browser_fetcher import BrowserFetcher
@@ -42,10 +43,12 @@ class ListingCrawlPipeline:
         retry_policy: RetryPolicy | None = None,
         response_classifier: ResponseClassifier | None = None,
         fetch_policy: FetchPolicy | None = None,
+        failure_artifact_writer=None,
     ) -> None:
         self.adapter = adapter
         self.robots_policy = robots_policy or RobotsPolicy()
         self.fetch_policy = fetch_policy or FetchPolicy()
+        self.failure_artifact_writer = failure_artifact_writer
 
         if fetch_coordinator is not None:
             self.fetch_coordinator = fetch_coordinator
@@ -67,7 +70,6 @@ class ListingCrawlPipeline:
         """Thực thi toàn bộ chu trình crawl một trang listing và sinh danh sách detail targets cùng raw HTML."""
         started_at = datetime.now(timezone.utc).isoformat()
 
-        # 1. Robots.txt Preflight Evaluation
         decision, robots_url = self.robots_policy.evaluate(target.url)
         logger.info("Source: %s", target.source)
         logger.info("Robots URL: %s", robots_url)
@@ -88,7 +90,6 @@ class ListingCrawlPipeline:
             )
             return [], [], meta, None
 
-        # 2. Generic Fetch via FetchCoordinator
         response, crawl_status, meta = await self.fetch_coordinator.fetch(
             target=target,
             adapter=self.adapter,
@@ -99,16 +100,37 @@ class ListingCrawlPipeline:
         if action != FetchAction.PARSE or not response:
             return [], [], meta, None
 
-        # 3. Extract Cards
-        cards = self.adapter.listing_parser.parse(
-            html=response.html,
-            source_url=response.final_url,
-            page_number=target.page_number,
-            limit=limit_per_page,
-        )
+        try:
+            cards = self.adapter.listing_parser.parse(
+                html=response.html,
+                source_url=response.final_url,
+                page_number=target.page_number,
+                limit=limit_per_page,
+            )
+        except ParseError:
+            meta.crawl_status = CrawlStatus.PARSE_ERROR
+            if self.failure_artifact_writer is not None:
+                try:
+                    self.failure_artifact_writer.save_failure_artifact(
+                        source=target.source,
+                        run_id=run_id,
+                        url=response.final_url,
+                        raw_html=response.html,
+                        failure_reason="SCHEMA_OR_PARSE_FAILURE",
+                        page_number=target.page_number,
+                        fetched_at=response.fetched_at,
+                    )
+                except Exception as exc:
+                    logger.error(
+                        "Parser failure artifact retention failed "
+                        "(source=%s, run_id=%s, error_class=%s)",
+                        target.source,
+                        run_id,
+                        type(exc).__name__,
+                    )
+            return [], [], meta, response.html
         logger.info("Parser Result: Extracted %d raw listing cards", len(cards))
 
-        # 4. Validate and create Detail Crawl Targets
         valid_cards: list[ListingCardRaw] = []
         detail_targets: list[CrawlTarget] = []
 

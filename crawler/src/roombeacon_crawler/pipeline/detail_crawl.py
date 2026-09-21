@@ -70,7 +70,6 @@ class DetailCrawlPipeline:
         """Thực thi chu trình crawl trang chi tiết, bóc tách ListingDetailRaw và map thành RentalBronzeRecord."""
         started_at = datetime.now(timezone.utc).isoformat()
 
-        # 1. Robots check
         if not self.robots_policy.is_allowed(target.url):
             meta = MetadataCollector.collect(
                 target=target,
@@ -83,7 +82,6 @@ class DetailCrawlPipeline:
             bronze = BronzeMapper.map(card=card, detail=None, run_id=run_id)
             return bronze, None, meta
 
-        # 2. Generic Fetch via FetchCoordinator
         response, crawl_status, meta = await self.fetch_coordinator.fetch(
             target=target,
             adapter=self.adapter,
@@ -95,7 +93,6 @@ class DetailCrawlPipeline:
             bronze = BronzeMapper.map(card=card, detail=None, run_id=run_id)
             return bronze, None, meta
 
-        # 3. Extract Detail
         detail: ListingDetailRaw | None = self.adapter.detail_parser.parse(
             html=response.html,
             detail_url=response.final_url,
@@ -112,7 +109,6 @@ class DetailCrawlPipeline:
                 meta.crawl_status = CrawlStatus.PARSE_ERROR
                 detail = None
 
-        # 4. Map to Bronze
         bronze_record = BronzeMapper.map(
             card=card,
             detail=detail,

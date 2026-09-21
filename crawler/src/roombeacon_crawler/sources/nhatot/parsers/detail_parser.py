@@ -1,3 +1,4 @@
+from roombeacon_crawler.sources.map_extractor import MapLocationExtractor
 """Extract the primary NhaTot detail, including its scoped full address."""
 
 import json
@@ -103,6 +104,7 @@ class NhatotDetailParser:
 
         if not html:
             return ListingDetailRaw(
+            map_location=MapLocationExtractor.extract_map_from_html(html),
                 source=self.source_name,
                 listing_id=listing_id,
                 detail_url=detail_url,
@@ -122,6 +124,7 @@ class NhatotDetailParser:
         except Exception as exc:
             logger.error("NhaTot detail DOM parse failed (error_class=%s)", type(exc).__name__)
             return ListingDetailRaw(
+            map_location=MapLocationExtractor.extract_map_from_html(html),
                 source=self.source_name,
                 listing_id=listing_id,
                 detail_url=detail_url,
@@ -134,22 +137,19 @@ class NhatotDetailParser:
                 posted_at_raw=None,
             )
 
-        # 1. Title
         title_raw: str | None = None
-        h1 = root.find(tag="h1")
-        if h1:
-            title_raw = h1.get_text().strip() or None
-            
+        for cls in TITLE_CLASSES:
+            node = root.find(class_contains=cls)
+            if node:
+                t = node.get_text().strip()
+                if t:
+                    title_raw = t
+                    break
         if not title_raw:
-            for cls in TITLE_CLASSES:
-                node = root.find(class_contains=cls)
-                if node:
-                    t = node.get_text().strip()
-                    if t:
-                        title_raw = t
-                        break
+            h1 = root.find(tag="h1")
+            if h1:
+                title_raw = h1.get_text().strip() or None
 
-        # 2. Price
         price_raw: str | None = None
         for cls in PRICE_CLASSES:
             node = root.find(class_contains=cls)
@@ -161,7 +161,6 @@ class NhatotDetailParser:
         if not price_raw:
             price_raw = self._extract_price(root.get_text())
 
-        # 3. Area
         area_raw: str | None = None
         for cls in AREA_CLASSES:
             node = root.find(class_contains=cls)
@@ -173,38 +172,10 @@ class NhatotDetailParser:
         if not area_raw:
             area_raw = self._extract_area(root.get_text())
 
-        # 4. Address & Location
-        latitude = None
-        longitude = None
-        next_data_address = None
-        import re, json
-        match = re.search(r'__NEXT_DATA__.*?>(.*?)</script>', html)
-        if match:
-            try:
-                data = json.loads(match.group(1))
-                state = data.get('props', {}).get('initialState', {}) or data.get('props', {}).get('pageProps', {}).get('initialState', {})
-                adInfo = state.get('adView', {}).get('adInfo', {})
-                ad = adInfo.get('ad', {})
-                ad_params = adInfo.get('ad_params', {})
-                
-                lat = ad.get('latitude')
-                lon = ad.get('longitude')
-                if lat and float(lat) != 0: latitude = float(lat)
-                if lon and float(lon) != 0: longitude = float(lon)
-                
-                addr_obj = ad_params.get('address', {})
-                if isinstance(addr_obj, dict):
-                    next_data_address = addr_obj.get('value')
-            except Exception:
-                pass
-                
-        address_raw = next_data_address or self._extract_full_address(root)
+        address_raw = self._extract_full_address(root)
 
-        location_raw = address_raw
-        if latitude and longitude and address_raw:
-            location_raw = json.dumps({"address": address_raw, "latitude": latitude, "longitude": longitude})
+        location_raw: str | None = address_raw
 
-        # 5. Description
         description_raw: str | None = None
         for cls in DESCRIPTION_CLASSES:
             node = root.find(class_contains=cls)
@@ -214,7 +185,6 @@ class NhatotDetailParser:
                     description_raw = desc
                     break
 
-        # 6. Posted At & Updated At
         posted_at_raw: str | None = None
         for cls in POSTED_AT_CLASSES:
             node = root.find(class_contains=cls)
@@ -222,7 +192,6 @@ class NhatotDetailParser:
                 posted_at_raw = node.get_text().strip() or None
                 break
 
-        # 7. Property Type, Furnishing, Deposit
         property_type_raw: str | None = None
         for cls in PROPERTY_TYPE_CLASSES:
             node = root.find(class_contains=cls)
@@ -244,7 +213,6 @@ class NhatotDetailParser:
                 deposit_raw = node.get_text().strip() or None
                 break
 
-        # 8. Seller Information
         seller_name_raw: str | None = None
         for cls in SELLER_NAME_CLASSES:
             node = root.find(class_contains=cls)
@@ -259,18 +227,14 @@ class NhatotDetailParser:
                 seller_type_raw = node.get_text().strip() or None
                 break
 
-
-        # 9. Image URLs
-        from roombeacon_crawler.sources.common_html import extract_scoped_images
         image_urls_raw: list[str] = []
-        for cls in IMAGE_CLASSES:
-            gallery = root.find(class_contains=cls)
-            if gallery:
-                image_urls_raw = extract_scoped_images(gallery, detail_url)
-                break
+        for img in root.find_all(tag="img"):
+            src = img.attrs.get("src") or img.attrs.get("data-src")
+            if src and not src.startswith("data:"):
+                abs_img = urljoin(detail_url, src)
+                if abs_img not in image_urls_raw and ("chotot" in abs_img or "nhatot" in abs_img or "cdn" in abs_img):
+                    image_urls_raw.append(abs_img)
 
-
-        # 10. Amenities
         amenities_raw: list[str] = []
         for cls in AMENITY_CLASSES:
             for item in root.find_all(class_contains=cls):
@@ -279,6 +243,7 @@ class NhatotDetailParser:
                     amenities_raw.append(amenity_text)
 
         return ListingDetailRaw(
+            map_location=MapLocationExtractor.extract_map_from_html(html),
             source=self.source_name,
             listing_id=listing_id,
             detail_url=detail_url,

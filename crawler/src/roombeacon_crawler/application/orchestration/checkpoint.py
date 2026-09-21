@@ -1,7 +1,6 @@
 """Update crawl checkpoints and source health after durable persistence.
 
-This module is deliberately Airflow-free. Runtime adapters are composed inside the
-relevant use-case boundary until Phase 3 introduces explicit composition roots.
+This module is Airflow-free and composes runtime adapters at the use-case boundary.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -22,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 def update_checkpoint(persist_payload: dict = None, result_payload: dict = None, **context) -> dict:
-    """6. Cập nhật Checkpoint State, Health State sau khi đã cào và persist an toàn."""
+    """Cập nhật Checkpoint State, Health State sau khi đã cào và persist an toàn."""
     payload = persist_payload or result_payload or {}
     result_payload = payload.get("crawl_result") or payload
     source = payload.get("source") or result_payload.get("source", "unknown")
@@ -45,7 +44,7 @@ def update_checkpoint(persist_payload: dict = None, result_payload: dict = None,
     now_iso = now.isoformat()
     seed_interval = int(plan_dict.get("interval_minutes", 60) or 60)
 
-    # 1. Trường hợp DEFERRED do Cooldown Active: Không thay đổi state hay health
+    # Trường hợp DEFERRED do Cooldown Active: Không thay đổi state hay health
     if action == "DEFERRED" or crawl_status == "cooldown_active":
         logger.info("Target %s/%s đang trong cooldown -> Giữ nguyên state.", source, target_id)
         return {
@@ -59,7 +58,33 @@ def update_checkpoint(persist_payload: dict = None, result_payload: dict = None,
             "next_run_at": state.next_run_at,
         }
 
-    # 2. Trường hợp crawl thành công (hoặc hoàn thành phân trang hợp lệ)
+    # Defense in depth for manually replayed or legacy payloads. In the mapped
+    # DAG a failed persistence task prevents this task from running at all, but
+    # a non-success persistence result must never authorize success progress.
+    if (
+        crawl_status == CrawlStatus.SUCCESS.value
+        and persist_status not in {"SUCCESS", "UNKNOWN"}
+    ):
+        logger.error(
+            "Checkpoint not advanced because persistence was not durable "
+            "(source=%s, target=%s, persist_status=%s)",
+            source,
+            target_id,
+            persist_status,
+        )
+        return {
+            "source": source,
+            "target_id": target_id,
+            "checkpoint_updated": False,
+            "target_state_persisted": False,
+            "success_checkpoint_advanced": False,
+            "health_state_updated": False,
+            "deferred_cooldown": False,
+            "last_success_at": state.last_success_at,
+            "next_run_at": state.next_run_at,
+        }
+
+    # Trường hợp crawl thành công (hoặc hoàn thành phân trang hợp lệ)
     if crawl_status == CrawlStatus.SUCCESS.value:
         state.last_started_at = result_payload.get("started_at") or now_iso
         state.last_finished_at = now_iso
@@ -116,13 +141,14 @@ def update_checkpoint(persist_payload: dict = None, result_payload: dict = None,
             state.bootstrap_completed = True
             state.bootstrap_next_page = None
 
-        # Lưu danh sách listing_ids đã thấy
         observed_ids = result_payload.get("observed_listing_ids", [])
         if observed_ids:
             repo.record_seen_listing_ids(source, target_id, observed_ids)
+        seen_metadata_updates = result_payload.get("seen_metadata_updates", {})
+        if seen_metadata_updates and hasattr(repo, "record_seen_details"):
+            repo.record_seen_details(source, target_id, seen_metadata_updates)
 
         repo.save_state(state)
-        # Thành công: Reset Health State về HEALTHY
         health_repo.record_success(source, target_id, current_time=now)
 
         logger.info(
@@ -146,7 +172,7 @@ def update_checkpoint(persist_payload: dict = None, result_payload: dict = None,
             "bootstrap_next_page": state.bootstrap_next_page,
         }
 
-    # 3. Trường hợp rào cản truy cập (Access Challenge), Robots Denied hoặc Robots Error
+    # Trường hợp rào cản truy cập (Access Challenge), Robots Denied hoặc Robots Error
     if crawl_status in (
         CrawlStatus.CLOUDFLARE_CHALLENGE.value,
         CrawlStatus.ACCESS_DENIED.value,
@@ -163,7 +189,6 @@ def update_checkpoint(persist_payload: dict = None, result_payload: dict = None,
 
         repo.save_state(state)
 
-        # Phân loại SourceHealthOutcome tương ứng
         if action == "ACCESS_CHALLENGE" or crawl_status in (
             CrawlStatus.CLOUDFLARE_CHALLENGE.value,
             CrawlStatus.ACCESS_DENIED.value,
@@ -206,7 +231,7 @@ def update_checkpoint(persist_payload: dict = None, result_payload: dict = None,
             "next_run_at": state.next_run_at,
         }
 
-    # 4. Trường hợp sự cố kỹ thuật (Technical Failure)
+    # Trường hợp sự cố kỹ thuật (Technical Failure)
     state.last_finished_at = now_iso
     state.last_status = crawl_status
     state.last_stop_reason = result_payload.get("stop_reason") or result_payload.get("failure_reason") or "TECHNICAL_FAILURE"
@@ -235,8 +260,3 @@ def update_checkpoint(persist_payload: dict = None, result_payload: dict = None,
         "last_success_at": state.last_success_at,
         "next_run_at": state.next_run_at,
     }
-
-
-# --------------------------------------------------------------------------
-# Task 7: Refresh DuckDB Analytics (Once per DAG Run)
-# --------------------------------------------------------------------------

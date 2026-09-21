@@ -55,15 +55,15 @@ class NhaTotDiscoveryAdapter(SourceDiscoveryAdapter):
 
             path = parsed.path.lower()
 
-            # 1. Loại bỏ các danh mục không liên quan
+            # Loại bỏ các danh mục không liên quan
             if any(path.startswith(exc) or exc in path for exc in self.NON_RENT_EXCLUDES):
                 return False
 
-            # 2. Khớp các URL danh mục / listing cho thuê
+            # Khớp các URL danh mục / listing cho thuê
             if any(path.startswith(p) or p in path for p in self.RENT_PATTERNS):
                 return True
 
-            # 3. Khớp các URL chi tiết tin đăng cho thuê
+            # Khớp các URL chi tiết tin đăng cho thuê
             if ("-pr" in path or re.search(r"/\d+\.htm", path)) and not any(exc in path for exc in self.NON_RENT_EXCLUDES):
                 # Nếu có từ khóa thuê hoặc nằm trong domain nhatot chuyên biệt
                 if "nhatot.com" in netloc or any(p in path for p in self.RENT_PATTERNS):

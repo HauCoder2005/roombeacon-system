@@ -10,21 +10,19 @@ BOOTSTRAP_PATH = ROOT / "infrastructure/minio/bootstrap.sh"
 COMPOSE_PATH = ROOT / "docker-compose.yml"
 
 
-def test_asset_policy_is_object_scoped_and_least_privilege():
+def test_asset_policy_is_scoped_to_runtime_operations():
     policy = json.loads(POLICY_PATH.read_text(encoding="utf-8"))
     statements = policy["Statement"]
     assert len(statements) == 2
-
-    bucket_access, object_access = statements
-    assert bucket_access["Effect"] == "Allow"
-    assert bucket_access["Action"] == ["s3:ListBucket"]
-    assert bucket_access["Resource"] == ["arn:aws:s3:::roombeacon-assets"]
-
-    assert object_access["Effect"] == "Allow"
-    assert set(object_access["Action"]) == {"s3:GetObject", "s3:PutObject"}
-    assert set(object_access["Resource"]) == {
-        "arn:aws:s3:::roombeacon-assets/*",
-        "arn:aws:s3:::roombeacon-raw/*",
+    listing, objects = statements
+    assert listing == {
+        "Effect": "Allow", "Action": ["s3:ListBucket"],
+        "Resource": ["arn:aws:s3:::roombeacon-assets"],
+    }
+    assert objects["Effect"] == "Allow"
+    assert set(objects["Action"]) == {"s3:GetObject", "s3:PutObject"}
+    assert set(objects["Resource"]) == {
+        "arn:aws:s3:::roombeacon-assets/*", "arn:aws:s3:::roombeacon-raw/*",
     }
 
 

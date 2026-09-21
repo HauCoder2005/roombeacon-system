@@ -1,0 +1,58 @@
+import re
+from urllib.parse import urlparse, parse_qs, unquote_plus
+def extract_from_url(url: str):
+    if not url:
+        return None
+        
+    parsed = urlparse(url)
+    is_google = "google.com" in parsed.netloc and "/maps" in parsed.path
+    is_maps_google = "maps.google.com" in parsed.netloc
+    
+    if not (is_google or is_maps_google):
+        return None
+        
+    qs = parse_qs(parsed.query)
+    
+    # Case 1: q coordinates or q text
+    if 'q' in qs:
+        q_val = qs['q'][0]
+        coord_match = re.match(r'^(-?\d+\.\d+),(-?\d+\.\d+)$', q_val)
+        if coord_match:
+            return {"provider":"google_maps_embed", "map_url_raw":url, "latitude":coord_match.group(1), "longitude":coord_match.group(2)}
+        return {"provider":"google_maps_embed", "map_url_raw":url, "query_raw":unquote_plus(q_val).replace('+', ' ')}
+        
+    # extract pb=!2s...
+    # The format pb=... contains sections separated by !
+    if 'pb' in qs:
+        pb_val = qs['pb'][0]
+        s_match = re.search(r'!2s([^!]+)', pb_val)
+        if s_match:
+            # wait, it could be !2s or !1s something. Usually !2z base64 or !2sUrlEncoded
+            print(f"pb !2s Match: {s_match.group(1)}")
+            
+    embed_match = re.search(r'!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)', url)
+    if embed_match:
+        return {"provider":"google_maps_embed", "map_url_raw":url, "latitude":embed_match.group(1), "longitude":embed_match.group(2)}
+            
+    embed_match2 = re.search(r'!2d(-?\d+\.\d+)!3d(-?\d+\.\d+)', url)
+    if embed_match2:
+        return {"provider":"google_maps_embed", "map_url_raw":url, "latitude":embed_match2.group(2), "longitude":embed_match2.group(1)}
+            
+    path_match = re.search(r'/@(-?\d+\.\d+),(-?\d+\.\d+)', parsed.path)
+    if path_match:
+        return {"provider":"google_maps_embed", "map_url_raw":url, "latitude":path_match.group(1), "longitude":path_match.group(2)}
+    
+    if 'll' in qs:
+        ll_val = qs['ll'][0]
+        coord_match = re.match(r'^(-?\d+\.\d+),(-?\d+\.\d+)$', ll_val)
+        if coord_match:
+            return {"provider":"google_maps_embed", "map_url_raw":url, "latitude":coord_match.group(1), "longitude":coord_match.group(2)}
+                
+    return None
+
+url = "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d15676.634958189519!2d106.63001859999999!3d10.7991475!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x31752b1b369527a9%3A0x6420f18af78a1bc1!2zNzkgTmd1eeG7hW4gVGjDrSwgUGjGsOG7nW5nIDE0LCBUw6JuIELDrG5oLCBI4buTIENow60gTWluaCwgVmnhu4d0IE5hbQ!5e0!3m2!1svi!2s!4v1701337424072!5m2!1svi!2s"
+print(extract_from_url(url))
+
+url2 = "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3919.467888863116!2d106.6346296147489!3d10.775433292322301!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x31752ea144839ef1%3A0x798819bd00b5eb3b!2zMTcgTMOqIMSQw6xuaCBUaMOhbSwgVMOibiBRdcO9LCBUw6JuIFBow7osIEjhu5MgQ2jDrSBNaW5o!5e0!3m2!1svi!2s!4v1652174390558!5m2!1svi!2s"
+print(extract_from_url(url2))
+

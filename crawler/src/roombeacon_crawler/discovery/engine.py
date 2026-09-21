@@ -89,7 +89,6 @@ class SitemapDiscoveryEngine:
         all_discovered: list[DiscoveredUrl] = []
         errors: list[str] = []
 
-        # Phân giải discovery transport từ SourceCapabilities
         transport = getattr(adapter, "preferred_discovery_transport", None)
         if not transport:
             from roombeacon_crawler.sources.registry import source_registry
@@ -110,7 +109,6 @@ class SitemapDiscoveryEngine:
                 errors.append(f"Fetch failed ({resp.error}): {sitemap_url}")
                 continue
 
-            # 1. Thử parse dạng Sitemap Index
             index_entries = SitemapIndexParser.parse_index(resp.content)
             if index_entries:
                 logger.info("Phát hiện Sitemap Index: %d child sitemaps trong %s", len(index_entries), sitemap_url)
@@ -120,7 +118,6 @@ class SitemapDiscoveryEngine:
                             sitemap_queue.append((child.loc, depth + 1))
                 continue
 
-            # 2. Thử parse dạng URL Set
             urlset_entries = SitemapUrlsetParser.parse_urlset(resp.content)
             if urlset_entries:
                 raw_entries = [(e.loc, e.lastmod) for e in urlset_entries]
@@ -134,7 +131,6 @@ class SitemapDiscoveryEngine:
                 all_discovered.extend(filtered)
                 logger.info("Đã lọc được %d URL ứng viên hợp lệ từ %s", len(filtered), sitemap_url)
 
-        # 3. Phân loại danh sách URL theo persistent seen state
         known_seen_urls = self.storage.get_seen_urls(adapter.SOURCE_NAME)
         new_urls = [u for u in all_discovered if u.url not in known_seen_urls]
         known_count = len(all_discovered) - len(new_urls)
@@ -147,13 +143,11 @@ class SitemapDiscoveryEngine:
             new_count,
         )
 
-        # Cập nhật seen candidate URLs cho nguồn
         if new_urls:
             self.storage.record_seen_urls(
                 adapter.SOURCE_NAME, [u.url for u in new_urls]
             )
 
-        # 4. Lưu Discovery Artifact xuống file qua DiscoveryStorage
         artifact = self.storage.save_artifact(
             source=adapter.SOURCE_NAME,
             run_id=active_run_id,
@@ -176,7 +170,6 @@ class SitemapDiscoveryEngine:
             error="; ".join(errors) if errors else None,
         )
 
-        # Lưu DiscoveryTargetState
         from roombeacon_crawler.discovery.models import DiscoveryTargetState
         discovery_state = DiscoveryTargetState(
             source=adapter.SOURCE_NAME,

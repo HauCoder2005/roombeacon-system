@@ -120,7 +120,6 @@ class Phongtro123ListingParser:
             builder = DOMTreeBuilder()
             builder.feed(html)
 
-            # Tìm các card items
             post_items = builder.root.find_all(class_contains="post-item")
             if not post_items:
                 post_items = builder.root.find_all(class_contains="item-post")
@@ -136,7 +135,6 @@ class Phongtro123ListingParser:
                 if len(cards) >= limit:
                     break
 
-                # Detail link & Title
                 title_node = item.find(class_contains="post-title") or item.find(tag="h3")
                 link_node = title_node.find(tag="a") if title_node else item.find(tag="a")
                 if not link_node:
@@ -150,11 +148,10 @@ class Phongtro123ListingParser:
                 if detail_url in seen_urls:
                     continue
 
-                title_raw = title_node.get_text() if title_node else link_node.attrs.get("title") or link_node.get_text()
+                title_raw = link_node.attrs.get("title", "").strip() or link_node.get_text()
                 if not title_raw:
                     continue
 
-                # ID extraction
                 id_match = ID_REGEX.search(detail_url)
                 listing_id = ""
                 if id_match:
@@ -162,7 +159,6 @@ class Phongtro123ListingParser:
                 if not listing_id:
                     listing_id = urlparse(detail_url).path.strip("/").replace(".html", "")
 
-                # Price
                 price_node = (
                     item.find(class_contains="post-price")
                     or item.find(class_contains="item-price")
@@ -174,7 +170,6 @@ class Phongtro123ListingParser:
                     match = PRICE_REGEX.search(item.get_text())
                     price_raw = match.group(1) if match else None
 
-                # Area
                 area_node = (
                     item.find(class_contains="post-acreage")
                     or item.find(class_contains="item-acreage")
@@ -185,7 +180,6 @@ class Phongtro123ListingParser:
                     match = AREA_REGEX.search(item.get_text())
                     area_raw = match.group(1) if match else None
 
-                # Location
                 loc_node = (
                     item.find(class_contains="post-location")
                     or item.find(class_contains="location")
@@ -197,11 +191,9 @@ class Phongtro123ListingParser:
                     if loc_links:
                         location_raw = loc_links[0].get_text()
 
-                # Time
                 time_node = item.find(class_contains="post-time") or item.find(class_contains="time") or item.find(tag="time")
                 posted_at_raw = time_node.get_text() if time_node else None
 
-                # Author
                 author_node = (
                     item.find(class_contains="post-author")
                     or item.find(class_contains="author-name")
@@ -211,7 +203,6 @@ class Phongtro123ListingParser:
                 )
                 seller_name_raw = author_node.get_text() if author_node else None
 
-                # Thumbnail image
                 img_node = item.find(tag="img")
                 thumbnail_url_raw = None
                 if img_node:
