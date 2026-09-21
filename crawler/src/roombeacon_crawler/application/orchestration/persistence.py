@@ -1,7 +1,6 @@
 """Persist successful local Bronze artifacts into observation history.
 
-This module is deliberately Airflow-free. Runtime adapters are composed inside the
-relevant use-case boundary until Phase 3 introduces explicit composition roots.
+This module is Airflow-free and composes runtime adapters at the use-case boundary.
 """
 
 import logging
@@ -15,7 +14,7 @@ from roombeacon_crawler.application.orchestration.errors import CrawlerWorkflowE
 
 
 def persist_bronze_mysql(result_payload: dict, **context) -> dict:
-    """5. Đọc Bronze Artifacts (listings.json, details.json) và persist vào MySQL Database qua Use Case."""
+    """Đọc Bronze Artifacts (listings.json, details.json) và persist vào MySQL Database qua Use Case."""
     source = result_payload.get("source", "unknown")
     target_id = result_payload.get("target_id", "default")
     run_id = result_payload.get("run_id") or result_payload.get("crawl_run_id")
@@ -28,7 +27,6 @@ def persist_bronze_mysql(result_payload: dict, **context) -> dict:
     logger.info("Source: %s | Target ID: %s | Run ID: %s | Bronze Path: %s", source, target_id, run_id, bronze_path)
     logger.info("=" * 60)
 
-    # 1. Bỏ qua persist nếu không có dữ liệu Bronze hợp lệ
     if action in {"SKIPPED", "DEFERRED"} or crawl_status != CrawlStatus.SUCCESS.value:
         logger.info("Bỏ qua persist MySQL cho %s/%s (action=%s, status=%s, bronze_path=%s)", source, target_id, action, crawl_status, bronze_path)
         return {
@@ -60,7 +58,6 @@ def persist_bronze_mysql(result_payload: dict, **context) -> dict:
             f"Successful crawl missing Bronze artifacts for {source}/{target_id}"
         )
 
-    # 2. Khởi tạo và nạp BronzeObservation
     from roombeacon_crawler.application.persistence.persist_observations import PersistBronzeObservationsUseCase
     from roombeacon_crawler.models.persistence_context import PersistenceContext
     from roombeacon_crawler.enums.ingestion_origin import IngestionOrigin
@@ -189,8 +186,3 @@ def persist_bronze_mysql(result_payload: dict, **context) -> dict:
         raise CrawlerWorkflowError(
             f"MySQL persistence failed for {source}/{target_id} (run_id={run_id})"
         ) from exc
-
-
-# --------------------------------------------------------------------------
-# Task 6: Update Checkpoint (Mapped per Persist Result)
-# --------------------------------------------------------------------------

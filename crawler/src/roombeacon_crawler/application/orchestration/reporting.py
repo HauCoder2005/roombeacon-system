@@ -1,7 +1,6 @@
 """Aggregate task outputs into one operator-facing scheduled-run summary.
 
-This module is deliberately Airflow-free. Runtime adapters are composed inside the
-relevant use-case boundary until Phase 3 introduces explicit composition roots.
+This module is Airflow-free and composes runtime adapters at the use-case boundary.
 """
 
 import logging
@@ -21,7 +20,7 @@ def summarize_run(
     asset_summary: dict = None,
     **context,
 ) -> dict:
-    """8. Tổng hợp số liệu thống kê toàn diện của toàn bộ fleet sau phiên cào."""
+    """Tổng hợp số liệu thống kê toàn diện của toàn bộ fleet sau phiên cào."""
     plans = plans or []
     qualifications = qualifications or []
     crawl_results = crawl_results or []

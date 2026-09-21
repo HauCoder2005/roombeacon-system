@@ -341,7 +341,7 @@ class AssetReconcilerService:
         """Thực thi một chu kỳ đối soát đa nguồn công bằng với dynamic spillover."""
         result = AssetBatchResult(batch_budget=batch_size)
 
-        # 1. Thu thập kiểm kê ban đầu
+        # Thu thập kiểm kê ban đầu
         accounting = self.get_source_accounting()
         result.per_source = accounting
         result.pending_before = sum(
@@ -364,7 +364,7 @@ class AssetReconcilerService:
 
         result.candidates_found = sum(len(items) for items in candidates_by_source.values())
 
-        # 2. Phân bổ batch công bằng qua FairAssetScheduler
+        # Phân bổ batch công bằng qua FairAssetScheduler
         scheduled_items = FairAssetScheduler.allocate_fair_batch(
             candidates_by_source, batch_size=batch_size
         )
@@ -375,7 +375,7 @@ class AssetReconcilerService:
             if item.source in result.per_source:
                 result.per_source[item.source].selected_this_run += 1
 
-        # 3. Tải và nạp MinIO
+        # Tải và nạp MinIO
         for item in scheduled_items:
             result.attempted += 1
             src_metrics = result.per_source.get(item.source)
@@ -393,7 +393,7 @@ class AssetReconcilerService:
             ).total_seconds(),
         )
 
-        # 4. Cập nhật lại remaining_actionable per source sau batch
+        # Cập nhật lại remaining_actionable per source sau batch
         updated_accounting = self.get_source_accounting()
         for s, m in updated_accounting.items():
             if s in result.per_source:
@@ -436,7 +436,7 @@ class AssetReconcilerService:
 
         url = item.image_url
 
-        # 1. Kiểm tra data URL (không phải HTTP)
+        # Kiểm tra data URL (không phải HTTP)
         if url.startswith("data:"):
             item.status = AssetStatus.TERMINAL_FAILURE
             item.last_error_category = AssetErrorCategory.INVALID_DATA_URL
@@ -459,7 +459,7 @@ class AssetReconcilerService:
                 src_metrics.terminal_failed_this_run += 1
             return
 
-        # 2. Validate every destination and follow redirects manually.
+        # Validate every destination and follow redirects manually.
         headers = {"User-Agent": USER_AGENT}
         try:
             resp = self._request_public_asset(url, headers=headers)
@@ -498,7 +498,7 @@ class AssetReconcilerService:
                 src_metrics.retryable_failed_this_run += 1
             return
 
-        # 3. Kiểm tra HTTP Status Code
+        # Kiểm tra HTTP Status Code
         status_code = resp.status_code
         if status_code in (400, 403, 404, 410):
             resp.close()
@@ -524,7 +524,7 @@ class AssetReconcilerService:
                 src_metrics.retryable_failed_this_run += 1
             return
 
-        # 4. Kiểm tra Content-Type
+        # Kiểm tra Content-Type
         content_type_header = resp.headers.get("Content-Type", "").lower()
         if "text/html" in content_type_header or "application/json" in content_type_header:
             resp.close()
@@ -538,7 +538,7 @@ class AssetReconcilerService:
                 src_metrics.terminal_failed_this_run += 1
             return
 
-        # 5. Stream body with a hard upper bound before buffering it in memory.
+        # Stream body with a hard upper bound before buffering it in memory.
         try:
             content_bytes = self._read_bounded_content(resp)
         except ValueError:
@@ -577,7 +577,7 @@ class AssetReconcilerService:
                 src_metrics.terminal_failed_this_run += 1
             return
 
-        # 6. Kiểm tra Magic Bytes
+        # Kiểm tra Magic Bytes
         ext, validated_mime = self._detect_image_format(content_bytes)
         if not ext:
             item.status = AssetStatus.TERMINAL_FAILURE
@@ -602,7 +602,7 @@ class AssetReconcilerService:
         if src_metrics:
             src_metrics.downloaded_valid += 1
 
-        # 7. Upload lên MinIO
+        # Upload lên MinIO
         try:
             s3.put_object(
                 Bucket=self.bucket_name,

@@ -252,7 +252,6 @@ class NhatotListingParser:
         page_number: int,
     ) -> ListingCardRaw | None:
         """Trích xuất từng trường dữ liệu thô từ một node card đơn lẻ."""
-        # 1. Detail URL
         href: str | None = None
         if card_node.tag == "a" and "href" in card_node.attrs:
             href = card_node.attrs["href"]
@@ -275,13 +274,11 @@ class NhatotListingParser:
         if parsed_url.path in ("", "/", "/chuyen-muc", "/dashboard", "/login", "/tro-giup"):
             return None
 
-        # 2. Listing ID
         listing_id_match = ID_FROM_URL_REGEX.search(abs_url)
         listing_id = listing_id_match.group(1) if listing_id_match else None
 
         card_text = card_node.get_text()
 
-        # 3. Title Raw
         title_raw: str | None = None
         for cls in TITLE_CLASSES:
             node = card_node.find(class_contains=cls)
@@ -300,7 +297,6 @@ class NhatotListingParser:
                         title_raw = t
                         break
 
-        # 4. Price Raw
         price_raw: str | None = None
         for cls in PRICE_CLASSES:
             node = card_node.find(class_contains=cls)
@@ -313,7 +309,6 @@ class NhatotListingParser:
         if not price_raw:
             price_raw = self._extract_price(card_text)
 
-        # 5. Area Raw
         area_raw: str | None = None
         for cls in AREA_CLASSES:
             node = card_node.find(class_contains=cls)
@@ -326,7 +321,6 @@ class NhatotListingParser:
         if not area_raw:
             area_raw = self._extract_area(card_text)
 
-        # 6. Location Raw
         location_raw: str | None = None
         for cls in LOCATION_CLASSES:
             node = card_node.find(class_contains=cls)
@@ -341,7 +335,6 @@ class NhatotListingParser:
             if m:
                 location_raw = self._clean_location(m.group(1))
 
-        # 7. Posted At Raw
         posted_at_raw: str | None = None
         for cls in POSTED_AT_CLASSES:
             node = card_node.find(class_contains=cls)
@@ -349,7 +342,6 @@ class NhatotListingParser:
                 posted_at_raw = node.get_text().strip() or None
                 break
 
-        # 8. Seller Raw
         seller_name_raw: str | None = None
         for cls in SELLER_CLASSES:
             node = card_node.find(class_contains=cls)
@@ -357,7 +349,6 @@ class NhatotListingParser:
                 seller_name_raw = node.get_text().strip() or None
                 break
 
-        # 9. Thumbnail Image
         thumbnail_url_raw: str | None = None
         img_node = card_node.find(tag="img")
         if img_node:

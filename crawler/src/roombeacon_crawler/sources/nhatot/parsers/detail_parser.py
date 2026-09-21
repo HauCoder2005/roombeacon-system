@@ -137,7 +137,6 @@ class NhatotDetailParser:
                 posted_at_raw=None,
             )
 
-        # 1. Title
         title_raw: str | None = None
         for cls in TITLE_CLASSES:
             node = root.find(class_contains=cls)
@@ -151,7 +150,6 @@ class NhatotDetailParser:
             if h1:
                 title_raw = h1.get_text().strip() or None
 
-        # 2. Price
         price_raw: str | None = None
         for cls in PRICE_CLASSES:
             node = root.find(class_contains=cls)
@@ -163,7 +161,6 @@ class NhatotDetailParser:
         if not price_raw:
             price_raw = self._extract_price(root.get_text())
 
-        # 3. Area
         area_raw: str | None = None
         for cls in AREA_CLASSES:
             node = root.find(class_contains=cls)
@@ -175,12 +172,10 @@ class NhatotDetailParser:
         if not area_raw:
             area_raw = self._extract_area(root.get_text())
 
-        # 4. Address & Location
         address_raw = self._extract_full_address(root)
 
         location_raw: str | None = address_raw
 
-        # 5. Description
         description_raw: str | None = None
         for cls in DESCRIPTION_CLASSES:
             node = root.find(class_contains=cls)
@@ -190,7 +185,6 @@ class NhatotDetailParser:
                     description_raw = desc
                     break
 
-        # 6. Posted At & Updated At
         posted_at_raw: str | None = None
         for cls in POSTED_AT_CLASSES:
             node = root.find(class_contains=cls)
@@ -198,7 +192,6 @@ class NhatotDetailParser:
                 posted_at_raw = node.get_text().strip() or None
                 break
 
-        # 7. Property Type, Furnishing, Deposit
         property_type_raw: str | None = None
         for cls in PROPERTY_TYPE_CLASSES:
             node = root.find(class_contains=cls)
@@ -220,7 +213,6 @@ class NhatotDetailParser:
                 deposit_raw = node.get_text().strip() or None
                 break
 
-        # 8. Seller Information
         seller_name_raw: str | None = None
         for cls in SELLER_NAME_CLASSES:
             node = root.find(class_contains=cls)
@@ -235,7 +227,6 @@ class NhatotDetailParser:
                 seller_type_raw = node.get_text().strip() or None
                 break
 
-        # 9. Image URLs
         image_urls_raw: list[str] = []
         for img in root.find_all(tag="img"):
             src = img.attrs.get("src") or img.attrs.get("data-src")
@@ -244,7 +235,6 @@ class NhatotDetailParser:
                 if abs_img not in image_urls_raw and ("chotot" in abs_img or "nhatot" in abs_img or "cdn" in abs_img):
                     image_urls_raw.append(abs_img)
 
-        # 10. Amenities
         amenities_raw: list[str] = []
         for cls in AMENITY_CLASSES:
             for item in root.find_all(class_contains=cls):

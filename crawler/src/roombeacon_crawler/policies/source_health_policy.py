@@ -61,7 +61,6 @@ class SourceHealthPolicy:
         if outcome == SourceHealthOutcome.ROBOTS_DENIED:
             return 0
 
-        # Mặc định
         idx = min(consecutive_failures - 1, len(self.backoff_minutes) - 1)
         return self.backoff_minutes[idx]
 

@@ -129,7 +129,7 @@ class RobotsDocument:
         matched_group = None
         matched_ua_name = "*"
 
-        # 1. Tìm nhóm user-agent khớp cụ thể theo tên product token
+        # Tìm nhóm user-agent khớp cụ thể theo tên product token
         for g in self.groups:
             for ua in g["user_agents"]:
                 if ua != "*" and (ua.lower() == product or ua.lower() in product):
@@ -139,7 +139,7 @@ class RobotsDocument:
             if matched_group:
                 break
 
-        # 2. Nếu không có nhóm riêng, fallback về nhóm '*'
+        # Nếu không có nhóm riêng, fallback về nhóm '*'
         if not matched_group:
             for g in self.groups:
                 if "*" in g["user_agents"]:
@@ -150,7 +150,7 @@ class RobotsDocument:
         if not matched_group or not matched_group["rules"]:
             return "ALLOWED", matched_ua_name, "None", "DEFAULT_ALLOW"
 
-        # 3. Áp dụng thuật toán Longest Match RFC 9309 (Most specific rule wins, Allow wins ties)
+        # Áp dụng thuật toán Longest Match RFC 9309 (Most specific rule wins, Allow wins ties)
         best_rule = None
         for rule in matched_group["rules"]:
             if rule.matches(target_path_query):
@@ -272,7 +272,7 @@ class RobotsPolicy:
         entry = self._get_or_load_document(domain, scheme)
         robots_url = entry.final_robots_url or robots_url
 
-        # 1. Trường hợp UNREACHABLE (HTTP 5xx, Network Timeout, Connection Error, DNS Failure)
+        # Trường hợp UNREACHABLE (HTTP 5xx, Network Timeout, Connection Error, DNS Failure)
         # RFC 9309 2.3.1.3: Server Error / Unreachable -> crawler assume complete disallow
         if entry.robots_state == "UNREACHABLE":
             logger.info("=" * 60)
@@ -297,7 +297,7 @@ class RobotsPolicy:
                 error_reason=entry.error_reason,
             )
 
-        # 2. Trường hợp UNAVAILABLE (HTTP 4xx: 400, 401, 403, 404, 410, 429 hoặc HTML non-text)
+        # Trường hợp UNAVAILABLE (HTTP 4xx: 400, 401, 403, 404, 410, 429 hoặc HTML non-text)
         # RFC 9309 2.3.1.2: Client Error -> crawler MUST assume there are NO restrictions
         if entry.robots_state == "UNAVAILABLE" or entry.document is None:
             logger.info("=" * 60)
@@ -322,7 +322,7 @@ class RobotsPolicy:
                 error_reason=entry.error_reason,
             )
 
-        # 3. Trường hợp 200 OK -> Phân tích cú pháp và áp dụng quy tắc RFC 9309
+        # Trường hợp 200 OK -> Phân tích cú pháp và áp dụng quy tắc RFC 9309
         decision, matched_ua, matched_rule, rule_type = entry.document.evaluate(
             target_path_query=target_path_query,
             product_token=self.user_agent,

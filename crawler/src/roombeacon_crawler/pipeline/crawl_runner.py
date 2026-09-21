@@ -94,7 +94,6 @@ class CrawlRunner:
         self.deferred_repository = deferred_repository or LocalDeferredDetailRepository(base_data_dir=self.settings.data_dir)
         self.deferred_scheduler = DeferredBudgetScheduler()
 
-        # Phân giải Adapter từ URL nếu chưa được truyền vào
         if adapter is not None:
             self.adapter = adapter
         elif target_url:
@@ -107,7 +106,6 @@ class CrawlRunner:
         else:
             raise ValueError("Cần cung cấp target_url hoặc adapter để khởi tạo CrawlRunner")
 
-        # Khởi tạo các thành phần cốt lõi
         self.http_fetcher = HttpFetcher(
             timeout=self.settings.request_timeout,
             user_agent=self.settings.user_agent,
@@ -275,7 +273,6 @@ class CrawlRunner:
         logger.info("Stop After Known Pgs: %d", stop_after_known_pages)
         logger.info("=" * 60)
 
-        # 0. Phân loại loại URL mục tiêu (Target Classification)
         target_type = self.adapter.classify_url(self.adapter.base_url)
         if target_type == CrawlTargetType.UNSUPPORTED:
             logger.warning(

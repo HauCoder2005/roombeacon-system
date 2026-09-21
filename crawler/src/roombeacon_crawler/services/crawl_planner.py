@@ -68,7 +68,6 @@ class CrawlPlanner:
 
             state = self.state_repository.get_state(seed.source, seed.target_id)
 
-            # 1. Kiểm tra tính DUE
             is_due = self._is_target_due(seed, state, now, override_mode)
             if not is_due:
                 logger.info(
@@ -79,29 +78,24 @@ class CrawlPlanner:
                 )
                 continue
 
-            # 2. Kiểm tra Capabilities của Adapter
             adapter_cls = self.registry.get(seed.source) if self.registry else None
             caps = getattr(adapter_cls, "CAPABILITIES", None) if adapter_cls else None
             is_forward_only = caps is not None and (
                 not getattr(caps, "historical_backfill_supported", True)
             )
 
-            # 3. Xác định CrawlMode và Lý do
             mode, reason = self._resolve_mode_and_reason(
                 state=state, override_mode=override_mode, is_forward_only=is_forward_only
             )
 
-            # Xác định start_page và safety_max_pages
             start_page = 1
             if mode == CrawlMode.BOOTSTRAP_CONTINUE and state and state.bootstrap_next_page:
                 start_page = state.bootstrap_next_page
 
             safety_max_pages = 1 if is_forward_only else seed.bootstrap_safety_max_pages
 
-            # 4. Phân giải chiến lược khám phá (STANDARD vs ENHANCED_DISCOVERY)
             discovery_strategy = self.discovery_strategy_resolver.resolve(seed.source)
 
-            # 5. Tính toán Watermark & Overlap Window
             watermark_from = state.last_watermark_at if state else None
             overlap_from = None
             if watermark_from:

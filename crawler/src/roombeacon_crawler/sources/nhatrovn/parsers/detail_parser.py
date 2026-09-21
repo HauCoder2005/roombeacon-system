@@ -82,12 +82,12 @@ class NhatroVNDetailParser:
 
         root = DOMTreeBuilder.parse(html)
 
-        # 1. Listing ID
+        # Listing ID
         if not listing_id:
             match = re.search(r"/chi-tiet/([^/?#]+)/?", detail_url)
             listing_id = match.group(1) if match else None
 
-        # 2. Tiêu đề / Tên phòng
+        # Tiêu đề / Tên phòng
         title_elem = (
             root.find(tag="h1", class_contains="room-code")
             or root.find(tag="li", class_contains="active")
@@ -97,17 +97,17 @@ class NhatroVNDetailParser:
             page_title = root.find(tag="title")
             title_raw = page_title.get_text() if page_title else None
 
-        # 3. Địa chỉ
+        # Địa chỉ
         address_raw = self._extract_full_address(root)
 
-        # 4. Giá
+        # Giá
         price_elem = (
             root.find(class_contains="rs-card-price__value")
             or root.find(class_contains="rs-card-price")
         )
         price_raw = price_elem.get_text() if price_elem else None
 
-        # 5. Diện tích & Vị trí / Tầng từ Meta Chips / Info Badges (Khớp chính xác class cha)
+        # Diện tích & Vị trí / Tầng từ Meta Chips / Info Badges (Khớp chính xác class cha)
         area_raw = None
         position_raw = None
         badges = root.find_all(
@@ -122,7 +122,7 @@ class NhatroVNDetailParser:
                 val_elem = badge.find(class_contains="rs-info-badge__val")
                 position_raw = val_elem.get_text() if val_elem else text
 
-        # 6. Danh sách hình ảnh (Deduplicated)
+        # Danh sách hình ảnh (Deduplicated)
         image_urls_raw: list[str] = []
         img_elements = root.find_all(
             tag="img",
@@ -139,7 +139,7 @@ class NhatroVNDetailParser:
                 if full_img_url not in image_urls_raw:
                     image_urls_raw.append(full_img_url)
 
-        # 7. Tiện ích (Amenities - chỉ lấy các mục active)
+        # Tiện ích (Amenities - chỉ lấy các mục active)
         amenities_raw: list[str] = []
         amenity_elements = root.find_all(
             predicate=lambda n: (
@@ -153,7 +153,7 @@ class NhatroVNDetailParser:
             if a_text and a_text not in amenities_raw:
                 amenities_raw.append(a_text)
 
-        # 8. Chi phí / Biểu phí chi tiết (Fee items)
+        # Chi phí / Biểu phí chi tiết (Fee items)
         electricity_cost_raw = None
         water_cost_raw = None
         management_fee_raw = None
@@ -177,7 +177,7 @@ class NhatroVNDetailParser:
             elif cost_key in ("wifi", "internet") or "wifi" in text.lower() or "mạng" in text.lower():
                 internet_fee_raw = text
 
-        # 9. Mô tả chi tiết (Description - bảo toàn câu từ nguyên bản)
+        # Mô tả chi tiết (Description - bảo toàn câu từ nguyên bản)
         desc_parts: list[str] = []
         summary_lead = root.find(class_contains="rs-summary__lead")
         if summary_lead:
@@ -199,7 +199,7 @@ class NhatroVNDetailParser:
 
         description_raw = "\n".join(desc_parts).strip() if desc_parts else None
 
-        # 10. Số lượng phòng trống / Tổng số phòng nếu có
+        # Số lượng phòng trống / Tổng số phòng nếu có
         vacant_badge = root.find(class_contains="rn-vacant-badge")
         available_rooms_raw = vacant_badge.get_text() if vacant_badge else None
 

@@ -52,7 +52,6 @@ class SourceRegistry:
                     f"Domain này đã được đăng ký bởi '{existing_cls.__name__}' và xung đột với '{adapter_cls.__name__}'."
                 )
 
-        # Cập nhật Domain Index
         for domain in adapter_cls.DOMAINS:
             norm_domain = domain.strip().lower()
             self._domain_index[norm_domain] = adapter_cls
@@ -72,7 +71,6 @@ class SourceRegistry:
         for cls in target_classes:
             if cls in self._adapters:
                 self._adapters.remove(cls)
-            # Xóa các domain trỏ tới class này
             domains_to_remove = [
                 dom for dom, registered_cls in self._domain_index.items() if registered_cls == cls
             ]

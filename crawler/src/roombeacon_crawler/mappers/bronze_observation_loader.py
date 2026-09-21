@@ -104,7 +104,6 @@ class BronzeObservationLoader:
             furnishing_raw = item.get("furnishing_raw") or item.get("furnishing")
             deposit_raw = item.get("deposit_raw") or item.get("deposit")
 
-            # Merge thông tin từ details.json nếu có
             if lid in details_by_id:
                 dt = details_by_id[lid]
                 description_raw = dt.get("description_raw") or dt.get("description") or description_raw
@@ -124,7 +123,7 @@ class BronzeObservationLoader:
                 if dt_attrs:
                     attributes.update(dt_attrs)
 
-                # IMPORTANT: Update item with dt so source_payload captures the rich detail data including map_location
+                # Giữ dữ liệu chi tiết, gồm map_location, trong source_payload.
                 item.update(dt)
 
             content_hash = compute_observation_content_hash(
@@ -167,7 +166,6 @@ class BronzeObservationLoader:
                 attributes=attributes,
                 source_payload=item,
             )
-            # Lưu content_hash vào attributes hoặc trường riêng
             obs.attributes["content_hash"] = content_hash
             observations.append(obs)
 

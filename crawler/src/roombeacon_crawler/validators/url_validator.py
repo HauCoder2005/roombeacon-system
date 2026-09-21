@@ -42,7 +42,6 @@ class URLValidator:
         except Exception as exc:
             return False, f"Cú pháp URL không hợp lệ: {exc}"
 
-        # 1. Scheme check
         scheme = (parsed.scheme or "").lower()
         if scheme not in ("http", "https"):
             return (
@@ -54,7 +53,6 @@ class URLValidator:
         if not hostname:
             return False, "URL không chứa hostname hợp lệ."
 
-        # 2. SSRF / Blocked Hostnames check
         if hostname in _BLOCKED_HOSTNAMES:
             return (
                 False,

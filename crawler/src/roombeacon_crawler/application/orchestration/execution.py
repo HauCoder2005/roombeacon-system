@@ -1,7 +1,6 @@
 """Execute a qualified crawl plan through the application runner boundary.
 
-This module is deliberately Airflow-free. Runtime adapters are composed inside the
-relevant use-case boundary until Phase 3 introduces explicit composition roots.
+This module is Airflow-free and composes runtime adapters at the use-case boundary.
 """
 
 import logging
@@ -15,7 +14,7 @@ from roombeacon_crawler.application.orchestration.errors import CrawlerWorkflowE
 
 
 def execute_crawl(qual_payload: dict, **context) -> dict:
-    """4. Thực thi cào dữ liệu cho từng plan đã qua bước thẩm định."""
+    """Thực thi cào dữ liệu cho từng plan đã qua bước thẩm định."""
     plan_dict = qual_payload.get("plan", {})
     source = qual_payload.get("source", "unknown")
     target_id = qual_payload.get("target_id", "default")
@@ -95,7 +94,6 @@ def execute_crawl(qual_payload: dict, **context) -> dict:
             f"CrawlRunner technical failure for {source}/{target_id}"
         ) from None
 
-    # Technical Failure Check
     if result.status in (
         CrawlStatus.NOT_FOUND,
         CrawlStatus.CONNECTION_ERROR,
@@ -198,8 +196,3 @@ def execute_crawl(qual_payload: dict, **context) -> dict:
         "browser_context_count": result.browser_context_count,
         "browser_page_count": result.browser_page_count,
     }
-
-
-# --------------------------------------------------------------------------
-# Task 5: Persist Bronze to MySQL (Mapped per Crawl Result)
-# --------------------------------------------------------------------------

@@ -1,11 +1,11 @@
 """Load scheduled targets and turn due work into bounded crawl plans.
 
-This module is deliberately Airflow-free. Runtime adapters are composed inside the
-relevant use-case boundary until Phase 3 introduces explicit composition roots.
+This module is Airflow-free and composes runtime adapters at the use-case boundary.
 """
 
 from datetime import datetime, timezone
 import logging
+
 from roombeacon_crawler.enums.crawl_mode import CrawlMode
 from roombeacon_crawler.models.crawl_plan import CrawlPlan
 from roombeacon_crawler.models.crawl_seed import CrawlSeed
@@ -26,7 +26,7 @@ from roombeacon_crawler.application.orchestration.errors import CrawlerWorkflowE
 
 
 def load_crawl_targets() -> list[dict]:
-    """1. Thu thập danh sách cấu hình tĩnh (CrawlSeed) từ tất cả các Source Adapter đã đăng ký."""
+    """Thu thập danh sách cấu hình tĩnh (CrawlSeed) từ tất cả các Source Adapter đã đăng ký."""
     logger.info("=" * 60)
     logger.info("STAGE 1: LOAD CRAWL TARGETS (DISCOVERY)")
     logger.info("=" * 60)
@@ -39,11 +39,8 @@ def load_crawl_targets() -> list[dict]:
     return serialized
 
 
-# --------------------------------------------------------------------------
-# Task 2: Plan Crawls (Planning)
-# --------------------------------------------------------------------------
 def plan_crawls(targets: list[dict], **context) -> list[dict]:
-    """2. Lập kế hoạch cào dữ liệu tự động (CrawlPlanner) dựa trên Checkpoint State và cấu hình runtime."""
+    """Lập kế hoạch cào dữ liệu tự động (CrawlPlanner) dựa trên Checkpoint State và cấu hình runtime."""
     logger.info("=" * 60)
     logger.info("STAGE 2: PLAN CRAWLS (PLANNING)")
     logger.info("=" * 60)
@@ -59,7 +56,6 @@ def plan_crawls(targets: list[dict], **context) -> list[dict]:
     repo = LocalCrawlStateRepository()
     planner = CrawlPlanner(state_repository=repo)
 
-    # 1. Hỗ trợ chế độ DEBUG_SINGLE_TARGET dành cho lập trình viên
     if execution_mode == "DEBUG_SINGLE_TARGET":
         if not debug_url:
             raise CrawlerWorkflowError(
@@ -70,12 +66,20 @@ def plan_crawls(targets: list[dict], **context) -> list[dict]:
         state = repo.get_state(source_name, "debug_single_target")
         start_page = (
             state.bootstrap_next_page
-            if (state and not getattr(state, "bootstrap_completed", False) and state.bootstrap_next_page)
+            if (
+                state
+                and not getattr(state, "bootstrap_completed", False)
+                and state.bootstrap_next_page
+            )
             else 1
         )
         plan_mode = (
             CrawlMode.BOOTSTRAP_CONTINUE
-            if (state and not getattr(state, "bootstrap_completed", False) and state.bootstrap_next_page)
+            if (
+                state
+                and not getattr(state, "bootstrap_completed", False)
+                and state.bootstrap_next_page
+            )
             else CrawlMode.FORCE_FULL
         )
         plan = CrawlPlan(
@@ -90,20 +94,26 @@ def plan_crawls(targets: list[dict], **context) -> list[dict]:
             safety_max_records=debug_max_records if debug_max_records > 0 else 200,
             start_page=start_page,
         )
-        logger.info("Tạo 1 CrawlPlan DEBUG cho URL: %s (start_page=%d, mode=%s)", debug_url, start_page, plan_mode.value if hasattr(plan_mode, "value") else str(plan_mode))
+        logger.info(
+            "Tạo 1 CrawlPlan DEBUG cho URL: %s (start_page=%d, mode=%s)",
+            debug_url,
+            start_page,
+            plan_mode.value if hasattr(plan_mode, "value") else str(plan_mode),
+        )
         return [plan.to_dict()]
 
-    # 2. Chế độ sản xuất tự động (AUTO, FORCE_FULL, FORCE_INCREMENTAL)
     seeds = [CrawlSeed.from_dict(t) for t in (targets or [])]
-    override_mode = execution_mode if execution_mode in ("FORCE_FULL", "FORCE_INCREMENTAL") else None
+    override_mode = (
+        execution_mode
+        if execution_mode in ("FORCE_FULL", "FORCE_INCREMENTAL")
+        else None
+    )
 
     plans = planner.plan_all(seeds=seeds, current_time=now, override_mode=override_mode)
     serialized_plans = [p.to_dict() for p in plans]
 
-    logger.info("Đã tạo %d plans hợp lệ sẵn sàng chuyển sang tầng qualification.", len(serialized_plans))
+    logger.info(
+        "Đã tạo %d plans hợp lệ sẵn sàng chuyển sang tầng qualification.",
+        len(serialized_plans),
+    )
     return serialized_plans
-
-
-# --------------------------------------------------------------------------
-# Task 3: Qualify Target (Mapped per Plan)
-# --------------------------------------------------------------------------

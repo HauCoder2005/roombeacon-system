@@ -59,7 +59,6 @@ class SourceQualifier:
             hostname = ""
             robots_url = ""
 
-        # 1. URL Safety & Syntax Validation (Chặn SSRF, localhost, private IP)
         is_valid, err_msg = URLValidator.validate(clean_url)
         if not is_valid:
             return SourceQualificationResult(
@@ -75,7 +74,6 @@ class SourceQualifier:
                 checked_at=checked_at,
             )
 
-        # 2. Robots Preflight Evaluation
         if user_agent:
             eval_policy = RobotsPolicy(user_agent=user_agent)
         else:
@@ -106,7 +104,6 @@ class SourceQualifier:
         else:
             robots_status = RobotsQualificationStatus.ERROR
 
-        # 3. SourceRegistry Lookup
         adapter_cls = self.registry.resolve_adapter_class_for_url(clean_url)
         is_registered = adapter_cls is not None
         source_name = adapter_cls.SOURCE_NAME if adapter_cls else None
@@ -127,7 +124,6 @@ class SourceQualifier:
                     "detail_fetch_supported": caps.detail_fetch_supported,
                 }
 
-        # 4. Overall Qualification Decision
         failure_reason = None
 
         if robots_status == RobotsQualificationStatus.UNREACHABLE or robots_status == RobotsQualificationStatus.ERROR:

@@ -70,7 +70,6 @@ class ListingCrawlPipeline:
         """Thực thi toàn bộ chu trình crawl một trang listing và sinh danh sách detail targets cùng raw HTML."""
         started_at = datetime.now(timezone.utc).isoformat()
 
-        # 1. Robots.txt Preflight Evaluation
         decision, robots_url = self.robots_policy.evaluate(target.url)
         logger.info("Source: %s", target.source)
         logger.info("Robots URL: %s", robots_url)
@@ -91,7 +90,6 @@ class ListingCrawlPipeline:
             )
             return [], [], meta, None
 
-        # 2. Generic Fetch via FetchCoordinator
         response, crawl_status, meta = await self.fetch_coordinator.fetch(
             target=target,
             adapter=self.adapter,
@@ -102,7 +100,6 @@ class ListingCrawlPipeline:
         if action != FetchAction.PARSE or not response:
             return [], [], meta, None
 
-        # 3. Extract Cards
         try:
             cards = self.adapter.listing_parser.parse(
                 html=response.html,
@@ -134,7 +131,6 @@ class ListingCrawlPipeline:
             return [], [], meta, response.html
         logger.info("Parser Result: Extracted %d raw listing cards", len(cards))
 
-        # 4. Validate and create Detail Crawl Targets
         valid_cards: list[ListingCardRaw] = []
         detail_targets: list[CrawlTarget] = []
 
