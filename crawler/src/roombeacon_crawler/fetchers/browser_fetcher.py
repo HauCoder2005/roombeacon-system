@@ -11,6 +11,9 @@ from datetime import datetime, timezone
 from roombeacon_crawler.enums.fetch_strategy import FetchStrategy
 from roombeacon_crawler.models.captured_response import CapturedResponse
 
+import random
+from roombeacon_crawler.utils.user_agents import get_random_user_agent
+
 try:
     from playwright.async_api import (
         TimeoutError as PlaywrightTimeoutError,
@@ -24,18 +27,20 @@ logger = logging.getLogger(__name__)
 
 
 class BrowserFetcher:
-    """Fetcher bất đồng bộ sử dụng Playwright Chromium để render JavaScript của các dynamic pages."""
+    """Fetcher bất đồng bộ sử dụng Playwright để render JavaScript của các dynamic pages."""
 
     def __init__(
         self,
         timeout: float = 30.0,
         headless: bool = True,
-        user_agent: str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        user_agent: str | None = None,
         viewport: dict | None = None,
     ) -> None:
         self.timeout = timeout
         self.headless = headless
-        self.user_agent = user_agent
+        self._initial_user_agent = user_agent
+        self.user_agent = user_agent or get_random_user_agent()
+        self.engine = "chromium"
         self.viewport = viewport or {"width": 1280, "height": 800}
         self._playwright = None
         self._browser = None
@@ -44,13 +49,26 @@ class BrowserFetcher:
         self.context_count = 0
         self.page_count = 0
 
+    async def rotate_browser(self):
+        """Close current browser and select a new random user-agent to evade bot detection."""
+        logger.info("BrowserFetcher: Đang xoay vòng trình duyệt và đổi User-Agent để tránh bot...")
+        await self.close()
+        self.user_agent = self._initial_user_agent or get_random_user_agent()
+        self.engine = "chromium"
+
     async def _get_context(self):
         """Create one browser/context lazily and reuse it for the crawl run."""
         if self._context is None:
             self._playwright = await async_playwright().start()
-            self._browser = await self._playwright.chromium.launch(
+            
+            browser_type = getattr(self._playwright, self.engine)
+            args = []
+            if self.engine == "chromium":
+                args = ["--no-sandbox", "--disable-dev-shm-usage"]
+                
+            self._browser = await browser_type.launch(
                 headless=self.headless,
-                args=["--no-sandbox", "--disable-dev-shm-usage"],
+                args=args,
             )
             self.launch_count += 1
             self._context = await self._browser.new_context(

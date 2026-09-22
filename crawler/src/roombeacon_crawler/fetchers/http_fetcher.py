@@ -12,6 +12,7 @@ import httpx
 
 from roombeacon_crawler.enums.fetch_strategy import FetchStrategy
 from roombeacon_crawler.models.captured_response import CapturedResponse
+from roombeacon_crawler.utils.user_agents import get_random_user_agent
 
 logger = logging.getLogger(__name__)
 
@@ -23,14 +24,21 @@ class HttpFetcher:
         self,
         timeout: float = 30.0,
         timeout_seconds: float | None = None,
-        user_agent: str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        user_agent: str | None = None,
         follow_redirects: bool = True,
     ) -> None:
         self.timeout = timeout_seconds if timeout_seconds is not None else timeout
-        self.user_agent = user_agent
+        self._initial_user_agent = user_agent
+        self.user_agent = user_agent or get_random_user_agent()
         self.follow_redirects = follow_redirects
         self._client: httpx.AsyncClient | None = None
         self.client_count = 0
+
+    async def rotate_client(self):
+        """Close current client and pick a new user-agent to evade bot detection."""
+        logger.info("HttpFetcher: Đang tạo lại HTTP Client với User-Agent mới...")
+        await self.close()
+        self.user_agent = self._initial_user_agent or get_random_user_agent()
 
     async def _get_client(self) -> httpx.AsyncClient:
         """Return the run-scoped keep-alive client, creating it lazily."""

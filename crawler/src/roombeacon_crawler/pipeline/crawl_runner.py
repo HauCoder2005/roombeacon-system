@@ -359,6 +359,7 @@ class CrawlRunner:
             if hasattr(self.deferred_repository, "count_backlog")
             else 0
         )
+        exit_transition = None
         while state.current_page <= state.effective_end_page:
             # Finish the current page before yielding, so no card is skipped.
             if state.pages_success > 0 and time.monotonic() >= deadline:
@@ -400,6 +401,7 @@ class CrawlRunner:
                     state.current_page,
                     meta.crawl_status.value,
                 )
+                exit_transition = acquisition_decision.transition
                 break
             page_records_count = len(cards)
             page_new_count = 0
@@ -444,9 +446,15 @@ class CrawlRunner:
                 page_known_count,
             )
             if frontier_decision.should_stop:
+                exit_transition = frontier_decision.transition
                 break
         frontier_started = time.perf_counter()
-        self.frontier_decision_processor.complete_exhausted_loop(state)
+        
+        if exit_transition is None:
+            from roombeacon_crawler.application.crawl.frontier_decision import FrontierTransition
+            exit_transition = FrontierTransition.PAGE_RANGE_EXHAUSTED
+            
+        self.frontier_decision_processor.finalize(state, exit_transition)
         state.frontier_seconds += time.perf_counter() - frontier_started
         state.discovery_seconds = time.perf_counter() - start_time
         # Discovery and frontier progression complete before bounded enrichment.
@@ -493,7 +501,14 @@ class CrawlRunner:
         detail_coverage = detailed_count / total_unique_seen * 100.0 if total_unique_seen > 0 else 0.0
         lightweight_only_listings = max(0, total_unique_seen - detailed_count)
         result = CrawlRunResult(run_id=run_id, source=self.adapter.SOURCE_NAME, target_id=target_id, mode=mode, target_url=self.adapter.base_url, started_at=started_at, finished_at=finished_at, status=state.final_status, stop_reason=state.stop_reason, source_end_confirmed=state.source_end_confirmed, failure_reason=state.failure_reason, max_pages=effective_max_pages, max_records=effective_max_records, crawl_details=crawl_details, pages_attempted=state.pages_attempted, pages_success=state.pages_success, pages_failed=state.pages_failed, details_success=state.detail_succeeded + state.deferred_succeeded, details_failed=state.detail_failed + state.deferred_failed, detail_requests_skipped=state.detail_skipped, detail_requests_forced_by_change=state.detail_requests_forced_by_change, detail_required=state.detail_required, detail_requested=state.detail_requested, detail_succeeded=state.detail_succeeded, detail_failed=state.detail_failed, detail_skipped=state.detail_skipped, skipped_known_unchanged_ttl=state.skipped_known_unchanged_ttl, skipped_no_detail_url=state.skipped_no_detail_url, skipped_request_budget=state.skipped_request_budget, skipped_deferred_for_discovery=state.skipped_deferred_for_discovery, skipped_source_policy=state.skipped_source_policy, skipped_other=state.skipped_other, full_address_present=state.full_address_present, full_address_missing=state.full_address_missing, coarse_only_address=state.coarse_only_address, detail_address_extracted=state.detail_address_extracted, detail_address_parse_failed=state.detail_address_parse_failed, deferred_backlog_before=state.deferred_backlog_before, deferred_added=state.deferred_added, deferred_attempted=state.deferred_attempted, deferred_succeeded=state.deferred_succeeded, deferred_failed=state.deferred_failed, deferred_terminal=state.deferred_terminal, deferred_remaining=deferred_remaining, detail_coverage=round(detail_coverage, 2), lightweight_only_listings=lightweight_only_listings, unique_yield=round(unique_yield, 2), change_rate=round(change_rate, 2), records_created=len(state.new_listing_ids), observations_written=len(state.bronze_records), duplicates_skipped=state.duplicates_skipped, records_seen=records_seen, records_new=records_new, records_known=records_known, records_changed=state.records_changed, known_pages_streak_at_stop=state.known_page_streak, bootstrap_completed=state.bootstrap_completed, bootstrap_start_page=start_page if state.is_bootstrap else 1, bootstrap_next_page=state.bootstrap_next_page, observed_listing_ids=state.observed_listing_ids, new_listing_ids=state.new_listing_ids, seen_metadata_updates=state.updated_seen_meta, errors=state.errors, page_acquisition_seconds=state.page_acquisition_seconds, listing_parse_seconds=state.listing_parse_seconds, card_processing_seconds=state.card_processing_seconds, detail_fetch_seconds=state.detail_fetch_seconds, deferred_detail_seconds=state.deferred_detail_seconds, frontier_seconds=state.frontier_seconds, discovery_seconds=state.discovery_seconds, http_client_count=self.http_fetcher.client_count, browser_launch_count=self.browser_fetcher.launch_count, browser_context_count=self.browser_fetcher.context_count, browser_page_count=self.browser_fetcher.page_count)
+        if hasattr(self.deferred_repository, "flush"):
+            try:
+                self.deferred_repository.flush()
+            except Exception as e:
+                logger.error("Error flushing deferred repository: %s", e)
+
         bronze_started = time.perf_counter()
+
         bronze_dir = self.storage_writer.save_bronze_dataset(run_id=run_id, source=self.adapter.SOURCE_NAME, records=state.bronze_records, metadata=state.metadata, details=state.detail_records if crawl_details and state.detail_records else None)
         result.bronze_serialization_seconds = time.perf_counter() - bronze_started
         result.total_crawl_seconds = time.perf_counter() - start_time

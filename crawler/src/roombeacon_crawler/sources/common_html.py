@@ -439,3 +439,19 @@ class VietnameseDateInterpreter:
             except ValueError:
                 return None
         return None
+
+def extract_scoped_images(gallery_node, base_url=""):
+    images = []
+    if not gallery_node:
+        return images
+    for img in gallery_node.find_all(tag="img"):
+        src = img.attrs.get("data-src") or img.attrs.get("src")
+        if src and not src.startswith("data:"):
+            from urllib.parse import urljoin
+            absolute = urljoin(base_url, src)
+            if absolute not in images:
+                images.append(absolute)
+    return images
+
+def extract_json_ld_images(root_node, base_url=""):
+    return []

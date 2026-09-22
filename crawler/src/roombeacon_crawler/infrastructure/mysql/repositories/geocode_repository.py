@@ -10,11 +10,21 @@ class MySQLGeocodeRepository:
 
     @contextmanager
     def _connection(self):
-        conn = self.connection or MySQLConnectionFactory.get_engine().connect()
+        from sqlalchemy.engine.base import Engine
+        if isinstance(self.connection, Engine):
+            conn = self.connection.connect()
+            close_it = True
+        elif self.connection is not None:
+            conn = self.connection
+            close_it = False
+        else:
+            conn = MySQLConnectionFactory.get_engine().connect()
+            close_it = True
+            
         try:
             yield conn
         finally:
-            if self.connection is None:
+            if close_it:
                 conn.close()
 
     def ensure_table(self):
