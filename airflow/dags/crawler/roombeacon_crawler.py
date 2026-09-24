@@ -68,7 +68,7 @@ def qualify_target(plan: dict, **context) -> dict:
     return _translate_failure("qualify_target", workflow.qualify_target, plan, **context)
 
 
-@task(task_id="04_crawl_execute_source", execution_timeout=timedelta(minutes=10))
+@task(task_id="04_crawl_execute_source", execution_timeout=timedelta(minutes=180))
 def execute_crawl(qual_payload: dict, **context) -> dict:
     """Execute one qualified crawl through the application boundary."""
     return _translate_failure("execute_crawl", workflow.execute_crawl, qual_payload, **context)

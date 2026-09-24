@@ -60,7 +60,7 @@ class ScheduledHtmlSourceAdapter(BaseSourceAdapter):
             interval_minutes=self.INTERVAL_MINUTES,
             bootstrap_safety_max_pages=self.BOOTSTRAP_SAFETY_MAX_PAGES,
             crawl_details=self.CAPABILITIES.detail_fetch_supported,
-            max_details_per_run=20,
+            max_details_per_run=1000,
             target_type_hint=CrawlTargetType.LISTING_PAGE,
             label=f"{self.SOURCE_NAME}_hcm_phongtro",
         ),)

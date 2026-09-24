@@ -185,11 +185,11 @@ class Phongtro123ListingParser:
                     or item.find(class_contains="location")
                     or item.find(class_contains="post-address")
                 )
-                location_raw = loc_node.get_text() if loc_node else None
+                location_raw = loc_node.get_text().strip() if loc_node else ""
                 if not location_raw:
                     loc_links = [a for a in item.find_all(tag="a") if "tinh-thanh" in a.attrs.get("href", "") or "quan-" in a.attrs.get("href", "")]
                     if loc_links:
-                        location_raw = loc_links[0].get_text()
+                        location_raw = loc_links[0].get_text().strip() or loc_links[0].attrs.get("title", "").strip()
 
                 time_node = item.find(class_contains="post-time") or item.find(class_contains="time") or item.find(tag="time")
                 posted_at_raw = time_node.get_text() if time_node else None
