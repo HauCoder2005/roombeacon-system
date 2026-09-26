@@ -17,7 +17,7 @@ for variable_name in ${required_variables}; do
     fi
 done
 
-until /usr/bin/mc alias set \
+until mc alias set \
     "${alias_name}" \
     "http://minio:9000" \
     "${MINIO_ROOT_USER}" \
@@ -31,39 +31,39 @@ for bucket_name in \
     "${MINIO_BUCKET_ASSETS}" \
     "${MINIO_BUCKET_QUARANTINE}" \
     "${MINIO_BUCKET_EXPORTS}"; do
-    /usr/bin/mc mb --ignore-existing "${alias_name}/${bucket_name}" >/dev/null
+    mc mb --ignore-existing "${alias_name}/${bucket_name}" >/dev/null
 done
 
-if ! /usr/bin/mc admin user info \
+if ! mc admin user info \
     "${alias_name}" \
     "${MINIO_CRAWLER_ACCESS_KEY}" >/dev/null 2>&1; then
-    /usr/bin/mc admin user add \
+    mc admin user add \
         "${alias_name}" \
         "${MINIO_CRAWLER_ACCESS_KEY}" \
         "${MINIO_CRAWLER_SECRET_KEY}" >/dev/null
 fi
 
-/usr/bin/mc admin policy create \
+mc admin policy create \
     "${alias_name}" \
     "${assets_policy}" \
     "${policy_file}" >/dev/null
 
-/usr/bin/mc admin policy attach \
+mc admin policy attach \
     "${alias_name}" \
     "${assets_policy}" \
     --user "${MINIO_CRAWLER_ACCESS_KEY}" >/dev/null
 
-/usr/bin/mc alias set \
+mc alias set \
     "${crawler_alias}" \
     "http://minio:9000" \
     "${MINIO_CRAWLER_ACCESS_KEY}" \
     "${MINIO_CRAWLER_SECRET_KEY}" >/dev/null
 
 cleanup_verification_objects() {
-    /usr/bin/mc rm --force \
+    mc rm --force \
         "${alias_name}/${MINIO_BUCKET_ASSETS}/${verification_key}" \
         >/dev/null 2>&1 || true
-    /usr/bin/mc rm --force \
+    mc rm --force \
         "${alias_name}/${MINIO_BUCKET_RAW}/${verification_key}" \
         >/dev/null 2>&1 || true
 }
@@ -77,23 +77,23 @@ verify_crawler_permissions() {
     # Some mc releases print an S3 error while still returning success for ls,
     # so reject error output explicitly as well as non-zero exit codes.
     list_output=$(
-        /usr/bin/mc ls "${crawler_alias}/${MINIO_BUCKET_ASSETS}" 2>&1
+        mc ls "${crawler_alias}/${MINIO_BUCKET_ASSETS}" 2>&1
     ) || return 1
     case "${list_output}" in
         *"<ERROR>"*|*"Access Denied"*) return 1 ;;
     esac
 
     for bucket_name in "${MINIO_BUCKET_ASSETS}" "${MINIO_BUCKET_RAW}"; do
-        /usr/bin/mc pipe \
+        mc pipe \
             "${crawler_alias}/${bucket_name}/${verification_key}" \
             < "${verification_file}" >/dev/null 2>&1 || return 1
 
         # Root stat proves PutObject created the canary. Crawler cat proves
         # GetObject can read it without requiring DeleteObject.
-        /usr/bin/mc stat \
+        mc stat \
             "${alias_name}/${bucket_name}/${verification_key}" \
             >/dev/null 2>&1 || return 1
-        /usr/bin/mc cat \
+        mc cat \
             "${crawler_alias}/${bucket_name}/${verification_key}" \
             >/dev/null 2>&1 || return 1
     done

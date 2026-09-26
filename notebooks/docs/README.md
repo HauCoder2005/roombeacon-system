@@ -1,6 +1,11 @@
 # RoomBeacon — EDA & Data Quality Documentation
 
-PART 01 — Data Understanding & Quality Audit
+Official notebooks and execution instructions: [notebooks/README.md](../README.md).
+Numeric results in the older methodology documents are **historical snapshots**;
+current findings come from the executed official notebooks and their `RUN_CONTEXT`.
+Refactor checks: [validation report](notebook_refactor_validation.json).
+
+PART 01 — Data Understanding & EDA
 - [01 — Kiểm kê Dataset và Current Snapshot](./01_dataset_inventory_and_snapshot.md)
 - [02 — Kiểm tra tính toàn vẹn cấu trúc](./02_structural_validation.md)
 - [03 — Ngữ nghĩa dữ liệu thiếu](./03_missing_data_semantics.md)

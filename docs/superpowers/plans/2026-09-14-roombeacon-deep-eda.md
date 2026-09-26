@@ -1,5 +1,7 @@
 # RoomBeacon Deep EDA Implementation Plan
 
+> **Historical / legacy plan.** References to `notebooks/roombeacon_eda.ipynb` below describe the pre-refactor artifact, now preserved under [notebooks/drafts/](../../../notebooks/drafts/README.md). The current official workflow is [notebooks/README.md](../../../notebooks/README.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Turn `notebooks/roombeacon_eda.ipynb` into a reproducible, evidence-led analytical report that preserves RoomBeacon's current-state access boundary, annotates rather than destroys source truth, validates selective corrections, and exposes all analytical data loss.

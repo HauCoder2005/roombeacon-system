@@ -57,7 +57,7 @@ services:
       MYSQL_PASSWORD: "${BRONZE_MYSQL_PASSWORD}"
 
     ports:
-      - "127.0.0.1:${BRONZE_MYSQL_HOST_PORT}:3306"
+      - "3307:3306"
 
     volumes:
       - "${ROOMBEACON_DATA_DIR:-./data}/mysql/bronze:/var/lib/mysql"
@@ -132,6 +132,7 @@ services:
 
   minio:
     image: "${MINIO_IMAGE}:${MINIO_VERSION}"
+    user: "0:0"
     container_name: "${MINIO_CONTAINER_NAME}"
     restart: "${DOCKER_RESTART_POLICY}"
     mem_limit: "768m"
@@ -170,7 +171,8 @@ services:
   # ============================================================
 
   minio-bootstrap:
-    image: "minio/mc:latest"
+    image: "${MINIO_MC_IMAGE}:${MINIO_MC_VERSION}"
+    user: "0:0"
     container_name: "roombeacon-minio-bootstrap"
 
     networks:
