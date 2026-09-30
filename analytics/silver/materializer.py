@@ -1,8 +1,7 @@
-"""Publish the canonical DuckDB Silver table and its compatibility mirror.
+"""Write and validate the canonical file-based RoomBeacon Silver dataset.
 
-``silver.rental_listings`` is the source of truth.  The Parquet file is a
-deprecated, temporary compatibility mirror and is refreshed only after the
-canonical table has passed grain and schema validation.
+The Parquet checkpoint is the persisted Silver dataset. DuckDB remains an
+analytical/query engine and is not required to hold a physical Silver table.
 """
 
 import json
@@ -13,14 +12,15 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+import duckdb
 
-from analytics.duckdb.connection import create_analytics_connection, resolve_runtime_path
+from analytics.duckdb.connection import resolve_runtime_path
 from roombeacon_crawler.config.get_env import env
 
 logger = logging.getLogger(__name__)
 
-CANONICAL_TABLE = "silver.rental_listings"
-COMPATIBILITY_MIRROR = "rental_latest.parquet"
+CANONICAL_FILENAME = "rental_listings.parquet"
+METADATA_FILENAME = "rental_listings.metadata.json"
 REQUIRED_COLUMNS = [
     "source_code", "rental_post_id", "source_listing_id", "title_raw", "url",
     "price_amount", "area_value", "location_raw", "latest_observed_at",
@@ -29,26 +29,28 @@ REQUIRED_COLUMNS = [
 
 @dataclass
 class SilverMetadata:
+    dataset_name: str
+    layer: str
     generated_at: str
     row_count: int
-    unique_listing_count: int
-    canonical_table: str
-    compatibility_mirror: str
-    mirror_status: str
+    distinct_rental_post_id: int
+    column_count: int
+    columns: list[str]
+    canonical_path: str
     min_observed_at: str | None
     max_observed_at: str | None
     schema_version: str
-    materializer_version: str
-    columns: list[str]
+    processing_version: str
     source_distribution: dict[str, int]
+    source_snapshot: dict[str, Any] | None = None
 
 
 class SilverMaterializationError(Exception):
-    """Raised when canonical Silver or compatibility publication fails."""
+    """Raised when canonical Silver file publication or validation fails."""
 
 
 class SilverMaterializer:
-    """Materialize DuckDB Silver, validate it, then export the Parquet mirror."""
+    """Small, compatibility-safe writer for canonical Silver Parquet."""
 
     def __init__(
         self,
@@ -60,117 +62,92 @@ class SilverMaterializer:
             if output_dir is None else Path(output_dir).resolve()
         )
         self.valid_sources = valid_sources
-        self.output_file = self.output_dir / COMPATIBILITY_MIRROR
-        self.metadata_file = self.output_dir / "rental_latest.metadata.json"
-        self.tmp_file = self.output_dir / "rental_latest.parquet.tmp"
+        self.output_file = self.output_dir / CANONICAL_FILENAME
+        self.metadata_file = self.output_dir / METADATA_FILENAME
+        self.tmp_file = self.output_dir / f"{CANONICAL_FILENAME}.tmp"
+        self.tmp_metadata_file = self.output_dir / f"{METADATA_FILENAME}.tmp"
 
-    def materialize(self, processed_df: pd.DataFrame, conn: Any | None = None) -> SilverMetadata:
-        """Run the only supported publication order: DuckDB, validate, mirror."""
+    def materialize(
+        self,
+        processed_df: pd.DataFrame,
+        *,
+        quality_gate_passed: bool,
+        source_snapshot: dict[str, Any] | None = None,
+    ) -> SilverMetadata:
+        """Safely publish validated Silver directly to canonical Parquet."""
+        if not quality_gate_passed:
+            raise SilverMaterializationError(
+                "Pre-Silver quality gate failed; canonical Silver was not published"
+            )
+
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        connection = conn if conn is not None else create_analytics_connection()
         self._validate_dataframe(processed_df)
+        for temporary in (self.tmp_file, self.tmp_metadata_file):
+            temporary.unlink(missing_ok=True)
 
         try:
-            self.materialize_duckdb_silver(processed_df, connection)
-            canonical = self.validate_silver(connection)
-            self.export_parquet_mirror(connection, canonical)
-            metadata = self._build_metadata(canonical)
-            self.metadata_file.write_text(
+            self._write_parquet(processed_df, self.tmp_file)
+            canonical = self._read_parquet(self.tmp_file)
+            self._validate_readback(processed_df, canonical)
+            metadata = self._build_metadata(canonical, source_snapshot)
+            self.tmp_metadata_file.write_text(
                 json.dumps(asdict(metadata), indent=2, ensure_ascii=False),
                 encoding="utf-8",
             )
+            self.tmp_file.replace(self.output_file)
+            self.tmp_metadata_file.replace(self.metadata_file)
             return metadata
         except SilverMaterializationError:
             raise
         except Exception as exc:
             logger.error("Silver publication failed (error_class=%s)", type(exc).__name__)
-            raise SilverMaterializationError("Silver publication failed") from exc
+            raise SilverMaterializationError("Canonical Silver publication failed") from exc
         finally:
-            if self.tmp_file.exists():
-                self.tmp_file.unlink()
+            self.tmp_file.unlink(missing_ok=True)
+            self.tmp_metadata_file.unlink(missing_ok=True)
 
-    def materialize_duckdb_silver(self, processed_df: pd.DataFrame, conn: Any) -> None:
-        """Atomically replace ``silver.rental_listings`` from a validated frame."""
-        self._validate_dataframe(processed_df)
-        conn.register("_roombeacon_silver_input", processed_df)
-        try:
-            conn.execute("BEGIN TRANSACTION")
-            conn.execute("CREATE SCHEMA IF NOT EXISTS silver")
-            conn.execute("DROP TABLE IF EXISTS silver._rental_listings_next")
-            conn.execute(
-                "CREATE TABLE silver._rental_listings_next AS "
-                "SELECT * FROM _roombeacon_silver_input"
+    def read_and_validate(self) -> pd.DataFrame:
+        """Read the canonical Parquet checkpoint and validate its grain."""
+        if not self.output_file.exists():
+            raise SilverMaterializationError(
+                f"Canonical Silver does not exist: {self.output_file}"
             )
-            self._validate_table(conn, "silver._rental_listings_next")
-            conn.execute("DROP TABLE IF EXISTS silver.rental_listings")
-            conn.execute("ALTER TABLE silver._rental_listings_next RENAME TO rental_listings")
-            conn.execute("COMMIT")
-        except Exception as exc:
-            try:
-                conn.execute("ROLLBACK")
-            except Exception:
-                pass
-            if isinstance(exc, SilverMaterializationError):
-                raise
-            raise SilverMaterializationError("Canonical DuckDB Silver materialization failed") from exc
-        finally:
-            try:
-                conn.unregister("_roombeacon_silver_input")
-            except Exception:
-                pass
-
-    def validate_silver(self, conn: Any) -> pd.DataFrame:
-        """Read back and validate the canonical table; return its exact dataset."""
-        self._validate_table(conn, CANONICAL_TABLE)
-        frame = conn.execute(f"SELECT * FROM {CANONICAL_TABLE}").df()
+        frame = self._read_parquet(self.output_file)
         self._validate_dataframe(frame)
         return frame
 
-    def export_parquet_mirror(self, conn: Any, canonical: pd.DataFrame | None = None) -> None:
-        """Atomically refresh the deprecated mirror from canonical DuckDB Silver."""
-        frame = canonical if canonical is not None else self.validate_silver(conn)
-        if self.tmp_file.exists():
-            self.tmp_file.unlink()
+    @staticmethod
+    def _write_parquet(frame: pd.DataFrame, path: Path) -> None:
+        """Write a DataFrame to Parquet without creating a physical DuckDB table."""
+        connection = duckdb.connect(":memory:")
+        connection.register("_silver_output", frame)
         try:
-            escaped_path = str(self.tmp_file).replace("'", "''")
-            conn.execute(
-                f"COPY (SELECT * FROM {CANONICAL_TABLE}) TO '{escaped_path}' (FORMAT PARQUET)"
+            escaped_path = str(path).replace("'", "''")
+            connection.execute(
+                f"COPY (SELECT * FROM _silver_output) TO '{escaped_path}' (FORMAT PARQUET)"
             )
-            mirror_columns = [
-                row[0] for row in conn.execute(
-                    f"DESCRIBE SELECT * FROM read_parquet('{escaped_path}')"
-                ).fetchall()
-            ]
-            mirror_row_count, mirror_unique_count, mirror_null_count = conn.execute(
-                f"SELECT count(*), count(DISTINCT rental_post_id), "
-                f"count(*) FILTER (WHERE rental_post_id IS NULL) "
-                f"FROM read_parquet('{escaped_path}')"
-            ).fetchone()
-            if mirror_columns != list(frame.columns):
-                raise SilverMaterializationError("Compatibility mirror columns differ from canonical Silver")
-            if mirror_row_count != len(frame):
-                raise SilverMaterializationError("Compatibility mirror row count differs from canonical Silver")
-            if mirror_null_count or mirror_row_count != mirror_unique_count:
-                raise SilverMaterializationError("Compatibility mirror violates rental_post_id grain")
-            if mirror_unique_count != frame.rental_post_id.nunique():
-                raise SilverMaterializationError("Compatibility mirror identity count differs from canonical Silver")
-            self.tmp_file.replace(self.output_file)
-        except Exception as exc:
-            if isinstance(exc, SilverMaterializationError):
-                raise
-            raise SilverMaterializationError("Compatibility mirror export failed") from exc
+        finally:
+            connection.close()
 
-    def _validate_table(self, conn: Any, table_name: str) -> None:
-        row_count, unique_count, null_count = conn.execute(
-            f"SELECT count(*), count(DISTINCT rental_post_id), "
-            f"count(*) FILTER (WHERE rental_post_id IS NULL) FROM {table_name}"
-        ).fetchone()
-        if row_count == 0:
-            raise SilverMaterializationError("Canonical Silver table is empty")
-        if null_count:
-            raise SilverMaterializationError("Canonical Silver contains null rental_post_id")
-        if row_count != unique_count:
-            raise SilverMaterializationError("Canonical Silver rental_post_id must be unique")
+    @staticmethod
+    def _read_parquet(path: Path) -> pd.DataFrame:
+        connection = duckdb.connect(":memory:")
+        try:
+            escaped_path = str(path).replace("'", "''")
+            return connection.execute(
+                f"SELECT * FROM read_parquet('{escaped_path}')"
+            ).df()
+        finally:
+            connection.close()
+
+    def _validate_readback(self, expected: pd.DataFrame, actual: pd.DataFrame) -> None:
+        self._validate_dataframe(actual)
+        if len(actual) != len(expected):
+            raise SilverMaterializationError("Silver read-back row count differs")
+        if actual.rental_post_id.nunique() != expected.rental_post_id.nunique():
+            raise SilverMaterializationError("Silver read-back identity count differs")
+        if list(actual.columns) != list(expected.columns):
+            raise SilverMaterializationError("Silver read-back columns differ")
 
     def _validate_dataframe(self, frame: pd.DataFrame) -> None:
         if frame.empty:
@@ -189,20 +166,26 @@ class SilverMaterializer:
         if invalid_sources:
             raise SilverMaterializationError(f"Invalid source_code values: {sorted(invalid_sources)}")
 
-    def _build_metadata(self, frame: pd.DataFrame) -> SilverMetadata:
+    def _build_metadata(
+        self,
+        frame: pd.DataFrame,
+        source_snapshot: dict[str, Any] | None,
+    ) -> SilverMetadata:
         observed = frame.latest_observed_at.dropna()
         source_distribution = frame.source_code.value_counts().to_dict()
         return SilverMetadata(
+            dataset_name="rental_listings",
+            layer="silver",
             generated_at=datetime.now(timezone.utc).astimezone().isoformat(),
             row_count=len(frame),
-            unique_listing_count=int(frame.rental_post_id.nunique()),
-            canonical_table=CANONICAL_TABLE,
-            compatibility_mirror=COMPATIBILITY_MIRROR,
-            mirror_status="DEPRECATED_TEMPORARY_COMPATIBILITY_MIRROR",
+            distinct_rental_post_id=int(frame.rental_post_id.nunique()),
+            column_count=len(frame.columns),
+            columns=frame.columns.tolist(),
+            canonical_path=str(self.output_file),
             min_observed_at=str(observed.min()) if not observed.empty else None,
             max_observed_at=str(observed.max()) if not observed.empty else None,
             schema_version="2.0.0",
-            materializer_version="2.0.0",
-            columns=frame.columns.tolist(),
+            processing_version="2.0.0",
             source_distribution={str(key): int(value) for key, value in source_distribution.items()},
+            source_snapshot=source_snapshot,
         )

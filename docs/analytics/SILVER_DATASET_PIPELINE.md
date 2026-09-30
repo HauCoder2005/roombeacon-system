@@ -4,10 +4,9 @@
 
 ## Canonical contract
 
-- Canonical dataset: DuckDB `silver.rental_listings`.
+- Canonical dataset: `data/silver/rental_listings.parquet`.
+- Metadata: `data/silver/rental_listings.metadata.json`.
 - Grain: one row per non-null, unique `rental_post_id`.
-- Compatibility output: `data/silver/rental_latest.parquet`.
-- Mirror status: **deprecated / temporary compatibility mirror**.
 
 Silver preserves all Bronze rows and raw/source fields. Deterministic clean values, lineage indicators, anomaly flags, duplicate-candidate evidence, temporal checks, and documented quality statuses are appended. The pipeline does not delete statistical outliers or duplicate candidates and does not guess missing values.
 
@@ -18,14 +17,14 @@ flowchart LR
     B[(MySQL Bronze)] --> V[v_latest_posts]
     V --> P[Deterministic processing]
     P --> G{Pre-Silver quality gate}
-    G -->|PASS| S[(DuckDB silver.rental_listings)]
-    S --> Q{Canonical validation}
-    Q -->|PASS| M[(Temporary Parquet mirror)]
+    G -->|PASS| T[Write temporary Parquet]
+    T --> Q{Read-back validation}
+    Q -->|PASS| S[(data/silver/rental_listings.parquet)]
     G -->|FAIL| X[Stop without publishing]
     Q -->|FAIL| X
 ```
 
-`SilverMaterializer` accepts the already processed DataFrame. It atomically replaces the DuckDB table inside a transaction, reads and validates the canonical table, and only then exports the Parquet mirror. A failed canonical materialization never refreshes the mirror.
+Notebook 02 visibly writes the validated `silver_df` to a temporary Parquet file, reads it back, validates its grain and schema, and atomically replaces the canonical file. DuckDB remains the analytical/query engine and is not required to persist a physical Silver table.
 
 ## Critical invariants
 
@@ -38,7 +37,7 @@ flowchart LR
 - Invalid coordinates are never marked usable.
 - Outliers and duplicate candidates remain present and flagged.
 - Every quality status belongs to its documented vocabulary.
-- Canonical DuckDB and the compatibility mirror have identical row count, identity count, grain, and columns.
+- Parquet read-back has the expected row count, identity count, grain, and column order.
 
 ## Notebook ownership
 

@@ -28,26 +28,31 @@ def test_silver_notebook_contains_complete_executable_pipeline():
         "10. Coordinate Trust Classification", "11. Cross-field Consistency",
         "12. Duplicate / Repost Candidate Hardening", "13. Temporal Semantics Validation",
         "14. Final Row Quality Status", "15. Silver Dataset Contract",
-        "16. Pre-Silver Quality Gate", "17. Materialize `silver.rental_listings`",
-        "18. Silver Validation",
+        "16. Pre-Silver Quality Gate", "17. Save Canonical Silver Dataset",
+        "18. Final Silver Validation",
     ]
     for section in expected_sections:
         assert section in text
     assert "build_silver_dataset" in text
     assert "evaluate_pre_silver_quality_gate" in text
-    assert "SilverMaterializer" in text
-    assert "silver.rental_listings" in text
-    assert "TEMPORARY COMPATIBILITY MIRROR" in text
+    assert "COPY (SELECT * FROM _canonical_silver_write)" in text
+    assert "rental_listings.parquet" in text
+    assert "rental_listings.metadata.json" in text
+    assert "SilverMaterializer" not in text
+    assert "TEMPORARY COMPATIBILITY MIRROR" not in text
+    assert "CREATE TABLE silver.rental_listings" not in text
     assert ".fit(" not in text and ".predict(" not in text
 
 
 def test_processing_notebook_reads_only_canonical_silver_and_does_not_clean_it():
     text = _text(NOTEBOOKS / "03_roombeacon_processing.ipynb")
-    assert "FROM silver.rental_listings" in text
+    assert "rental_listings.parquet" in text
+    assert "read_parquet" in text
     for forbidden in [
         "v_latest_posts", "load_snapshot(", "apply_text_standardization(",
         "apply_address_parsing(", "apply_ward_mapping(", "validate_numeric_candidates(",
         "SilverMaterializer(", "CREATE TABLE silver.rental_listings",
+        "FROM silver.rental_listings",
         "derive_local_price_bands(", "summarize_local_price_by_radius(",
     ]:
         assert forbidden not in text

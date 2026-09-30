@@ -80,9 +80,7 @@ Silver là logical layer đã được:
 - gắn data-quality flags hoặc exclusion reason;
 - kiểm tra schema và semantic invariants.
 
-The canonical Silver dataset is DuckDB `silver.rental_listings`. It is built from the Bronze-backed latest-state snapshot by deterministic text, address, ward, numeric, coordinate, duplicate-candidate, temporal, and row-quality processing. A pre-Silver gate enforces row, identity, raw-field, and status invariants before publication.
-
-`data/silver/rental_latest.parquet` is a deprecated, temporary compatibility mirror exported only after the DuckDB table has materialized and passed canonical validation. It is not a source of truth.
+The canonical Silver dataset is `data/silver/rental_listings.parquet`, with descriptive runtime metadata in `data/silver/rental_listings.metadata.json`. It is built from the Bronze-backed latest-state snapshot by deterministic text, address, ward, numeric, coordinate, duplicate-candidate, temporal, and row-quality processing. A pre-Silver gate enforces row, identity, raw-field, and status invariants before safe file publication.
 
 ## 7. Gold — FUTURE / NOT IMPLEMENTED
 
@@ -92,9 +90,9 @@ Gold được tạo sau Clean Analytical EDA và Feature Engineering. Nó có th
 
 | Công cụ/format | Vai trò | Không đồng nghĩa với |
 |---|---|---|
-| DuckDB | SQL analytical engine | Silver/Gold |
+| DuckDB | SQL analytical/query engine | persisted Silver storage |
 | Pandas | DataFrame và EDA tool | data layer |
-| Parquet | columnar file format | cleaned Silver |
+| Parquet | canonical Silver checkpoint format | transformation logic |
 | MySQL | Bronze persistence engine | serving/Gold database |
 
 ## 9. Publication hiện tại
