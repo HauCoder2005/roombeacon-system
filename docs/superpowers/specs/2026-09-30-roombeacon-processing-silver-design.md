@@ -2,21 +2,47 @@
 
 ## Purpose
 
-Refactor the existing RoomBeacon processing path into one deterministic,
-source-preserving pipeline that transforms the latest Bronze snapshot into the
-canonical DuckDB table `silver.rental_listings`. The existing
+Restructure the canonical RoomBeacon notebooks and implement one deterministic,
+source-preserving Silver pipeline that transforms the latest Bronze snapshot
+into the canonical DuckDB table `silver.rental_listings`. The existing
 `rental_latest.parquet` remains a deprecated temporary compatibility mirror and
 is exported only from the committed canonical table.
 
-The pipeline stops after Silver materialization. It does not perform market
-analysis, radius search, feature engineering, Gold construction, modeling, or
-recommendation.
+Silver creation stops after materialization. Post-Silver analytical preparation
+belongs only to `03_roombeacon_processing.ipynb`; model fitting belongs only to
+`04_roombeacon_modeling.ipynb` if existing model work must be promoted from its
+current location. This task does not build Gold or expand model research.
+
+## Canonical Notebook Architecture
+
+```text
+01_roombeacon_eda.ipynb
+  -> 02_roombeacon_silver.ipynb
+  -> DuckDB silver.rental_listings
+  -> 03_roombeacon_processing.ipynb
+  -> optional 04_roombeacon_modeling.ipynb
+```
+
+- `01_roombeacon_eda.ipynb` remains the accepted, read-only Bronze audit and
+  processing specification.
+- The current `02_roombeacon_processing.ipynb` is moved—not copied—to
+  `03_roombeacon_processing.ipynb`, then stripped of Bronze-cleaning and Silver
+  publication responsibilities.
+- A new `02_roombeacon_silver.ipynb` becomes the only Bronze-to-Silver notebook.
+- `03_roombeacon_processing.ipynb` reads only `silver.rental_listings` and
+  prepares analytical/model-ready data without fitting models or recreating
+  Silver.
+- The current canonical Processing notebook contains no model training. The
+  existing modeling work is already isolated under `notebooks/drafts/`, so this
+  refactor does not create a placeholder `04_roombeacon_modeling.ipynb`.
 
 ## Scope and Constraints
 
 - Keep `01_roombeacon_eda.ipynb` unchanged; it is the analytical specification.
-- Refactor the existing `02_roombeacon_processing.ipynb`; do not create another
-  processing notebook.
+- Rename the existing `02_roombeacon_processing.ipynb` to
+  `03_roombeacon_processing.ipynb` using repository move semantics.
+- Create exactly one `02_roombeacon_silver.ipynb` for Bronze-to-Silver work.
+- Do not leave `02_roombeacon_processing.ipynb` behind after the move.
 - Preserve one row per `rental_post_id` throughout processing and publication.
 - Preserve all Bronze-derived columns exactly and add clean/status fields beside
   them.
@@ -68,10 +94,9 @@ A focused module under `notebooks/utils/` owns deterministic row annotations:
 Functions accept DataFrames and return copies or explicit audit results. They do
 not connect to databases and do not write files.
 
-### Processing notebook
+### Silver notebook
 
-`02_roombeacon_processing.ipynb` orchestrates the canonical helpers in this
-order:
+`02_roombeacon_silver.ipynb` orchestrates the canonical helpers in this order:
 
 1. Runtime snapshot and contract
 2. General text standardization
@@ -89,10 +114,39 @@ order:
 14. Pre-Silver quality gate
 15. Silver materialization
 
-The notebook removes the reference-location configuration, radius summaries,
-local price bands, product candidate search, analytical feature engineering,
-and all model-related logic. It connects to the configured persistent DuckDB
+The Silver notebook contains no reference-location configuration, radius
+summaries, local price bands, product candidate search, analytical feature
+engineering, or model logic. It connects to the configured persistent DuckDB
 catalog rather than `:memory:` for canonical publication.
+
+### Post-Silver processing notebook
+
+After the repository move, `03_roombeacon_processing.ipynb` begins with a
+runtime assertion that `silver.rental_listings` exists and loads that table at
+one-row-per-`rental_post_id` grain. It must not query `v_latest_posts`, raw
+evidence tables, or MySQL Bronze.
+
+Its permitted responsibilities are limited to downstream preparation:
+
+- explicit eligibility masks based on Silver statuses;
+- price-per-area and other deterministic analytical variables;
+- trusted-coordinate-only location features when a real reference is supplied;
+- categorical/model-ready column preparation;
+- train/validation/test preparation without fitting or evaluating models.
+
+The current radius market summaries, local price-band charts, and product-style
+candidate table are removed. Generic distance helpers may remain in utilities,
+but the canonical Processing notebook uses them only for an explicitly
+configured trusted-coordinate feature, never as Silver cleaning or market
+analysis. The notebook does not persist Gold in this task.
+
+### Modeling notebook decision
+
+No `model.fit`, `model.predict`, cross-validation, or evaluation code exists in
+the current canonical Processing notebook. Existing modeling code is already in
+`notebooks/drafts/03_experimental_price_modeling.ipynb`. Therefore this refactor
+does not create `04_roombeacon_modeling.ipynb`; promoting that draft is a later,
+separately reviewed task.
 
 ### Silver materializer
 
@@ -327,7 +381,12 @@ Use the existing pytest/unittest style and add focused tests for:
 - mirror ordering after canonical commit;
 - canonical/mirror row, grain, and column equality;
 - notebook structure proving wrong-layer analytics and feature engineering were
-  removed.
+  removed from Silver;
+- notebook architecture proving the old `02_roombeacon_processing.ipynb` no
+  longer exists, `02_roombeacon_silver.ipynb` owns Bronze cleaning, and
+  `03_roombeacon_processing.ipynb` reads only canonical Silver;
+- repository references updated for the new canonical notebook names without
+  rewriting intentional historical references.
 
 Existing text, address, ward, numeric, location, and Silver tests remain part of
 regression verification. Known unrelated crawler import failures are reported
@@ -346,7 +405,9 @@ separately rather than classified as Processing regressions.
 
 ## Completion Boundary
 
-Success is a fully executed `02_roombeacon_processing.ipynb`, a passing
-Pre-Silver gate, a validated persistent `silver.rental_listings`, and a matching
-compatibility Parquet mirror. The task stops immediately after reporting those
-artifacts and tests.
+Success is a fully executed `02_roombeacon_silver.ipynb`, a passing Pre-Silver
+gate, a validated persistent `silver.rental_listings`, a matching compatibility
+Parquet mirror, and a fully executed `03_roombeacon_processing.ipynb` whose only
+input is canonical Silver. The old `02_roombeacon_processing.ipynb` is absent.
+No canonical `04` is created because model code is not mixed into the current
+Processing notebook. The task stops after reporting those artifacts and tests.
