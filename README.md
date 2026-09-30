@@ -171,13 +171,14 @@ Dữ liệu RoomBeacon có thể trở thành nguồn cho:
 | Historical Observations | **Implemented** |
 | Deferred Detail Enrichment | **Implemented** |
 | Full-address Enrichment | **Implemented** |
+| Geocoding Enrichment | **Implemented** |
 | DuckDB Analytical Views | **Implemented** |
 | Latest-state Analytical Dataset | **Implemented** |
 | MinIO Asset Pipeline | **Implemented / Operational validation ongoing** |
-| Automated Regression Tests | **350+** |
+| Automated Regression Tests | **630+** |
 | Airflow DAG Import Validation | **Enabled** |
-| Cleaned Semantic Silver | **Planned / Partial** |
-| Gold Dataset | **Not implemented yet** |
+| Cleaned Semantic Silver | **Implemented** |
+| Gold Dataset | **In Progress** |
 
 > Runtime availability của từng website có thể thay đổi theo robots policy, source health, Cloudflare/access challenge hoặc cấu trúc website.
 
@@ -1349,7 +1350,7 @@ DAG Import Validation
 Runtime Smoke Tests
 ```
 
-Các regression suite hiện có **350+ tests**.
+Các regression suite hiện có **630+ tests**.
 
 Một số behavior quan trọng được test:
 
@@ -1411,6 +1412,7 @@ cho normal operation vì stateful volumes/data phải được bảo toàn.
 | Deferred Detail Enrichment | **IMPLEMENTED** |
 | Retry / Backoff / TTL | **IMPLEMENTED** |
 | Full-address Enrichment | **IMPLEMENTED** |
+| Geocoding Enrichment | **IMPLEMENTED** |
 | Source Health / Cooldown | **IMPLEMENTED** |
 | Bronze Reconciliation | **IMPLEMENTED** |
 | DuckDB Analytical Views | **IMPLEMENTED** |
@@ -1418,10 +1420,10 @@ cho normal operation vì stateful volumes/data phải được bảo toàn.
 | MinIO Asset Pipeline | **IMPLEMENTED / VALIDATING RUNTIME POLICY** |
 | Test Isolation | **VERIFIED** |
 | Security Hardening | **VERIFIED** |
-| Initial Data Quality EDA | **IN PROGRESS** |
-| Semantic Silver Cleaning | **PLANNED** |
-| Feature Engineering | **PLANNED** |
-| Gold Dataset | **NOT IMPLEMENTED** |
+| Initial Data Quality EDA | **IMPLEMENTED** |
+| Semantic Silver Cleaning | **IMPLEMENTED** |
+| Feature Engineering | **IN PROGRESS** |
+| Gold Dataset | **IN PROGRESS** |
 | Serving API | **FUTURE** |
 | Web / Mobile Product | **FUTURE** |
 
@@ -1466,18 +1468,18 @@ cho normal operation vì stateful volumes/data phải được bảo toàn.
 - [x] Historical observation views
 - [x] Latest-state analytical view
 - [x] Data quality views
-- [ ] Raw EDA Dataset
-- [ ] Initial Data Quality EDA
-- [ ] Define cleaning rules
-- [ ] Semantic Silver materialization
-- [ ] Clean Analytical EDA
+- [x] Raw EDA Dataset
+- [x] Initial Data Quality EDA
+- [x] Define cleaning rules
+- [x] Semantic Silver materialization
+- [x] Clean Analytical EDA
 
 ---
 
 ## Phase 4 — Data Mining
 
-- [ ] Rental-price analysis
-- [ ] Price-per-square-meter features
+- [x] Rental-price analysis
+- [x] Price-per-square-meter features
 - [ ] Outlier detection
 - [ ] Location hotspot analysis
 - [ ] Listing lifetime analysis
@@ -1588,8 +1590,4 @@ RoomBeacon được phát hành theo giấy phép [MIT](LICENSE).
 
 *From fragmented rental listings to structured rental intelligence.*
 
-<<<<<<< HEAD
 </div>
-=======
-</div>
->>>>>>> feature/codeser
