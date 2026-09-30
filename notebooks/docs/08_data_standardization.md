@@ -89,25 +89,16 @@ flowchart TD
 
 ## 3. Runtime Audit & Phát hiện (Findings)
 
-Thực hiện Audit trên Runtime `121,929` listings:
+Notebook `02_roombeacon_silver.ipynb` computes the audit from the current snapshot instead of storing hard-coded counts in documentation. The standardization step must expose:
 
-### 3.1 Text Representation Audit
-- `title_raw`: 629 trường hợp representation chưa ở canonical NFC target của RoomBeacon, 1 trường hợp lỗi khoảng trắng dư thừa.
-- `full_address_text`: 563 trường hợp representation chưa ở canonical NFC target của RoomBeacon, 47 trường hợp lỗi khoảng trắng.
-- `location_raw`: 569 trường hợp representation chưa ở canonical NFC target của RoomBeacon.
-- `best_address_text`: 566 trường hợp representation chưa ở canonical NFC target của RoomBeacon, 47 trường hợp lỗi khoảng trắng.
-- **Empty String:** Không phát hiện chuỗi rỗng `""` hoặc chuỗi chứa toàn khoảng trắng `"  "`. Toàn bộ missing data đều đã là physical NULL.
+- tổng số text values được kiểm tra;
+- số values có emoji/icon trang trí trước cleanup;
+- số values có ký tự Unicode ẩn/control trước cleanup;
+- số values thay đổi ở từng stage;
+- số raw/source values thay đổi, bắt buộc bằng `0`;
+- tối đa 16 ví dụ before/after kèm lý do thay đổi.
 
-### 3.2 Categorical Audit
-- `source_code` (9 distinct values) và `best_address_source` (3 distinct values) đều là lowercase chuẩn mực, không chứa khoảng trắng ẩn, không có issue về Unicode. 
-- $\rightarrow$ **NO_TRANSFORMATION_REQUIRED**.
-
-### 3.3 Numeric & Temporal Representation Audit
-- `price_amount`: Định dạng `DECIMAL(15,2)`. Chuẩn xác, tránh lỗi floating-point.
-- `area_value`: Định dạng `DECIMAL(10,2)`. Chuẩn xác.
-- `active_days`: Định dạng `BIGINT`.
-- Các trường `TIMESTAMP`: Đều đạt độ phân giải Microsecond. Database không encode timezone cụ thể (timezone unknown/local).
-- $\rightarrow$ **NO_TRANSFORMATION_REQUIRED** cho toàn bộ Numeric & Temporal (Không có lý do để đổi dtype hay round).
+Sau chuẩn hóa, notebook chạy lại parser địa chỉ trên representation trước và sau hardening, rồi so sánh phân phối `parse_status`, component coverage và `UNRECOGNIZED_FORMAT`. Regression guard là `0.01%` số records; vượt ngưỡng phải được điều tra và giải thích trước khi tiếp tục Task 10–11.
 
 ---
 
@@ -117,10 +108,10 @@ Vì Text Fields bộc lộ Issue về Unicode và Khoảng trắng, ta thiết l
 
 | Field Gốc | Issue Phát hiện | Standardization Rule | Output Derived Field | Loss Risk | Decision |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `title_raw` | Unicode NFD, Extra Whitespace | NFC + Trim + Collapse Spaces | `title_normalized` | Lossless | **APPLIED** |
-| `full_address_text` | Unicode NFD, Extra Whitespace | NFC + Trim + Collapse Spaces | `full_address_normalized` | Lossless | **APPLIED** |
-| `location_raw` | Unicode NFD | NFC + Trim + Collapse Spaces | `location_normalized` | Lossless | **APPLIED** |
-| `best_address_text` | Unicode NFD, Extra Whitespace | NFC + Trim + Collapse Spaces | `best_address_normalized` | Lossless | **APPLIED** |
+| `title_raw` | Unicode, invisible/control, icon, whitespace, punctuation noise | Shared Task 08 pipeline | `title_raw_normalized` | Source preserved; decorative representation removed | **APPLIED** |
+| `full_address_text` | Unicode, invisible/control, icon, whitespace, empty comma segment | Shared Task 08 pipeline | `full_address_text_normalized` | Source preserved; decorative representation removed | **APPLIED** |
+| `location_raw` | Unicode, invisible/control, icon, whitespace, punctuation noise | Shared Task 08 pipeline | `location_raw_normalized` | Source preserved; decorative representation removed | **APPLIED** |
+| `best_address_text` | Unicode, invisible/control, icon, whitespace, empty comma segment | Shared Task 08 pipeline | `best_address_text_normalized` | Source preserved; decorative representation removed | **APPLIED** |
 | `source_code` | None | None | N/A | N/A | NO_TRANSFORMATION |
 | `price_amount` | None | None | N/A | N/A | NO_TRANSFORMATION |
 
@@ -133,6 +124,8 @@ Vì Text Fields bộc lộ Issue về Unicode và Khoảng trắng, ta thiết l
 
 ## 5. Kết luận Bảo toàn Dữ liệu (Conservation Result)
 
-- **Row Conservation:** PASS. Quá trình sinh ra cột Derived không làm thay đổi tổng số dòng của dataset (`121,929` rows before = `121,929` rows after). Không có thao tác Drop Row.
-- **Identity Conservation:** PASS. Tổ hợp khóa định danh (`source_code`, `source_listing_id`) không bị biến đổi. Khóa sinh `rental_post_id` nguyên vẹn.
-- **Idempotency:** PASS. Hàm `normalize_whitespace` và `normalize_unicode` (vừa được đóng gói trong `notebooks/utils/text_standardization.py`) có tính chất Idempotent. Chạy nhiều lần không làm text biến đổi thêm.
+- **Row Conservation:** notebook assert số rows không đổi; không có thao tác drop row.
+- **Identity Conservation:** notebook giữ nguyên toàn bộ source columns và identities.
+- **Raw Preservation:** chuẩn hóa chỉ ghi vào derived columns; raw/source change count phải bằng `0`.
+- **Idempotency:** toàn bộ pipeline, gồm NFC, artifact ẩn, emoji/icon, whitespace, punctuation và empty-to-null, được chạy lần hai và assert không đổi.
+- **Semantic Preservation:** regression tests bảo vệ `/ - , . : ; # % + ₫ $ m²`, house numbers, ranges, decimal values, Vietnamese accents và price/area semantics. Emoji sequences không được để lại ZWJ, variation selector hoặc keycap artifact mồ côi.

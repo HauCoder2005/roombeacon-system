@@ -19,7 +19,7 @@ class ChothuephongtroSourceAdapter(ScheduledHtmlSourceAdapter):
     CAPABILITIES = SourceCapabilities(
         access_profile=SourceAccessProfile.STANDARD_PAGINATION,
         supports_pagination=True,
-        preferred_fetch_strategy=FetchStrategy.HTTP,
+        preferred_fetch_strategy=FetchStrategy.BROWSER,
         detail_fetch_supported=True,
     )
     LISTING_PREFIXES = ("/ho-chi-minh",)

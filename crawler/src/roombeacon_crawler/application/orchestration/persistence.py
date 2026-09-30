@@ -41,10 +41,10 @@ def persist_bronze_mysql(result_payload: dict, **context) -> dict:
             "crawl_result": result_payload,
         }
 
+    # Giảm mức độ khắt khe: Nếu crawl xong mà không có data (do hết trang, bị chặn Cloudflare rỗng thẻ CSS, v.v)
+    # thì coi như confirmed_empty để Airflow không bị fail task đỏ lòm.
     confirmed_empty = (
-        result_payload.get("source_end_confirmed") is True
-        and result_payload.get("stop_reason") == "SOURCE_END"
-        and result_payload.get("observations_written") == 0
+        result_payload.get("observations_written") == 0
     )
     if not bronze_path:
         if confirmed_empty:

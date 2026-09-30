@@ -21,15 +21,15 @@ def test_canonical_notebook_files_are_present_without_legacy_processing_name():
 def test_silver_notebook_contains_complete_executable_pipeline():
     text = _text(NOTEBOOKS / "02_roombeacon_silver.ipynb")
     expected_sections = [
-        "01 Load Bronze Snapshot", "02 Processing Contract",
-        "03 General Text Standardization", "04 Title Quality Processing",
-        "05 Address Standardization & Parsing", "06 Administrative Unit Mapping",
-        "07 Price Validation", "08 Area Validation", "09 Numeric Outlier Flags",
-        "10 Coordinate Trust Classification", "11 Cross-field Consistency",
-        "12 Duplicate / Repost Candidate Classification", "13 Temporal Semantics Validation",
-        "14 Final Row Quality Status", "15 Silver Dataset Contract",
-        "16 Pre-Silver Quality Gate", "17 Materialize silver.rental_listings",
-        "18 Silver Validation Summary",
+        "01. Load Bronze Snapshot", "02. Processing Contract Matrix",
+        "03. General Text Standardization", "04. Title Quality Processing",
+        "05. Address Standardization & Parsing", "06. Administrative Unit Mapping",
+        "07. Price Validation", "08. Area Validation", "09. Numeric Outlier Flags",
+        "10. Coordinate Trust Classification", "11. Cross-field Consistency",
+        "12. Duplicate / Repost Candidate Hardening", "13. Temporal Semantics Validation",
+        "14. Final Row Quality Status", "15. Silver Dataset Contract",
+        "16. Pre-Silver Quality Gate", "17. Materialize `silver.rental_listings`",
+        "18. Silver Validation",
     ]
     for section in expected_sections:
         assert section in text
@@ -65,3 +65,29 @@ def test_notebook_readme_documents_canonical_layers_in_order():
     positions = [readme.index(name) for name in expected]
     assert positions == sorted(positions)
     assert "02_roombeacon_processing.ipynb" not in readme
+
+
+def test_silver_notebook_is_an_auditable_processing_report():
+    text = _text(NOTEBOOKS / "02_roombeacon_silver.ipynb")
+    required = [
+        "Silver Processing Pipeline Overview",
+        "Processing Contract Matrix",
+        "Before → After Examples",
+        "Raw Price Evidence",
+        "Reparsed Price",
+        "Raw Area Evidence",
+        "Reparsed Area",
+        "Top Flag Reasons",
+        "Number of Flags per Row",
+        "Raw → Silver Lineage Examples",
+        "What It Protects",
+        "Final Silver Health Summary",
+    ]
+    for label in required:
+        assert label in text
+    assert "matplotlib.pyplot" in text
+    assert text.count("plt.") >= 15
+    assert "numeric_audit_report" in text
+    assert "flag_reason_breakdown" in text
+    assert "multi_flag_distribution" in text
+    assert "market analysis" not in text.lower()

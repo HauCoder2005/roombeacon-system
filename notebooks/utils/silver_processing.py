@@ -6,6 +6,7 @@ are classified, never removed.
 """
 
 from dataclasses import dataclass
+import hashlib
 from typing import Mapping
 
 import numpy as np
@@ -26,10 +27,23 @@ STATUS_VALUES: Mapping[str, frozenset[str]] = {
     "area_quality_status": frozenset(
         {"VALIDATED_EXISTING", "REPARSE_ACCEPTED_CLEAN", "MISSING_OR_REVIEW", "UNKNOWN_LINEAGE"}
     ),
+    "price_parser_comparison_status": frozenset(
+        {"MATCH", "DISAGREEMENT", "REPARSED_ONLY", "EXISTING_ONLY", "NO_PRICE_EVIDENCE", "UNCOMPARABLE"}
+    ),
     "numeric_outlier_status": frozenset({"NOT_OUTLIER", "PRICE_OUTLIER", "AREA_OUTLIER", "PRICE_AND_AREA_OUTLIER"}),
     "coordinate_quality_status": frozenset({"USABLE", "INVALID", "UNTRUSTED"}),
-    "cross_field_status": frozenset({"CONSISTENT", "REQUIRES_REVIEW", "INSUFFICIENT_DATA"}),
+    "price_area_availability_status": frozenset(
+        {"AVAILABLE", "MISSING_PRICE", "MISSING_AREA", "MISSING_BOTH"}
+    ),
+    "price_area_quality_status": frozenset(
+        {"CHECKED_NO_FLAG", "PRICE_OUTLIER_REVIEW", "AREA_OUTLIER_REVIEW",
+         "BOTH_OUTLIERS_REVIEW", "EXTREME_PRICE_PER_AREA_REVIEW", "INSUFFICIENT_DATA"}
+    ),
     "duplicate_candidate_status": frozenset({"UNIQUE_FINGERPRINT", "POSSIBLE_DUPLICATE", "INSUFFICIENT_DATA"}),
+    "duplicate_match_reason": frozenset(
+        {"EXACT_FINGERPRINT", "SAME_ADDRESS_PRICE_AREA", "SAME_TITLE_PRICE_WARD", "NO_MATCH"}
+    ),
+    "duplicate_scope": frozenset({"SAME_SOURCE", "CROSS_SOURCE", "NOT_APPLICABLE"}),
     "temporal_quality_status": frozenset({"VALID", "REQUIRES_REVIEW", "INSUFFICIENT_DATA"}),
     "row_quality_status": frozenset({"READY", "READY_WITH_FLAGS", "REQUIRES_REVIEW"}),
 }
@@ -65,6 +79,12 @@ def _iqr_outlier(values: pd.Series) -> pd.Series:
     if not np.isfinite(iqr) or iqr <= 0:
         return pd.Series(False, index=values.index)
     return numeric.lt(q1 - 1.5 * iqr) | numeric.gt(q3 + 1.5 * iqr)
+
+
+def _group_key(frame: pd.DataFrame, fields: list[str], rule: str) -> pd.Series:
+    """Return deterministic, compact group IDs for complete blocking fields."""
+    hashed = pd.util.hash_pandas_object(frame[fields].astype("string"), index=False)
+    return hashed.map(lambda value: f"{rule}:{int(value):016x}")
 
 
 def build_silver_dataset(bronze: pd.DataFrame, evidence: pd.DataFrame) -> pd.DataFrame:
@@ -115,6 +135,21 @@ def build_silver_dataset(bronze: pd.DataFrame, evidence: pd.DataFrame) -> pd.Dat
         result[f"{kind}_lineage_aligned"] = audit.lineage_aligned.astype(bool)
         result[f"{kind}_regression_status"] = audit.regression
 
+    price_existing = price_audit.existing
+    price_reparsed = price_audit.reparsed
+    raw_price_missing = price_audit.raw.isna() | price_audit.raw.astype("string").str.strip().eq("").fillna(False)
+    result["price_parser_comparison_status"] = np.select(
+        [
+            price_existing.notna() & price_reparsed.notna() & price_existing.eq(price_reparsed),
+            price_existing.notna() & price_reparsed.notna() & ~price_existing.eq(price_reparsed),
+            price_existing.isna() & price_reparsed.notna(),
+            price_existing.notna() & price_reparsed.isna(),
+            price_existing.isna() & price_reparsed.isna() & raw_price_missing,
+        ],
+        ["MATCH", "DISAGREEMENT", "REPARSED_ONLY", "EXISTING_ONLY", "NO_PRICE_EVIDENCE"],
+        default="UNCOMPARABLE",
+    )
+
     price_outlier = _iqr_outlier(result.price_amount_clean)
     area_outlier = _iqr_outlier(result.area_value_clean)
     result["price_outlier_flag"] = price_outlier
@@ -134,25 +169,79 @@ def build_silver_dataset(bronze: pd.DataFrame, evidence: pd.DataFrame) -> pd.Dat
 
     price = pd.to_numeric(result.price_amount_clean, errors="coerce")
     area = pd.to_numeric(result.area_value_clean, errors="coerce")
+    result["price_area_availability_status"] = np.select(
+        [price.isna() & area.isna(), price.isna(), area.isna()],
+        ["MISSING_BOTH", "MISSING_PRICE", "MISSING_AREA"],
+        default="AVAILABLE",
+    )
     price_per_area = price / area.where(area.gt(0))
-    result["cross_field_status"] = np.select(
-        [price.isna() | area.isna(), price_per_area.le(0) | ~np.isfinite(price_per_area)],
-        ["INSUFFICIENT_DATA", "REQUIRES_REVIEW"],
-        default="CONSISTENT",
+    ratio_outlier = _iqr_outlier(price_per_area)
+    available = result.price_area_availability_status.eq("AVAILABLE")
+    result["price_area_quality_status"] = np.select(
+        [
+            ~available,
+            available & price_outlier & area_outlier,
+            available & price_outlier,
+            available & area_outlier,
+            available & ratio_outlier,
+        ],
+        ["INSUFFICIENT_DATA", "BOTH_OUTLIERS_REVIEW", "PRICE_OUTLIER_REVIEW",
+         "AREA_OUTLIER_REVIEW", "EXTREME_PRICE_PER_AREA_REVIEW"],
+        default="CHECKED_NO_FLAG",
     )
 
-    fingerprint_fields = ["title_clean", "best_address_text_clean", "price_amount_clean", "area_value_clean"]
-    sufficient = result[fingerprint_fields[:2]].notna().all(axis=1)
-    fingerprint = (
-        result[fingerprint_fields]
-        .astype("string")
-        .fillna("<NULL>")
-        .agg("|".join, axis=1)
+    exact_fields = ["title_clean", "best_address_text_clean", "price_amount_clean", "area_value_clean"]
+    address_fields = ["best_address_text_clean", "price_amount_clean", "area_value_clean"]
+    title_fields = ["title_clean", "price_amount_clean", "ward_current"]
+    exact_sufficient = result[exact_fields].notna().all(axis=1)
+    address_sufficient = result[address_fields].notna().all(axis=1)
+    title_sufficient = result[title_fields].notna().all(axis=1)
+    exact_key = _group_key(result, exact_fields, "EXACT")
+    address_key = _group_key(result, address_fields, "ADDRESS_PRICE_AREA")
+    title_key = _group_key(result, title_fields, "TITLE_PRICE_WARD")
+    exact_duplicate = exact_sufficient & exact_key.duplicated(keep=False)
+    address_cross = address_sufficient & address_key.duplicated(keep=False) & result.groupby(address_key).source_code.transform("nunique").gt(1)
+    title_cross = title_sufficient & title_key.duplicated(keep=False) & result.groupby(title_key).source_code.transform("nunique").gt(1)
+    duplicate = exact_duplicate | address_cross | title_cross
+    parent = {int(index): int(index) for index in result.index[duplicate]}
+
+    def find(index: int) -> int:
+        while parent[index] != index:
+            parent[index] = parent[parent[index]]
+            index = parent[index]
+        return index
+
+    def union(left: int, right: int) -> None:
+        left_root, right_root = find(left), find(right)
+        if left_root != right_root:
+            parent[max(left_root, right_root)] = min(left_root, right_root)
+
+    for key, mask in [(exact_key, exact_duplicate), (address_key, address_cross), (title_key, title_cross)]:
+        for members in result.loc[mask].groupby(key[mask]).groups.values():
+            member_list = [int(index) for index in members]
+            for member in member_list[1:]:
+                union(member_list[0], member)
+
+    components: dict[int, list[int]] = {}
+    for index in parent:
+        components.setdefault(find(index), []).append(index)
+    group = pd.Series(pd.NA, index=result.index, dtype="string")
+    for members in components.values():
+        identities = sorted(str(value) for value in result.loc[members, "rental_post_id"])
+        digest = hashlib.sha256("|".join(identities).encode("utf-8")).hexdigest()[:16]
+        group.loc[members] = f"CANDIDATE:{digest}"
+    result["duplicate_candidate_group"] = group
+    result["duplicate_match_reason"] = np.select(
+        [exact_duplicate, address_cross, title_cross],
+        ["EXACT_FINGERPRINT", "SAME_ADDRESS_PRICE_AREA", "SAME_TITLE_PRICE_WARD"],
+        default="NO_MATCH",
     )
-    duplicate = sufficient & fingerprint.duplicated(keep=False)
-    result["duplicate_candidate_group"] = fingerprint.where(duplicate, pd.NA)
+    group_source_count = result.loc[duplicate].groupby(group[duplicate]).source_code.transform("nunique")
+    result["duplicate_scope"] = "NOT_APPLICABLE"
+    result.loc[duplicate, "duplicate_scope"] = np.where(group_source_count.gt(1), "CROSS_SOURCE", "SAME_SOURCE")
+    any_sufficient = exact_sufficient | address_sufficient | title_sufficient
     result["duplicate_candidate_status"] = np.select(
-        [~sufficient, duplicate], ["INSUFFICIENT_DATA", "POSSIBLE_DUPLICATE"], default="UNIQUE_FINGERPRINT"
+        [duplicate, ~any_sufficient], ["POSSIBLE_DUPLICATE", "INSUFFICIENT_DATA"], default="UNIQUE_FINGERPRINT"
     )
 
     first = pd.to_datetime(result.first_observed_at, errors="coerce")
@@ -175,6 +264,8 @@ def build_silver_dataset(bronze: pd.DataFrame, evidence: pd.DataFrame) -> pd.Dat
         | result.coordinate_quality_status.ne("USABLE")
         | result.price_quality_status.ne("VALIDATED_EXISTING")
         | result.area_quality_status.ne("VALIDATED_EXISTING")
+        | result.price_parser_comparison_status.eq("DISAGREEMENT")
+        | result.price_area_quality_status.str.endswith("REVIEW")
     )
     result["row_quality_status"] = np.select(
         [requires_review, has_flags], ["REQUIRES_REVIEW", "READY_WITH_FLAGS"], default="READY"
@@ -228,6 +319,20 @@ def evaluate_pre_silver_quality_gate(
         ).any(),
         "outliers_preserved_and_flagged": "numeric_outlier_status" in silver and len(silver) == len(bronze),
         "duplicate_candidates_preserved_and_flagged": "duplicate_candidate_status" in silver and len(silver) == len(bronze),
+        "price_parser_disagreement_preserved": not (
+            silver.price_regression_status.eq("DIFFERENT_REVIEW")
+            & ~silver.price_parser_comparison_status.eq("DISAGREEMENT")
+        ).any(),
+        "price_area_status_domain_valid": (
+            set(silver.price_area_availability_status.dropna()).issubset(STATUS_VALUES["price_area_availability_status"])
+            and set(silver.price_area_quality_status.dropna()).issubset(STATUS_VALUES["price_area_quality_status"])
+        ),
+        "duplicate_scope_domain_valid": set(silver.duplicate_scope.dropna()).issubset(STATUS_VALUES["duplicate_scope"]),
+        "duplicate_candidate_rows_preserved": len(silver) == len(bronze),
+        "cross_source_duplicate_rule_deterministic": not (
+            silver.duplicate_match_reason.isin(["SAME_ADDRESS_PRICE_AREA", "SAME_TITLE_PRICE_WARD"])
+            & ~silver.duplicate_scope.eq("CROSS_SOURCE")
+        ).any(),
         "documented_status_values_only": status_valid,
     }
     report = SilverQualityGateReport(results)

@@ -35,11 +35,11 @@ class MuabanSourceAdapter(BaseSourceAdapter):
     DEFAULT_BASE_URL = "https://muaban.net/bat-dong-san/cho-thue-phong-tro-nha-tro"
     CAPABILITIES = SourceCapabilities(
         access_profile=SourceAccessProfile.ACCESS_CHALLENGED,
-        supports_pagination=False,
+        supports_pagination=True,
         supports_sitemap_discovery=True,
-        preferred_fetch_strategy=FetchStrategy.HTTP,
+        preferred_fetch_strategy=FetchStrategy.BROWSER,
         robots_required=True,
-        detail_fetch_supported=False,
+        detail_fetch_supported=True,
     )
 
     def __init__(
@@ -57,7 +57,7 @@ class MuabanSourceAdapter(BaseSourceAdapter):
             source_name=self.SOURCE_NAME,
             domain="muaban.net",
             base_url=self.base_url,
-            default_strategy=FetchStrategy.HTTP,
+            default_strategy=FetchStrategy.BROWSER,
             request_delay_seconds=request_delay_seconds,
             max_concurrency=max_concurrency,
         )

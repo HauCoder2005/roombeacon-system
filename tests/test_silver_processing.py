@@ -79,6 +79,28 @@ def _evidence(rows: pd.DataFrame) -> pd.DataFrame:
     )
 
 
+def _expanded(count: int) -> tuple[pd.DataFrame, pd.DataFrame]:
+    bronze_rows = []
+    evidence_rows = []
+    base_bronze = _bronze_rows().iloc[0].to_dict()
+    base_evidence = _evidence(_bronze_rows()).iloc[0].to_dict()
+    for index in range(count):
+        bronze_rows.append({
+            **base_bronze,
+            "rental_post_id": index + 1,
+            "source_listing_id": f"listing-{index + 1}",
+            "url": f"https://example.test/{index + 1}",
+        })
+        evidence_rows.append({
+            **base_evidence,
+            "rental_post_id": index + 1,
+            "evidence_observation_id": 100 + index,
+            "evidence_price_id": 200 + index,
+            "evidence_area_id": 300 + index,
+        })
+    return pd.DataFrame(bronze_rows), pd.DataFrame(evidence_rows)
+
+
 def test_build_silver_dataset_preserves_raw_grain_and_adds_quality_evidence():
     bronze = _bronze_rows()
     silver = build_silver_dataset(bronze, _evidence(bronze))
@@ -168,3 +190,121 @@ def test_clean_numeric_columns_use_stable_non_object_dtype_for_duckdb():
     assert silver.price_amount_clean.dtype != object
     assert silver.area_value_clean.dtype != object
     assert silver.price_amount_clean.max() == 1_350_000_000
+
+
+@pytest.mark.parametrize(
+    ("existing", "raw_price", "expected"),
+    [
+        (Decimal("3500000.00"), "3.5 triệu/tháng", "MATCH"),
+        (Decimal("3500000.00"), "4 triệu/tháng", "DISAGREEMENT"),
+        (None, "4 triệu/tháng", "REPARSED_ONLY"),
+        (Decimal("3500000.00"), None, "EXISTING_ONLY"),
+        (None, None, "NO_PRICE_EVIDENCE"),
+        (None, "thỏa thuận", "UNCOMPARABLE"),
+    ],
+)
+def test_price_parser_comparison_status_is_explicit(existing, raw_price, expected):
+    bronze = _bronze_rows()
+    evidence = _evidence(bronze)
+    bronze.loc[0, "price_amount"] = existing
+    evidence.loc[0, "price_raw"] = raw_price
+
+    silver = build_silver_dataset(bronze, evidence)
+
+    assert silver.loc[0, "price_parser_comparison_status"] == expected
+
+
+def test_price_disagreement_preserves_existing_clean_value_and_review_evidence():
+    bronze = _bronze_rows()
+    evidence = _evidence(bronze)
+    evidence.loc[0, "price_raw"] = "4 triệu/tháng"
+
+    silver = build_silver_dataset(bronze, evidence)
+
+    assert silver.loc[0, "price_amount_clean"] == 3_500_000
+    assert silver.loc[0, "price_quality_status"] == "VALIDATED_EXISTING"
+    assert silver.loc[0, "price_parser_comparison_status"] == "DISAGREEMENT"
+
+
+def test_price_area_availability_distinguishes_all_missing_combinations():
+    bronze, evidence = _expanded(4)
+    bronze.loc[1, "price_amount"] = None
+    evidence.loc[1, "price_raw"] = None
+    bronze.loc[2, "area_value"] = None
+    evidence.loc[2, "area_raw"] = None
+    bronze.loc[3, ["price_amount", "area_value"]] = None
+    evidence.loc[3, ["price_raw", "area_raw"]] = None
+
+    silver = build_silver_dataset(bronze, evidence)
+
+    assert silver.price_area_availability_status.tolist() == [
+        "AVAILABLE", "MISSING_PRICE", "MISSING_AREA", "MISSING_BOTH"
+    ]
+    assert silver.loc[0, "price_area_quality_status"] == "CHECKED_NO_FLAG"
+    assert silver.loc[1:, "price_area_quality_status"].eq("INSUFFICIENT_DATA").all()
+
+
+def test_price_area_quality_preserves_price_area_and_ratio_review_flags():
+    bronze, evidence = _expanded(8)
+    prices = [3_000_000, 4_000_000, 5_000_000, 6_000_000, 7_000_000, 8_000_000, 30_000_000, 3_000_000]
+    areas = [30, 35, 40, 45, 50, 55, 60, 300]
+    for index, (price, area) in enumerate(zip(prices, areas)):
+        bronze.loc[index, "price_amount"] = Decimal(str(price))
+        bronze.loc[index, "area_value"] = Decimal(str(area))
+        evidence.loc[index, "price_raw"] = f"{price} VND"
+        evidence.loc[index, "area_raw"] = f"{area} m2"
+
+    silver = build_silver_dataset(bronze, evidence)
+
+    assert silver.loc[6, "price_area_quality_status"] == "PRICE_OUTLIER_REVIEW"
+    assert silver.loc[7, "price_area_quality_status"] == "AREA_OUTLIER_REVIEW"
+
+
+def test_duplicate_rules_find_same_and_cross_source_candidates_without_merging_rows():
+    bronze, evidence = _expanded(5)
+    bronze.loc[1, "source_listing_id"] = "same-source-copy"
+    bronze.loc[2, "source_code"] = "nhatrovn"
+    bronze.loc[2, "source_listing_id"] = "cross-source-address"
+    bronze.loc[2, "title_raw"] = "Different title"
+    bronze.loc[3, "source_code"] = "nhatrovn"
+    bronze.loc[3, "source_listing_id"] = "cross-source-title"
+    bronze.loc[3, "best_address_text"] = "123 Other Street, Phường Bến Nghé, Quận 1"
+    bronze.loc[3, "full_address_text"] = "123 Other Street, Phường Bến Nghé, Quận 1"
+    bronze.loc[4, "source_code"] = "nhatrovn"
+    bronze.loc[4, ["best_address_text", "full_address_text"]] = None
+
+    silver = build_silver_dataset(bronze, evidence)
+
+    assert len(silver) == len(bronze) == silver.rental_post_id.nunique()
+    assert silver.loc[0, "duplicate_match_reason"] == "EXACT_FINGERPRINT"
+    assert silver.loc[1, "duplicate_scope"] == "CROSS_SOURCE"
+    assert silver.loc[2, "duplicate_match_reason"] == "SAME_ADDRESS_PRICE_AREA"
+    assert silver.loc[2, "duplicate_scope"] == "CROSS_SOURCE"
+    assert silver.loc[3, "duplicate_match_reason"] == "SAME_TITLE_PRICE_WARD"
+    assert silver.loc[3, "duplicate_scope"] == "CROSS_SOURCE"
+    assert silver.loc[4, "duplicate_scope"] == "NOT_APPLICABLE"
+
+
+def test_exact_same_source_candidates_have_deterministic_group_and_scope():
+    bronze, evidence = _expanded(2)
+
+    first = build_silver_dataset(bronze, evidence)
+    second = build_silver_dataset(bronze, evidence)
+
+    assert first.duplicate_scope.eq("SAME_SOURCE").all()
+    assert first.duplicate_match_reason.eq("EXACT_FINGERPRINT").all()
+    assert first.duplicate_candidate_group.tolist() == second.duplicate_candidate_group.tolist()
+
+
+def test_shared_coordinate_alone_does_not_create_duplicate_candidate():
+    bronze, evidence = _expanded(2)
+    bronze.loc[1, "title_raw"] = "Unrelated listing"
+    bronze.loc[1, ["best_address_text", "full_address_text"]] = "Unrelated address"
+    bronze.loc[1, "price_amount"] = Decimal("9000000")
+    bronze.loc[1, "area_value"] = Decimal("90")
+    evidence.loc[1, "price_raw"] = "9000000 VND"
+    evidence.loc[1, "area_raw"] = "90 m2"
+
+    silver = build_silver_dataset(bronze, evidence)
+
+    assert silver.duplicate_candidate_status.ne("POSSIBLE_DUPLICATE").all()
