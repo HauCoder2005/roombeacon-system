@@ -1,54 +1,49 @@
-# RoomBeacon — Latest-State Parquet Publication
+# RoomBeacon Canonical Silver Pipeline
 
-> Mục đích: mô tả pipeline hiện có mang tên `SilverMaterializer` và giới hạn semantics của output.
->
-> Trạng thái: **CURRENT IMPLEMENTATION / PARTIAL DATA LIFECYCLE**. Tài liệu chuẩn về các tầng dữ liệu: [Data Lifecycle](../data/DATA_LIFECYCLE.md).
+> Status: **CURRENT IMPLEMENTATION**. See [Data Lifecycle](../data/DATA_LIFECYCLE.md) for layer boundaries.
 
-## Semantics hiện tại
+## Canonical contract
 
-`SilverMaterializer` xuất `v_latest_posts` thành `data/silver/rental_latest.parquet`. Tên class, DAG và đường dẫn là tên legacy; output hiện là **latest-state Parquet**, chưa phải cleaned Silver.
+- Canonical dataset: DuckDB `silver.rental_listings`.
+- Grain: one row per non-null, unique `rental_post_id`.
+- Compatibility output: `data/silver/rental_latest.parquet`.
+- Mirror status: **deprecated / temporary compatibility mirror**.
 
-Pipeline hiện tại không có cleaning-rule registry, imputation, location standardization, business outlier policy hoặc versioned transformation rules. Parquet là định dạng vật lý, không tự tạo ra semantics Silver.
+Silver preserves all Bronze rows and raw/source fields. Deterministic clean values, lineage indicators, anomaly flags, duplicate-candidate evidence, temporal checks, and documented quality statuses are appended. The pipeline does not delete statistical outliers or duplicate candidates and does not guess missing values.
 
-## Luồng publication
+## Publication order
 
 ```mermaid
 flowchart LR
-    M[(MySQL Bronze)] --> D[DuckDB]
-    D --> V[v_latest_posts]
-    V --> T[Temporary Parquet]
-    T --> Q[Validate schema, source and identity]
-    Q --> P[(Latest-state Parquet)]
-    P --> X[Metadata sidecar]
+    B[(MySQL Bronze)] --> V[v_latest_posts]
+    V --> P[Deterministic processing]
+    P --> G{Pre-Silver quality gate}
+    G -->|PASS| S[(DuckDB silver.rental_listings)]
+    S --> Q{Canonical validation}
+    Q -->|PASS| M[(Temporary Parquet mirror)]
+    G -->|FAIL| X[Stop without publishing]
+    Q -->|FAIL| X
 ```
 
-`v_latest_posts` chọn observation mới nhất cho mỗi `rental_post_id`. Materializer sau đó:
+`SilverMaterializer` accepts the already processed DataFrame. It atomically replaces the DuckDB table inside a transaction, reads and validates the canonical table, and only then exports the Parquet mirror. A failed canonical materialization never refreshes the mirror.
 
-1. ghi temporary Parquet;
-2. kiểm tra file đọc được, schema bắt buộc, source hợp lệ và one-row-per-listing;
-3. thay thế snapshot đích bằng atomic rename;
-4. ghi metadata sidecar;
-5. giữ snapshot hợp lệ trước đó nếu validation thất bại.
+## Critical invariants
 
-## Invariants
+- Bronze and Silver row counts match.
+- `rental_post_id` is non-null and unique.
+- Source identity and raw/source fields are unchanged.
+- No join multiplies rows and no transformation silently deletes rows.
+- Price and area clean values follow their lineage and validation contracts.
+- Ambiguous ward evidence never becomes current ward truth.
+- Invalid coordinates are never marked usable.
+- Outliers and duplicate candidates remain present and flagged.
+- Every quality status belongs to its documented vocabulary.
+- Canonical DuckDB and the compatibility mirror have identical row count, identity count, grain, and columns.
 
-- `rental_post_id` không null và không trùng trong snapshot;
-- source phải thuộc registry được hỗ trợ;
-- file đã publish phải đọc lại được;
-- publication failure không làm hỏng snapshot hợp lệ trước đó.
+## Notebook ownership
 
-Các invariant này đảm bảo tính toàn vẹn kỹ thuật của snapshot. Chúng không thay thế semantic cleaning.
+1. `01_roombeacon_eda.ipynb` performs raw-data EDA only.
+2. `02_roombeacon_silver.ipynb` constructs and publishes canonical Silver.
+3. `03_roombeacon_processing.ipynb` reads only canonical Silver and prepares analytical/model-ready variables without fitting models.
 
-## Hai loại EDA
-
-- **Initial Data Quality EDA — PARTIAL:** đọc Bronze/latest-state để tìm missing values, malformed values, parser contamination và raw outliers; kết quả là cleaning rules có version.
-- **Clean Analytical EDA — PLANNED:** chỉ đọc Silver sau khi các cleaning rules đó được triển khai.
-
-## Ranh giới công cụ và tầng dữ liệu
-
-- DuckDB là query engine.
-- Pandas là công cụ DataFrame/EDA.
-- Parquet là file format.
-- Silver là logical cleaned layer.
-
-Các khái niệm này không hoán đổi cho nhau.
+Gold datasets, model fitting, recommendations, and market rankings are outside this pipeline.

@@ -1,79 +1,24 @@
 {
-  "validated_utc": "2026-09-25T18:13:31Z",
+  "validated_utc": "2026-09-30T05:17:54.044033+00:00",
   "official_notebooks": {
     "01_roombeacon_eda.ipynb": {
-      "sections": [1, 2, 3, 4, 5, 6, 7],
-      "code_cells": 21,
-      "executed_code_cells": 21,
+      "code_cells": 54,
+      "executed_code_cells": 54,
       "execution_errors": 0,
-      "rendered_charts": 23,
-      "bar_charts": 19,
-      "heatmaps": 4,
       "run_all": "PASS"
     },
-    "02_roombeacon_processing.ipynb": {
-      "sections": [8, 9, 10, 11, 12, 13, 14, 15, 16],
-      "implemented_sections": [8, 9, 10, 11],
-      "code_cells": 20,
-      "executed_code_cells": 20,
+    "02_roombeacon_silver.ipynb": {
+      "code_cells": 19,
+      "executed_code_cells": 19,
       "execution_errors": 0,
-      "rendered_charts": 16,
-      "bar_charts": 14,
-      "heatmaps": 2,
-      "run_all": "PASS",
-      "radius_outputs": "SKIPPED_REFERENCE_LOCATION_REQUIRED"
-    }
-  },
-  "common_visual_refactor": {
-    "default_run_charts_before": 43,
-    "default_run_charts_after": 39,
-    "charts_removed": [
-      "dense row-level missingness matrix",
-      "cumulative missing-cell Pareto line",
-      "price raw-pattern bar",
-      "area raw-pattern bar",
-      "local-price box plot"
-    ],
-    "charts_replaced": [
-      "source count/share facet -> one horizontal bar with count and percent",
-      "coordinate grouped bar -> source-by-trust-status heatmap",
-      "raw-pattern bars -> bounded review tables",
-      "local-price box plot -> median-by-radius bar plus selected-radius histogram"
-    ],
-    "box_plots_after": 0,
-    "dense_missingness_matrices_after": 0,
-    "pareto_lines_after": 0,
-    "rendered_heatmaps": 6,
-    "rendered_bar_charts": 33,
-    "rendered_histograms": 0,
-    "rendered_scatter_charts": 0,
-    "conditional_radius_charts_when_reference_is_configured": {
-      "bar_charts": 4,
-      "histograms": 1,
-      "scatter_charts": 1,
-      "total": 6
+      "run_all": "PASS"
     },
-    "visual_qa": {
-      "titles_present": "PASS",
-      "axis_titles_present": "PASS",
-      "friendly_status_labels": "PASS",
-      "percentage_units": "PASS",
-      "distance_units": "PASS_CONDITIONAL_OUTPUT",
-      "price_units": "PASS_CONDITIONAL_OUTPUT",
-      "dense_heatmap_annotations_suppressed": "PASS"
+    "03_roombeacon_processing.ipynb": {
+      "code_cells": 8,
+      "executed_code_cells": 8,
+      "execution_errors": 0,
+      "run_all": "PASS"
     }
   },
-  "tests": {
-    "passed": 39,
-    "files": [
-      "tests/test_notebook_common_visuals.py",
-      "tests/test_notebook_audit.py",
-      "tests/test_location_analysis.py",
-      "tests/test_eda_processing.py"
-    ]
-  },
-  "source_mutation": "NONE",
-  "modeling_executed": false,
-  "task_12_executed": false,
-  "status": "COMMON_VISUALS_READY"
+  "status": "CANONICAL_NOTEBOOK_LAYERS_READY"
 }

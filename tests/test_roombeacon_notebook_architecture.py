@@ -1,0 +1,67 @@
+import json
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+NOTEBOOKS = ROOT / "notebooks"
+
+
+def _text(path: Path) -> str:
+    notebook = json.loads(path.read_text(encoding="utf-8"))
+    return "\n".join("".join(cell.get("source", [])) for cell in notebook["cells"])
+
+
+def test_canonical_notebook_files_are_present_without_legacy_processing_name():
+    assert (NOTEBOOKS / "01_roombeacon_eda.ipynb").exists()
+    assert (NOTEBOOKS / "02_roombeacon_silver.ipynb").exists()
+    assert (NOTEBOOKS / "03_roombeacon_processing.ipynb").exists()
+    assert not (NOTEBOOKS / "02_roombeacon_processing.ipynb").exists()
+
+
+def test_silver_notebook_contains_complete_executable_pipeline():
+    text = _text(NOTEBOOKS / "02_roombeacon_silver.ipynb")
+    expected_sections = [
+        "01 Load Bronze Snapshot", "02 Processing Contract",
+        "03 General Text Standardization", "04 Title Quality Processing",
+        "05 Address Standardization & Parsing", "06 Administrative Unit Mapping",
+        "07 Price Validation", "08 Area Validation", "09 Numeric Outlier Flags",
+        "10 Coordinate Trust Classification", "11 Cross-field Consistency",
+        "12 Duplicate / Repost Candidate Classification", "13 Temporal Semantics Validation",
+        "14 Final Row Quality Status", "15 Silver Dataset Contract",
+        "16 Pre-Silver Quality Gate", "17 Materialize silver.rental_listings",
+        "18 Silver Validation Summary",
+    ]
+    for section in expected_sections:
+        assert section in text
+    assert "build_silver_dataset" in text
+    assert "evaluate_pre_silver_quality_gate" in text
+    assert "SilverMaterializer" in text
+    assert "silver.rental_listings" in text
+    assert "TEMPORARY COMPATIBILITY MIRROR" in text
+    assert ".fit(" not in text and ".predict(" not in text
+
+
+def test_processing_notebook_reads_only_canonical_silver_and_does_not_clean_it():
+    text = _text(NOTEBOOKS / "03_roombeacon_processing.ipynb")
+    assert "FROM silver.rental_listings" in text
+    for forbidden in [
+        "v_latest_posts", "load_snapshot(", "apply_text_standardization(",
+        "apply_address_parsing(", "apply_ward_mapping(", "validate_numeric_candidates(",
+        "SilverMaterializer(", "CREATE TABLE silver.rental_listings",
+        "derive_local_price_bands(", "summarize_local_price_by_radius(",
+    ]:
+        assert forbidden not in text
+    assert "price_per_area" in text
+    assert ".fit(" not in text and ".predict(" not in text
+
+
+def test_notebook_readme_documents_canonical_layers_in_order():
+    readme = (NOTEBOOKS / "README.md").read_text(encoding="utf-8")
+    expected = [
+        "01_roombeacon_eda.ipynb",
+        "02_roombeacon_silver.ipynb",
+        "03_roombeacon_processing.ipynb",
+    ]
+    positions = [readme.index(name) for name in expected]
+    assert positions == sorted(positions)
+    assert "02_roombeacon_processing.ipynb" not in readme
