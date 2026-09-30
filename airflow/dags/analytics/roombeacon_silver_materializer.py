@@ -1,7 +1,8 @@
-"""Schedule validated publication of the latest-state Silver Parquet snapshot.
+"""Schedule canonical RoomBeacon Silver construction and publication.
 
-Airflow owns ordering and retries; DuckDB extraction, validation and atomic file
-publication remain in the analytics materializer.
+Airflow owns ordering and retries. The shared notebook utilities own Bronze
+cleaning and the pre-Silver gate; the materializer publishes DuckDB first and
+the deprecated Parquet compatibility mirror second.
 """
 
 import json
@@ -23,7 +24,7 @@ DEFAULT_ARGS = {
 
 @dag(
     dag_id=DAG_ID,
-    description="Tự động materialization snapshot tầng Silver Parquet từ DuckDB v_latest_posts",
+    description="Build canonical silver.rental_listings and its compatibility mirror",
     default_args=DEFAULT_ARGS,
     schedule="0 2 * * *",
     start_date=datetime(2026, 8, 1, tzinfo=timezone.utc),
@@ -64,30 +65,48 @@ def roombeacon_silver_materializer():
 
     @task
     def materialize_silver(verification_info: dict) -> dict:
-        """2. Thực thi materialization nguyên tử sang file Parquet và ghi metadata."""
+        """2. Build, gate, and publish canonical DuckDB Silver, then its mirror."""
+        from pathlib import Path
+
+        from analytics.duckdb.connection import create_analytics_connection
         from analytics.silver.materializer import SilverMaterializer
+        from notebooks.utils.notebook_audit import load_snapshot
+        from notebooks.utils.silver_processing import (
+            build_silver_dataset,
+            evaluate_pre_silver_quality_gate,
+        )
 
         logger.info("=" * 60)
-        logger.info("STAGE 2: MATERIALIZE SILVER PARQUET")
+        logger.info("STAGE 2: BUILD AND MATERIALIZE CANONICAL SILVER")
         logger.info("=" * 60)
 
+        project_root = Path(__file__).resolve().parents[3]
+        conn = create_analytics_connection()
+        bronze_df, raw_evidence, _ = load_snapshot(conn, project_root)
+        if len(bronze_df) != verification_info["total_rows"]:
+            raise ValueError("Bronze snapshot changed between verification and materialization")
+        processed_df = build_silver_dataset(bronze_df, raw_evidence)
+        quality_gate = evaluate_pre_silver_quality_gate(bronze_df, processed_df)
+        if not quality_gate.passed:
+            raise ValueError("Pre-Silver quality gate failed")
         materializer = SilverMaterializer()
-        metadata = materializer.materialize()
+        metadata = materializer.materialize(processed_df, conn=conn)
 
-        logger.info("Materialization thành công: %d dòng, %d tin độc nhất.", metadata.row_count, metadata.unique_listing_count)
+        logger.info("Canonical Silver materialized: %d rows, %d unique listings.", metadata.row_count, metadata.unique_listing_count)
         return {
             "generated_at": metadata.generated_at,
             "row_count": metadata.row_count,
             "unique_listing_count": metadata.unique_listing_count,
             "source_distribution": metadata.source_distribution,
+            "canonical_table": metadata.canonical_table,
             "output_file": str(materializer.output_file),
             "metadata_file": str(materializer.metadata_file),
         }
 
     @task
     def validate_silver_output(materialization_info: dict) -> dict:
-        """3. Kiểm tra tính toàn vẹn và khả năng đọc lại của file Silver Parquet vừa xuất bản."""
-        import pandas as pd
+        """3. Verify canonical DuckDB and compatibility mirror parity."""
+        from analytics.duckdb.connection import create_analytics_connection
 
         logger.info("=" * 60)
         logger.info("STAGE 3: VALIDATE SILVER PARQUET OUTPUT")
@@ -104,14 +123,27 @@ def roombeacon_silver_materializer():
         file_size_bytes = parquet_path.stat().st_size
         logger.info("Kích thước file Silver Parquet: %d bytes (%.2f KB)", file_size_bytes, file_size_bytes / 1024)
 
-        df = pd.read_parquet(parquet_path)
-        if len(df) != materialization_info["row_count"]:
-            raise ValueError(f"Số dòng đọc lại ({len(df)}) != metadata ({materialization_info['row_count']})")
+        conn = create_analytics_connection(create_views=False)
+        canonical = conn.execute(
+            "SELECT count(*), count(DISTINCT rental_post_id) FROM silver.rental_listings"
+        ).fetchone()
+        escaped_path = str(parquet_path).replace("'", "''")
+        mirror = conn.execute(
+            f"SELECT count(*), count(DISTINCT rental_post_id) FROM read_parquet('{escaped_path}')"
+        ).fetchone()
+        columns_count = len(conn.execute("DESCRIBE silver.rental_listings").fetchall())
+        mirror_columns_count = len(conn.execute(
+            f"DESCRIBE SELECT * FROM read_parquet('{escaped_path}')"
+        ).fetchall())
+        if canonical != mirror or canonical[0] != materialization_info["row_count"]:
+            raise ValueError("Canonical Silver and compatibility mirror grain differ")
+        if columns_count != mirror_columns_count:
+            raise ValueError("Canonical Silver and compatibility mirror columns differ")
 
         return {
             "status": "VALID",
             "file_size_kb": round(file_size_bytes / 1024, 2),
-            "columns_count": len(df.columns),
+            "columns_count": columns_count,
         }
 
     @task
@@ -120,7 +152,8 @@ def roombeacon_silver_materializer():
         logger.info("=" * 60)
         logger.info("ROOMBEACON SILVER MATERIALIZATION SUMMARY")
         logger.info("=" * 60)
-        logger.info("Snapshot File       : %s", materialization_info["output_file"])
+        logger.info("Canonical Table     : %s", materialization_info["canonical_table"])
+        logger.info("Compatibility Mirror: %s", materialization_info["output_file"])
         logger.info("Metadata File       : %s", materialization_info["metadata_file"])
         logger.info("Total Rows          : %d", materialization_info["row_count"])
         logger.info("Unique Listings     : %d", materialization_info["unique_listing_count"])

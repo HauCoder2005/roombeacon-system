@@ -26,6 +26,10 @@ class NhatotSourceAdapter(BaseSourceAdapter):
     DEFAULT_BASE_URL = "https://www.nhatot.com/thue-phong-tro"
     CAPABILITIES = SourceCapabilities(
         access_profile=SourceAccessProfile.DISCOVERY_RESTRICTED,
+        # robots.txt disallows the ``?page=`` route, so only the landing seed
+        # page is eligible for acquisition.  Keep this in capabilities rather
+        # than relying on the pagination implementation alone: planning and
+        # direct executions must both resolve to forward-only mode.
         supports_pagination=False,
         supports_sitemap_discovery=True,
         historical_backfill_supported=False,

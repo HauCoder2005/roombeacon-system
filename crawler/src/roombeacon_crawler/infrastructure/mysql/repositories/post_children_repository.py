@@ -46,6 +46,24 @@ class MySQLPostChildrenRepository(PostChildrenRepositoryPort):
             or value > maximum
         )
 
+    @staticmethod
+    def _has_detail_payload(observation: BronzeObservation) -> bool:
+        """Return whether the observation contains a real detail-table value."""
+        values = (
+            observation.area_raw,
+            observation.description_raw,
+            observation.property_type_raw,
+            observation.furnishing_raw,
+            observation.deposit_raw,
+            observation.posted_at_raw,
+            observation.seller_name_raw,
+            observation.seller_type_raw,
+            observation.seller_phone_raw,
+        )
+        return any(
+            value is not None and str(value).strip() for value in values
+        )
+
     def _persist_price(
         self,
         connection,
@@ -97,15 +115,42 @@ class MySQLPostChildrenRepository(PostChildrenRepositoryPort):
         post_id: int,
         observation_id: int,
     ) -> None:
-        # Lightweight locations must not become inherited raw address rows.
+        # ``location_raw`` is a coarse card label, not a confirmed address.
         observed_address = observation.address_raw
-        if not observed_address or not str(observed_address).strip():
+        lat = observation.latitude
+        lng = observation.longitude
+
+        if (
+            isinstance(observed_address, str)
+            and observed_address.lstrip().startswith("{")
+        ):
+            try:
+                parsed = json.loads(observed_address)
+                observed_address = parsed.get("address", observed_address)
+                if lat is None and parsed.get("latitude") is not None:
+                    lat = float(parsed.get("latitude"))
+                if lng is None and parsed.get("longitude") is not None:
+                    lng = float(parsed.get("longitude"))
+            except (json.JSONDecodeError, TypeError, ValueError):
+                logger.warning(
+                    "Invalid structured address payload ignored (post_id=%s)",
+                    post_id,
+                )
+
+        address_text = str(observed_address).strip() if observed_address else ""
+        addr_val = address_text[:500] or None
+
+        if (lat is not None and lng is None) or (lat is None and lng is not None):
+            lat = None
+            lng = None
+
+        if addr_val is None and lat is None and lng is None:
             return
 
         insert_address = text(
             """
-            INSERT INTO post_addresses (rental_post_id, rental_post_version_id, full_address_text, created_at)
-            VALUES (:post_id, :version_id, :addr, NOW())
+            INSERT INTO post_addresses (rental_post_id, rental_post_version_id, full_address_text, latitude, longitude, created_at)
+            VALUES (:post_id, :version_id, :addr, :lat, :lng, NOW())
             """
         )
         connection.execute(
@@ -113,7 +158,9 @@ class MySQLPostChildrenRepository(PostChildrenRepositoryPort):
             {
                 "post_id": post_id,
                 "version_id": observation_id,
-                "addr": str(observed_address).strip()[:500],
+                "addr": addr_val,
+                "lat": lat,
+                "lng": lng,
             },
         )
 
@@ -124,6 +171,9 @@ class MySQLPostChildrenRepository(PostChildrenRepositoryPort):
         post_id: int,
         observation_id: int,
     ) -> None:
+        if not self._has_detail_payload(observation):
+            return
+
         normalized_area = MySQLBronzeMapper.parse_numeric_area(
             observation.area_raw
         )

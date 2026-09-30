@@ -11,7 +11,7 @@ class CrawlerEnv:
     request_timeout_seconds: float = 30.0
     request_delay_seconds: float = 3.0
     max_concurrency: int = 1
-    max_run_seconds: float = 180.0
+    max_run_seconds: float = 2700.0
     max_retries: int = 1
     retry_backoff_seconds: float = 5.0
     start_page: int = 1
@@ -32,7 +32,7 @@ def load_crawler_env() -> CrawlerEnv:
         request_timeout_seconds=get_float("CRAWLER_REQUEST_TIMEOUT_SECONDS", default=30.0) or 30.0,
         request_delay_seconds=get_float("CRAWLER_REQUEST_DELAY_SECONDS", default=3.0) or 3.0,
         max_concurrency=get_int("CRAWLER_MAX_CONCURRENCY", default=1) or 1,
-        max_run_seconds=max(1.0, get_float("CRAWLER_MAX_RUN_SECONDS", default=180.0) or 180.0),
+        max_run_seconds=2700.0,
         max_retries=get_int("CRAWLER_MAX_RETRIES", default=1) or 1,
         retry_backoff_seconds=get_float("CRAWLER_RETRY_BACKOFF_SECONDS", default=5.0) or 5.0,
         start_page=get_int("CRAWLER_START_PAGE", default=1) or 1,

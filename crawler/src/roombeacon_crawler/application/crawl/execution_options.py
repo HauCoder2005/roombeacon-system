@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from roombeacon_crawler.config.crawler_settings import CrawlerSettings
 from roombeacon_crawler.enums.crawl_mode import CrawlMode
 from roombeacon_crawler.models.crawl_plan import CrawlPlan
+from roombeacon_crawler.models.source_capabilities import SourceCapabilities
 
 
 @dataclass(frozen=True)
@@ -42,21 +43,20 @@ class CrawlExecutionOptions:
             plan.mode.value if plan and hasattr(plan.mode, "value") else
             str(plan.mode) if plan else CrawlMode.BOOTSTRAP_FULL.value
         )
-        forward_only = (
-            mode in (CrawlMode.FORWARD_ONLY_INCREMENTAL.value, "FORWARD_ONLY_INCREMENTAL")
-            or (
-                capabilities is not None
-                and not getattr(capabilities, "historical_backfill_supported", True)
-            )
-            or (
-                capabilities is not None
-                and not getattr(capabilities, "supports_pagination", True)
-            )
-        )
+        
+        caps = capabilities if capabilities is not None else SourceCapabilities()
+        
+        # A source that cannot backfill must never construct historical page
+        # URLs.  Coerce every entry point (including direct/manual execution)
+        # to the safe seed-page acquisition contract.
+        if not caps.historical_backfill_supported:
+            mode = CrawlMode.FORWARD_ONLY_INCREMENTAL.value
 
-        if forward_only:
+        is_forward_only_mode = mode == CrawlMode.FORWARD_ONLY_INCREMENTAL.value
+
+        if is_forward_only_mode:
             return cls(
-                mode=CrawlMode.FORWARD_ONLY_INCREMENTAL.value,
+                mode=mode,
                 max_pages=1,
                 max_records=max_records if max_records is not None else (
                     plan.safety_max_records if plan else settings.max_total_records

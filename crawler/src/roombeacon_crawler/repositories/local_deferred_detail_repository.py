@@ -37,38 +37,60 @@ class LocalDeferredDetailRepository(DeferredDetailRepository):
             self.base_dir = fallback_base
             self.deferred_dir = self.base_dir / "deferred"
             self.deferred_dir.mkdir(parents=True, exist_ok=True)
+        self._cache = {}
+        self._dirty = set()
 
     def _file_path(self, source: str, target_id: str) -> Path:
         return self.deferred_dir / f"{source}__{target_id}.json"
 
     def _load(self, source: str, target_id: str) -> dict[str, dict[str, Any]]:
+        cache_key = f"{source}__{target_id}"
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+            
         path = self._file_path(source, target_id)
         if not path.is_file():
-            return {}
+            self._cache[cache_key] = {}
+            return self._cache[cache_key]
+            
         try:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
             if isinstance(data, dict):
-                return data
+                self._cache[cache_key] = data
             elif isinstance(data, list):
-                # Hỗ trợ tương thích nếu file lưu dạng list
-                return {item.get("platform_post_id"): item for item in data if isinstance(item, dict) and "platform_post_id" in item}
-            return {}
+                self._cache[cache_key] = {item.get("platform_post_id"): item for item in data if isinstance(item, dict) and "platform_post_id" in item}
+            else:
+                self._cache[cache_key] = {}
+            return self._cache[cache_key]
         except Exception as exc:
             logger.warning("Deferred backlog read failed; using empty state (path=%s, error_class=%s)", path, type(exc).__name__)
-            return {}
+            self._cache[cache_key] = {}
+            return self._cache[cache_key]
 
     def _save(self, source: str, target_id: str, data: dict[str, dict[str, Any]]) -> None:
-        path = self._file_path(source, target_id)
-        temp_file = path.with_suffix(".tmp")
-        try:
-            with open(temp_file, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
-            temp_file.replace(path)
-        except Exception as exc:
-            logger.error("Deferred backlog write failed (path=%s, error_class=%s)", path, type(exc).__name__)
-            if temp_file.exists():
-                temp_file.unlink(missing_ok=True)
+        cache_key = f"{source}__{target_id}"
+        self._cache[cache_key] = data
+        self._dirty.add(cache_key)
+        
+        # Throttled flush (optional, we will rely on explicit flush)
+        if len(self._dirty) > 100:  # Just a safety valve, but actually we want to flush explicitly
+            pass 
+
+    def flush(self) -> None:
+        for cache_key in list(self._dirty):
+            source, target_id = cache_key.split("__", 1)
+            path = self._file_path(source, target_id)
+            temp_file = path.with_suffix(".tmp")
+            try:
+                with open(temp_file, "w", encoding="utf-8") as f:
+                    json.dump(self._cache[cache_key], f, indent=2, ensure_ascii=False)
+                temp_file.replace(path)
+                self._dirty.remove(cache_key)
+            except Exception as exc:
+                logger.error("Deferred backlog write failed (path=%s, error_class=%s)", path, type(exc).__name__)
+                if temp_file.exists():
+                    temp_file.unlink(missing_ok=True)
 
     def get_backlog(
         self,

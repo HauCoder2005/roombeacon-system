@@ -141,7 +141,14 @@ class FetchCoordinator:
                 break
 
             backoff = self.retry_policy.get_backoff_delay(attempt)
-            logger.info("FetchCoordinator: Retry sau %.1fs (lần %d)", backoff, attempt)
+            logger.info("FetchCoordinator: Retry sau %.1fs (lần %d). Tiến hành xoay vòng định danh...", backoff, attempt)
+            
+            # Xoay vòng định danh (User-Agent, Browser Engine) để tránh bị bot detection
+            if strategy == FetchStrategy.BROWSER and hasattr(self.browser_fetcher, 'rotate_browser'):
+                await self.browser_fetcher.rotate_browser()
+            elif strategy == FetchStrategy.HTTP and hasattr(self.http_fetcher, 'rotate_client'):
+                await self.http_fetcher.rotate_client()
+
             await asyncio.sleep(backoff)
 
         meta = MetadataCollector.collect(

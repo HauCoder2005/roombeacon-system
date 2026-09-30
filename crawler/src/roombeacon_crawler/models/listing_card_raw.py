@@ -14,6 +14,8 @@ class ListingCardRaw:
     area_raw: str | None
     location_raw: str | None
     posted_at_raw: str | None
+    latitude: float | None = None
+    longitude: float | None = None
     seller_name_raw: str | None = None
     seller_type_raw: str | None = None
     thumbnail_url_raw: str | None = None

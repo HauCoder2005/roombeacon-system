@@ -71,7 +71,7 @@ Output mong đợi: evidence và versioned cleaning rules.
 
 Chỉ chạy sau khi cleaning rules đã tạo Silver. Mục tiêu là phân tích giá, diện tích, vị trí, price-per-m² và quan hệ thị trường trên dữ liệu có semantics ổn định.
 
-## 6. Silver — NOT IMPLEMENTED
+## 6. Silver — IMPLEMENTED
 
 Silver là logical layer đã được:
 
@@ -80,7 +80,9 @@ Silver là logical layer đã được:
 - gắn data-quality flags hoặc exclusion reason;
 - kiểm tra schema và semantic invariants.
 
-File `data/silver/rental_latest.parquet` hiện do class `SilverMaterializer` tạo, nhưng implementation chỉ snapshot `v_latest_posts`, kiểm tra schema/source/uniqueness và publish atomically. Vì vậy tài liệu gọi output đó là **latest-state Parquet** cho tới khi cleaning semantics được triển khai.
+The canonical Silver dataset is DuckDB `silver.rental_listings`. It is built from the Bronze-backed latest-state snapshot by deterministic text, address, ward, numeric, coordinate, duplicate-candidate, temporal, and row-quality processing. A pre-Silver gate enforces row, identity, raw-field, and status invariants before publication.
+
+`data/silver/rental_latest.parquet` is a deprecated, temporary compatibility mirror exported only after the DuckDB table has materialized and passed canonical validation. It is not a source of truth.
 
 ## 7. Gold — FUTURE / NOT IMPLEMENTED
 

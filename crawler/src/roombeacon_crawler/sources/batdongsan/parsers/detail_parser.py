@@ -50,6 +50,14 @@ class BatDongSanDetailParser:
         desc_elem = root.find(class_contains="js__pr-description") or root.find(class_contains="re__section-body")
         description_raw = desc_elem.get_text() if desc_elem else None
 
+        from roombeacon_crawler.sources.common_html import extract_scoped_images, extract_json_ld_images
+        image_urls_raw = []
+        gallery = root.find(class_contains="js__pr-scrollbar") or root.find(class_contains="re__pr-media") or root.find(class_contains="slick-slider")
+        if gallery:
+            image_urls_raw = extract_scoped_images(gallery, detail_url)
+        if not image_urls_raw:
+            image_urls_raw = extract_json_ld_images(root, detail_url)
+
         return ListingDetailRaw(
             map_location=MapLocationExtractor.extract_map_from_html(html),
             source=self.source_name,
@@ -60,4 +68,5 @@ class BatDongSanDetailParser:
             address_raw=address_raw,
             location_raw=address_raw,
             description_raw=description_raw,
+            image_urls_raw=image_urls_raw,
         )

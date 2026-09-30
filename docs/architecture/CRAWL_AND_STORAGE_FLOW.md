@@ -158,7 +158,7 @@ PhongTro123 lấy address từ hàng có label `Địa chỉ:` với JSON-LD Pos
 3. `rental_post_versions`: một observation theo crawl run, unique `(rental_post_id, crawl_run_id)`.
 4. Nếu version mới, `MySQLPostChildrenRepository.persist_children()` ghi `post_prices`, `post_addresses`, `post_details`, `post_images`, `post_amenities`, rồi `post_contacts`.
 
-Với address, repository chọn `observation.address_raw` trước `observation.location_raw`. Vì mapper đã ưu tiên detail address, một coarse listing-card location không overwrite full detail value.
+Repository chỉ ghi `observation.address_raw` vào `post_addresses`. `location_raw` từ listing card có thể chỉ là district/city nên chỉ được giữ trong Bronze artifact, không được coi là full address hay thay thế địa chỉ detail đã xác nhận.
 
 `rental_posts` đại diện cùng một tin xuyên nhiều lần crawl. `rental_post_versions` bảo toàn mỗi lần quan sát, vì giá/nội dung/trạng thái có thể thay đổi theo thời gian. Retry cùng run không tạo version thứ hai.
 
@@ -245,7 +245,9 @@ MySQL giữ metadata/reference; MinIO giữ binary. Latest-state Parquet/Silver 
 `v_observations`, `v_latest_posts`, `v_price_history`, `v_content_changes`, `v_source_activity`, `v_listing_lifetime`, `v_location_summary`, `v_data_quality`, `v_acquisition_efficiency`.
 
 - `v_observations`: một row cho mỗi `rental_post_versions`, join một representative price/address/detail child để tránh nhân dòng.
-- `v_latest_posts`: `ROW_NUMBER()` theo `rental_post_id`, chọn observation mới nhất; một row/listing.
+- `v_latest_posts`: `ROW_NUMBER()` theo `rental_post_id`, chọn observation mới nhất;
+  giá bám observation hiện tại, còn address/area hợp lệ gần nhất được kế thừa có
+  cờ provenance `full_address_inherited` và `area_inherited`; một row/listing.
 
 DuckDB là query engine. `v_latest_posts` là latest-state view, không phải cleaned Silver.
 

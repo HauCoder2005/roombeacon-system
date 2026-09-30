@@ -1,5 +1,6 @@
 """Declare CafeLand HTTP source policy and audited path pagination."""
 
+import re
 from urllib.parse import urlparse
 import re
 
@@ -70,9 +71,18 @@ class CafelandSourceAdapter(ScheduledHtmlSourceAdapter):
     LISTING_PARSER = CafelandListingParser
     DETAIL_PARSER = CafelandDetailParser
     PAGINATION = CafelandPagination
+    DETAIL_PATH_PATTERN = re.compile(
+        r"^/cho-thue-phong-tro-[^/]+-\d+\.html$",
+        re.IGNORECASE,
+    )
 
     def classify_url(self, url: str) -> CrawlTargetType:
-        """Reject broker profiles even when their route ends in ``.html``."""
-        if "/moi-gioi/" in urlparse(url).path.casefold():
+        """Accept only the audited room-listing category and detail routes."""
+        if not self.supports(url):
             return CrawlTargetType.UNSUPPORTED
-        return super().classify_url(url)
+        path = urlparse(url).path.casefold()
+        if path.startswith(self.LISTING_PREFIXES):
+            return CrawlTargetType.LISTING_PAGE
+        if self.DETAIL_PATH_PATTERN.fullmatch(path):
+            return CrawlTargetType.DETAIL_PAGE
+        return CrawlTargetType.UNSUPPORTED

@@ -1,176 +1,101 @@
 import json
-import shutil
-import tempfile
-import unittest
+from decimal import Decimal
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+
+import duckdb
 import pandas as pd
+import pytest
 
 from analytics.silver.materializer import (
-    SilverMaterializer,
     SilverMaterializationError,
+    SilverMaterializer,
     SilverMetadata,
 )
 
 
-class TestSilverMaterializer(unittest.TestCase):
-
-    def setUp(self):
-        self.test_dir = Path(tempfile.mkdtemp())
-        self.materializer = SilverMaterializer(output_dir=self.test_dir)
-
-    def tearDown(self):
-        shutil.rmtree(self.test_dir, ignore_errors=True)
-
-    def _sample_valid_dataframe(self) -> pd.DataFrame:
-        return pd.DataFrame([
-            {
-                "source_code": "phongtro123",
-                "rental_post_id": 101,
-                "source_listing_id": "pt_101",
-                "title_raw": "Phòng trọ đẹp Quận 1",
-                "url": "https://phongtro123.com/post/101",
-                "price_amount": 3500000.0,
-                "area_value": 25.0,
-                "location_raw": "Quận 1, TP.HCM",
-                "latest_observed_at": "2026-08-23 10:00:00",
-                "first_observed_at": "2026-08-20 08:00:00",
-                "last_observed_at": "2026-08-23 10:00:00",
-                "active_days": 3,
-            },
-            {
-                "source_code": "nhatrovn",
-                "rental_post_id": 102,
-                "source_listing_id": "nv_102",
-                "title_raw": "Nhà trọ sạch sẽ Bình Thạnh",
-                "url": "https://nhatrovn.vn/post/102",
-                "price_amount": 2800000.0,
-                "area_value": 20.0,
-                "location_raw": "Quận Bình Thạnh, TP.HCM",
-                "latest_observed_at": "2026-08-23 11:00:00",
-                "first_observed_at": "2026-08-22 09:00:00",
-                "last_observed_at": "2026-08-23 11:00:00",
-                "active_days": 1,
-            }
-        ])
-
-    def test_materialization_succeeds(self):
-        df = self._sample_valid_dataframe()
-        mock_conn = MagicMock()
-        mock_conn.execute.return_value.df.return_value = df
-
-        meta = self.materializer.materialize(conn=mock_conn)
-
-        self.assertIsInstance(meta, SilverMetadata)
-        self.assertEqual(meta.row_count, 2)
-        self.assertEqual(meta.unique_listing_count, 2)
-        self.assertTrue(self.materializer.output_file.exists())
-        self.assertTrue(self.materializer.metadata_file.exists())
-
-    def test_one_row_per_listing_invariant(self):
-        df = self._sample_valid_dataframe()
-        mock_conn = MagicMock()
-        mock_conn.execute.return_value.df.return_value = df
-
-        meta = self.materializer.materialize(conn=mock_conn)
-        read_df = pd.read_parquet(self.materializer.output_file)
-
-        self.assertEqual(len(read_df), read_df["rental_post_id"].nunique())
-        self.assertEqual(len(read_df), meta.row_count)
-
-    def test_duplicate_rental_post_id_rejected(self):
-        df_dup = pd.DataFrame([
-            {
-                "source_code": "phongtro123",
-                "rental_post_id": 101,
-                "source_listing_id": "pt_101",
-                "title_raw": "Phòng trọ A",
-                "url": "https://example.com/1",
-                "price_amount": 3000000.0,
-                "area_value": 20.0,
-                "location_raw": "Quận 1",
-                "latest_observed_at": "2026-08-23 10:00:00",
-            },
-            {
-                "source_code": "phongtro123",
-                "rental_post_id": 101,  # Duplicate!
-                "source_listing_id": "pt_101_dup",
-                "title_raw": "Phòng trọ A bản sao",
-                "url": "https://example.com/2",
-                "price_amount": 3200000.0,
-                "area_value": 20.0,
-                "location_raw": "Quận 1",
-                "latest_observed_at": "2026-08-23 11:00:00",
-            }
-        ])
-        mock_conn = MagicMock()
-        mock_conn.execute.return_value.df.return_value = df_dup
-
-        with self.assertRaises(SilverMaterializationError) as ctx:
-            self.materializer.materialize(conn=mock_conn)
-        self.assertIn("Vi phạm tính duy nhất", str(ctx.exception))
-
-    def test_failed_materialization_preserves_previous_snapshot(self):
-        # 1. Ghi snapshot ban đầu thành công
-        df_valid = self._sample_valid_dataframe()
-        mock_conn = MagicMock()
-        mock_conn.execute.return_value.df.return_value = df_valid
-        self.materializer.materialize(conn=mock_conn)
-
-        initial_mtime = self.materializer.output_file.stat().st_mtime
-        initial_df = pd.read_parquet(self.materializer.output_file)
-
-        # 2. Lần thứ 2 lỗi do rỗng (0 dòng)
-        mock_conn.execute.return_value.df.return_value = pd.DataFrame()
-        with self.assertRaises(SilverMaterializationError):
-            self.materializer.materialize(conn=mock_conn)
-
-        # 3. Xác nhận file cũ vẫn nguyên vẹn
-        self.assertTrue(self.materializer.output_file.exists())
-        current_df = pd.read_parquet(self.materializer.output_file)
-        self.assertEqual(len(current_df), len(initial_df))
-        self.assertFalse(self.materializer.tmp_file.exists())
-
-    def test_metadata_file_generated_and_valid(self):
-        df = self._sample_valid_dataframe()
-        mock_conn = MagicMock()
-        mock_conn.execute.return_value.df.return_value = df
-
-        self.materializer.materialize(conn=mock_conn)
-
-        with open(self.materializer.metadata_file, "r", encoding="utf-8") as f:
-            data = json.load(f)
-
-        self.assertEqual(data["row_count"], 2)
-        self.assertEqual(data["unique_listing_count"], 2)
-        self.assertEqual(data["source_view"], "v_latest_posts")
-        self.assertIn("phongtro123", data["source_distribution"])
-        self.assertIn("nhatrovn", data["source_distribution"])
-        # Xác nhận không có credentials
-        self.assertNotIn("password", str(data).lower())
-
-    def test_parquet_readable_by_pandas(self):
-        df = self._sample_valid_dataframe()
-        mock_conn = MagicMock()
-        mock_conn.execute.return_value.df.return_value = df
-
-        self.materializer.materialize(conn=mock_conn)
-        df_loaded = pd.read_parquet(self.materializer.output_file)
-
-        self.assertIsInstance(df_loaded, pd.DataFrame)
-        self.assertEqual(df_loaded.shape, (2, 12))
-
-    def test_fake_test_data_excluded(self):
-        df_fake = self._sample_valid_dataframe()
-        df_fake.loc[0, "source_code"] = "fake_test_platform"
-
-        mock_conn = MagicMock()
-        mock_conn.execute.return_value.df.return_value = df_fake
-
-        with self.assertRaises(SilverMaterializationError) as ctx:
-            self.materializer.materialize(conn=mock_conn)
-        self.assertIn("nguồn dữ liệu không hợp lệ", str(ctx.exception))
+def _silver_frame() -> pd.DataFrame:
+    return pd.DataFrame([
+        {"source_code": "phongtro123", "rental_post_id": 101,
+         "source_listing_id": "pt_101", "title_raw": "Phòng trọ Quận 1",
+         "url": "https://example.test/101", "price_amount": 3_500_000.0,
+         "area_value": 25.0, "location_raw": "Quận 1, TP.HCM",
+         "latest_observed_at": "2026-08-23 10:00:00",
+         "title_clean": "Phòng trọ Quận 1", "row_quality_status": "READY"},
+        {"source_code": "nhatrovn", "rental_post_id": 102,
+         "source_listing_id": "nv_102", "title_raw": "Nhà trọ Bình Thạnh",
+         "url": "https://example.test/102", "price_amount": 2_800_000.0,
+         "area_value": 20.0, "location_raw": "Bình Thạnh, TP.HCM",
+         "latest_observed_at": "2026-08-23 11:00:00",
+         "title_clean": "Nhà trọ Bình Thạnh", "row_quality_status": "READY_WITH_FLAGS"},
+    ])
 
 
-if __name__ == "__main__":
-    unittest.main()
+@pytest.fixture
+def materializer(tmp_path: Path) -> SilverMaterializer:
+    return SilverMaterializer(output_dir=tmp_path, valid_sources={"phongtro123", "nhatrovn"})
+
+
+def test_materialize_publishes_duckdb_before_compatibility_mirror(materializer, tmp_path):
+    conn = duckdb.connect(str(tmp_path / "analytics.duckdb"))
+
+    metadata = materializer.materialize(_silver_frame(), conn=conn)
+
+    assert isinstance(metadata, SilverMetadata)
+    assert metadata.canonical_table == "silver.rental_listings"
+    canonical = conn.execute("SELECT * FROM silver.rental_listings ORDER BY rental_post_id").df()
+    mirror_path = str(materializer.output_file).replace("'", "''")
+    mirror = conn.execute(
+        f"SELECT * FROM read_parquet('{mirror_path}') ORDER BY rental_post_id"
+    ).df()
+    assert list(canonical.columns) == list(mirror.columns)
+    assert len(canonical) == len(mirror) == 2
+    assert canonical.rental_post_id.nunique() == mirror.rental_post_id.nunique() == 2
+
+
+def test_failed_canonical_materialization_does_not_refresh_existing_mirror(materializer, tmp_path):
+    conn = duckdb.connect(str(tmp_path / "analytics.duckdb"))
+    materializer.materialize(_silver_frame(), conn=conn)
+    original_bytes = materializer.output_file.read_bytes()
+    invalid = pd.concat([_silver_frame(), _silver_frame().iloc[[0]]], ignore_index=True)
+
+    with pytest.raises(SilverMaterializationError):
+        materializer.materialize(invalid, conn=conn)
+
+    assert materializer.output_file.read_bytes() == original_bytes
+    assert conn.execute("SELECT count(*) FROM silver.rental_listings").fetchone()[0] == 2
+
+
+def test_validate_silver_rejects_table_grain_mismatch(materializer, tmp_path):
+    conn = duckdb.connect(str(tmp_path / "analytics.duckdb"))
+    conn.execute("CREATE SCHEMA silver")
+    conn.register("bad", pd.concat([_silver_frame(), _silver_frame().iloc[[0]]], ignore_index=True))
+    conn.execute("CREATE TABLE silver.rental_listings AS SELECT * FROM bad")
+
+    with pytest.raises(SilverMaterializationError, match="unique"):
+        materializer.validate_silver(conn)
+
+
+def test_metadata_marks_parquet_as_temporary_compatibility_mirror(materializer, tmp_path):
+    conn = duckdb.connect(str(tmp_path / "analytics.duckdb"))
+    materializer.materialize(_silver_frame(), conn=conn)
+    data = json.loads(materializer.metadata_file.read_text(encoding="utf-8"))
+
+    assert data["canonical_table"] == "silver.rental_listings"
+    assert data["compatibility_mirror"] == "rental_latest.parquet"
+    assert data["mirror_status"] == "DEPRECATED_TEMPORARY_COMPATIBILITY_MIRROR"
+    assert data["row_count"] == data["unique_listing_count"] == 2
+    assert "password" not in str(data).lower()
+
+
+def test_materialize_accepts_large_decimal_clean_price(materializer, tmp_path):
+    conn = duckdb.connect(str(tmp_path / "analytics.duckdb"))
+    frame = _silver_frame()
+    frame["price_amount_clean"] = pd.Series(
+        [Decimal("3500000.00"), Decimal("1350000000.00")], dtype="object"
+    )
+
+    materializer.materialize(frame, conn=conn)
+
+    assert conn.execute(
+        "SELECT max(price_amount_clean) FROM silver.rental_listings"
+    ).fetchone()[0] == 1_350_000_000

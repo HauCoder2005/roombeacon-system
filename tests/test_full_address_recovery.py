@@ -55,3 +55,36 @@ def test_recovery_keeps_stable_identity_and_skips_pending_or_profiles():
         "TERMINAL": 1,
         "INVALID_OR_NON_LISTING_URL": 1,
     }
+
+from roombeacon_crawler.sources.cafeland.parsers.listing_parser import CafelandListingParser
+from roombeacon_crawler.sources.chothuenha.parsers.listing_parser import ChothuenhaListingParser
+
+def test_cafeland_card_location_raw_extracted():
+    html = """
+    <div class="row-item">
+        <a href="https://nhadat.cafeland.vn/cho-thue-phong-tro-abc-123.html" title="Title">Title</a>
+        <div class="info-location float-start">
+            Phương Liễu, Bắc Ninh
+        </div>
+    </div>
+    """
+    parser = CafelandListingParser("cafeland")
+    cards = parser.parse(html, "https://nhadat.cafeland.vn/cho-thue-nha-dat/")
+    assert len(cards) == 1
+    assert cards[0].location_raw == "Phương Liễu, Bắc Ninh"
+
+def test_chothuenha_card_location_raw_extracted():
+    html = """
+    <div class="dv-bds">
+        <figure class="home-thumb">
+            <a href="https://chothuenha.com.vn/phong-tro-quan-12-cvpm-quang-trung-78905">Title</a>
+        </figure>
+        <div class="dv-bds-autho">
+            <a href="https://chothuenha.com.vn/cho-thue-nha-quan-1-ho-chi-minh">Quận 1, Hồ Chí Minh</a>
+        </div>
+    </div>
+    """
+    parser = ChothuenhaListingParser("chothuenha")
+    cards = parser.parse(html, "https://chothuenha.com.vn/cho-thue-phong-tro-nha-tro-ho-chi-minh")
+    assert len(cards) == 1
+    assert cards[0].location_raw == "Quận 1, Hồ Chí Minh"

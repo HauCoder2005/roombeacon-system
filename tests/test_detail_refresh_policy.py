@@ -45,6 +45,19 @@ class TestDetailRefreshPolicy(unittest.TestCase):
         self.assertTrue(decision.should_refresh)
         self.assertEqual(decision.reason, "NO_PRIOR_DETAIL")
 
+    def test_known_listing_with_missing_address_bypasses_ttl(self):
+        recent_detailed = (self.now - timedelta(hours=2)).isoformat()
+        decision = self.policy.evaluate(
+            is_new=False,
+            card_changed=False,
+            last_detailed_at=recent_detailed,
+            current_time=self.now,
+            detail_status="ADDRESS_MISSING_RETRY",
+        )
+
+        self.assertTrue(decision.should_refresh)
+        self.assertEqual(decision.reason, "ADDRESS_MISSING")
+
     def test_known_listing_unchanged_within_ttl_skips_refresh(self):
         """Tin đã biết, không đổi và còn trong hạn TTL (< 24h) BỎ QUA network request detail."""
         recent_detailed = (self.now - timedelta(hours=5)).isoformat()

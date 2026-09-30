@@ -28,19 +28,26 @@ class ChothuenhaSourceAdapter(ScheduledHtmlSourceAdapter):
         preferred_fetch_strategy=FetchStrategy.HTTP,
         detail_fetch_supported=True,
     )
-    LISTING_PREFIXES = ("/cho-thue-phong-tro",)
+    LISTING_PREFIXES = ("/cho-thue-phong-tro-nha-tro-ho-chi-minh",)
     DETAIL_MARKERS = ()
     LISTING_PARSER = ChothuenhaListingParser
     DETAIL_PARSER = ChothuenhaDetailParser
     PAGINATION = QueryPagination
+    DETAIL_PATH_PATTERN = re.compile(
+        r"^/(?:cho-thue-phong-tro|cho-thue-nha-tro|phong-tro|nha-tro)-[^/]+-\d{4,}$",
+        re.IGNORECASE,
+    )
 
     def classify_url(self, url: str) -> CrawlTargetType:
         """Classify a supported URL as a listing, detail, or unsupported target."""
         if not self.supports(url):
             return CrawlTargetType.UNSUPPORTED
         path = urlparse(url).path.rstrip("/")
-        if re.search(r"-\d+$", path):
+        
+        if self.DETAIL_PATH_PATTERN.fullmatch(path):
             return CrawlTargetType.DETAIL_PAGE
+            
         if path.startswith("/cho-thue-phong-tro"):
             return CrawlTargetType.LISTING_PAGE
+            
         return CrawlTargetType.UNSUPPORTED

@@ -30,19 +30,19 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    I[Initialize session] --> D[Process deferred details]
-    D --> P[Acquire listing page]
+    I[Initialize session] --> P[Acquire listing pages]
     P --> C[Process cards]
     C --> F[Apply frontier decision]
     F -->|continue| P
-    F -->|stop| Z[Finalize artifacts and result]
+    F -->|stop| D[Process deferred details]
+    D --> Z[Finalize artifacts and result]
 ```
 
 ### `CrawlRunner`
 
 **Vai trò:** orchestration façade cho một crawl run.
 
-**Flow:** initialize → deferred details → page acquisition → card processing → frontier decision → finalize.
+**Flow:** initialize → page acquisition/card processing → frontier decision → deferred-detail enrichment → finalize.
 
 **Không phụ trách:** Airflow scheduling, MySQL SQL implementation, source-specific selectors.
 

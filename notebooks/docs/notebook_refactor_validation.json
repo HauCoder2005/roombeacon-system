@@ -1,0 +1,24 @@
+{
+  "validated_utc": "2026-09-30T05:17:54.044033+00:00",
+  "official_notebooks": {
+    "01_roombeacon_eda.ipynb": {
+      "code_cells": 54,
+      "executed_code_cells": 54,
+      "execution_errors": 0,
+      "run_all": "PASS"
+    },
+    "02_roombeacon_silver.ipynb": {
+      "code_cells": 19,
+      "executed_code_cells": 19,
+      "execution_errors": 0,
+      "run_all": "PASS"
+    },
+    "03_roombeacon_processing.ipynb": {
+      "code_cells": 8,
+      "executed_code_cells": 8,
+      "execution_errors": 0,
+      "run_all": "PASS"
+    }
+  },
+  "status": "CANONICAL_NOTEBOOK_LAYERS_READY"
+}

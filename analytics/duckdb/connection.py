@@ -109,12 +109,24 @@ class DuckDBConnectionFactory:
                 mysql_cfg = env.mysql_bronze
 
                 attached = False
-                candidates = [
-                    (mysql_cfg.host, mysql_cfg.port),
+                import os
+                candidates = []
+                # Nếu chạy ngoài Docker, việc phân giải tên miền Docker (như roombeacon-mysql-bronze)
+                # có thể làm kẹt (hang) DNS resolver của hệ điều hành trong nhiều phút.
+                # Do đó, chỉ thêm host này vào nếu nó là IP, hoặc nếu đang chạy trong Docker.
+                if os.path.exists('/.dockerenv') or mysql_cfg.host in ('127.0.0.1', 'localhost'):
+                    candidates.append((mysql_cfg.host, mysql_cfg.port))
+                else:
+                    import re
+                    # Nếu là IP thật thì cứ thêm
+                    if re.match(r'^\d+\.\d+\.\d+\.\d+$', mysql_cfg.host):
+                        candidates.append((mysql_cfg.host, mysql_cfg.port))
+                
+                candidates.extend([
                     ("127.0.0.1", 3307),
                     ("localhost", 3307),
                     ("127.0.0.1", 3306),
-                ]
+                ])
                 seen_candidates = set()
                 unique_candidates = []
                 for h, p in candidates:
@@ -122,12 +134,22 @@ class DuckDBConnectionFactory:
                         seen_candidates.add((h, p))
                         unique_candidates.append((h, p))
 
+                import socket
+                def is_port_open(h, p, timeout=1.0):
+                    try:
+                        with socket.create_connection((h, p), timeout=timeout):
+                            return True
+                    except Exception:
+                        return False
+
                 for host, port in unique_candidates:
+                    if not is_port_open(host, port):
+                        continue
                     try:
                         attach_sql = (
                             f"ATTACH 'host={host} port={port} "
                             f"user={mysql_cfg.user} password={mysql_cfg.password} "
-                            f"database={mysql_cfg.database}' AS mysql_db (TYPE MYSQL, READ_ONLY);"
+                            f"database={mysql_cfg.database} ssl_mode=DISABLED' AS mysql_db (TYPE MYSQL, READ_ONLY);"
                         )
                         conn.execute(attach_sql)
                         logger.info(

@@ -18,8 +18,20 @@ class DetailValidator:
         if not parsed.scheme or not parsed.netloc:
             return False
 
-        # Trang chi tiết hợp lệ cần có tiêu đề, giá tiền hoặc nội dung mô tả
-        if not detail.title_raw and not detail.price_raw and not detail.description_raw:
-            return False
-
-        return True
+        enrichment_fields = (
+            detail.title_raw,
+            detail.price_raw,
+            detail.area_raw,
+            detail.address_raw,
+            detail.location_raw,
+            detail.description_raw,
+            detail.posted_at_raw,
+            detail.property_type_raw,
+            detail.furnishing_raw,
+            detail.deposit_raw,
+            detail.seller_name_raw,
+            detail.seller_phone_raw,
+        )
+        return any(value for value in enrichment_fields) or bool(
+            detail.image_urls_raw or detail.amenities_raw
+        )

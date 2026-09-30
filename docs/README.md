@@ -18,8 +18,8 @@ Khi tài liệu mâu thuẫn, thứ tự ưu tiên là: **source code → tests 
 | Robots, retry, source access | [Fetch & Access Policy](crawler/03-fetch-and-access-policy.md) |
 | Observation được persist thế nào | [Data Persistence](architecture/DATA_PERSISTENCE_ARCHITECTURE.md) |
 | Asset image đi tới MinIO thế nào | [Asset Pipeline](architecture/ASSET_PIPELINE.md) |
-| DuckDB và latest-state Parquet | [Analytics Architecture](architecture/ANALYTICS_ARCHITECTURE.md) |
-| Initial Data Quality EDA hiện có | [EDA notebook](../notebooks/01_rental_eda.ipynb) và [Data Lifecycle](data/DATA_LIFECYCLE.md) |
+| DuckDB canonical Silver and its compatibility mirror | [Silver Dataset Pipeline](analytics/SILVER_DATASET_PIPELINE.md) |
+| Canonical notebook workflow | [Notebook README](../notebooks/README.md) and [Data Lifecycle](data/DATA_LIFECYCLE.md) |
 | Chạy development stack | [Docker Development](infrastructure/docker-development.md) |
 | Cấu hình runtime | [Environment Variables](env/environment-variables.md) |
 | Test không chạm production data | [Test Isolation](testing/TEST_DATA_ISOLATION.md) |
@@ -51,8 +51,8 @@ Các tài liệu khác bổ sung chi tiết, không override bốn tài liệu t
 
 - `architecture/ANALYTICS_ARCHITECTURE.md`: DuckDB current; terminology cũ có thể gọi latest-state output là Silver.
 - `analytics/PRE_EDA_DATA_READINESS.md`: evidence tại một snapshot lịch sử, không phải live metrics.
-- `analytics/SILVER_DATASET_PIPELINE.md`: mô tả current materializer nhưng output là latest-state snapshot.
-- `../notebooks/01_rental_eda.ipynb`: Initial Data Quality EDA hiện có; không phải Clean Analytical EDA trên Silver.
+- `analytics/SILVER_DATASET_PIPELINE.md`: authoritative canonical Silver publication contract.
+- `../notebooks/01_roombeacon_eda.ipynb`: raw-data EDA; it does not create Silver.
 - `env/environment-variables.md`: catalog rộng hơn active runtime; `.env.example` là cấu hình mẫu.
 
 ### HISTORICAL / INCIDENT — GIỮ NGUYÊN EVIDENCE
@@ -77,10 +77,10 @@ Những tài liệu này được giữ làm design context. Không dùng chúng
 
 ## CURRENT và FUTURE
 
-**IMPLEMENTED:** crawler, JSON/MySQL Bronze, reconciliation, asset MinIO path, DuckDB views, latest-state Parquet.
+**IMPLEMENTED:** crawler, JSON/MySQL Bronze, reconciliation, asset MinIO path, DuckDB views, canonical DuckDB Silver, and its temporary Parquet compatibility mirror.
 
 **PARTIAL:** Initial Data Quality EDA, repository-wide Clean Architecture composition ownership.
 
-**PLANNED:** versioned cleaning rules, cleaned semantic Silver, clean analytical EDA.
+**PLANNED:** versioned evolution of cleaning rules and downstream clean analytical EDA.
 
 **FUTURE / NOT IMPLEMENTED:** Gold, serving API/UI, ClickHouse runtime, MySQL replica service, active Raw HTML object uploader.

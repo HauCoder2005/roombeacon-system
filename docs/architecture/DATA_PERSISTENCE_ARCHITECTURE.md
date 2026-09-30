@@ -8,7 +8,7 @@ Tài liệu này đặc tả kiến trúc lưu trữ dữ liệu thô Bronze và
 
 - `location_raw` trên listing card có thể chỉ là district/city.
 - `address_raw` từ detail page giữ full source-near address khi nguồn cung cấp.
-- `BronzeMapper` ưu tiên detail address; persistence ghi `address_raw or location_raw` vào `post_addresses.full_address_text`.
+- `BronzeMapper` ưu tiên detail address; persistence chỉ ghi `address_raw` đã được parser detail xác nhận vào `post_addresses.full_address_text`. `location_raw` vẫn được giữ trong Bronze artifact nhưng không được nâng thành địa chỉ đã xác nhận.
 - Các cột province/district/ward/street/house number giữ `NULL` nếu không thể tách chắc chắn; không suy đoán component.
 - Đây là Bronze technical representation, không phải Silver address cleaning.
 

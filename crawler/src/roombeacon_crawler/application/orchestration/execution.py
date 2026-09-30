@@ -88,11 +88,9 @@ def execute_crawl(qual_payload: dict, **context) -> dict:
             "Crawler technical failure (source=%s, target=%s, error_class=%s)",
             source,
             target_id,
-            type(exc).__name__,
+            type(exc).__name__, exc_info=True
         )
-        raise CrawlerWorkflowError(
-            f"CrawlRunner technical failure for {source}/{target_id}"
-        ) from None
+        raise CrawlerWorkflowError(f"CrawlRunner technical failure for {source}/{target_id}") from exc
 
     if result.status in (
         CrawlStatus.NOT_FOUND,

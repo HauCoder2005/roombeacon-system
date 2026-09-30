@@ -27,21 +27,26 @@ class DetailRefreshPolicy:
         last_detailed_at: datetime | str | None,
         current_time: datetime | None = None,
         custom_ttl_hours: int | None = None,
+        detail_status: str | None = None,
     ) -> RefreshDecision:
         """Đánh giá xem một tin đăng có cần thực hiện request cào trang chi tiết (Detail Fetch) hay không.
 
         Quy tắc quyết định:
         1. NEW: Tin đăng mới chưa từng thấy -> BẮT BUỘC fetch detail.
         2. CARD_CHANGED: Tin đã biết nhưng trường nhẹ thay đổi -> BẮT BUỘC fetch detail (Forced refresh).
-        3. NO_PRIOR_DETAIL: Tin đã biết nhưng chưa từng có bản ghi detail -> fetch detail.
-        4. TTL_EXPIRED: Đã quá hạn TTL kể từ lần fetch detail gần nhất -> fetch detail định kỳ.
-        5. UNCHANGED_WITHIN_TTL: Đã biết, không đổi và còn trong hạn TTL -> BỎ QUA detail network request (Lightweight Observation).
+        3. ADDRESS_MISSING: Detail gần nhất không có address -> fetch lại có giới hạn.
+        4. NO_PRIOR_DETAIL: Tin đã biết nhưng chưa từng có bản ghi detail -> fetch detail.
+        5. TTL_EXPIRED: Đã quá hạn TTL kể từ lần fetch detail gần nhất -> fetch detail định kỳ.
+        6. UNCHANGED_WITHIN_TTL: Đã biết, không đổi và còn trong hạn TTL -> BỎ QUA detail network request (Lightweight Observation).
         """
         if is_new:
             return RefreshDecision(should_refresh=True, reason="NEW_LISTING")
 
         if card_changed:
             return RefreshDecision(should_refresh=True, reason="CARD_CHANGED")
+
+        if detail_status in {"SUCCESS_WITHOUT_ADDRESS", "ADDRESS_MISSING_RETRY"}:
+            return RefreshDecision(should_refresh=True, reason="ADDRESS_MISSING")
 
         if last_detailed_at is None:
             return RefreshDecision(should_refresh=True, reason="NO_PRIOR_DETAIL")

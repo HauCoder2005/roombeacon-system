@@ -1,8 +1,8 @@
-"""Validate and atomically publish the latest-state Silver Parquet snapshot.
+"""Publish the canonical DuckDB Silver table and its compatibility mirror.
 
-The materializer reads a fixed DuckDB view, validates one-row-per-listing and
-required columns, then replaces the published file atomically. It does not clean
-or enrich Bronze business fields beyond the documented snapshot semantics.
+``silver.rental_listings`` is the source of truth.  The Parquet file is a
+deprecated, temporary compatibility mirror and is refreshed only after the
+canonical table has passed grain and schema validation.
 """
 
 import json
@@ -11,37 +11,30 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
 import pandas as pd
 
-from analytics.duckdb.connection import (
-    create_analytics_connection,
-    resolve_runtime_path,
-)
+from analytics.duckdb.connection import create_analytics_connection, resolve_runtime_path
 from roombeacon_crawler.config.get_env import env
 
 logger = logging.getLogger(__name__)
 
+CANONICAL_TABLE = "silver.rental_listings"
+COMPATIBILITY_MIRROR = "rental_latest.parquet"
 REQUIRED_COLUMNS = [
-    "source_code",
-    "rental_post_id",
-    "source_listing_id",
-    "title_raw",
-    "url",
-    "price_amount",
-    "area_value",
-    "location_raw",
-    "latest_observed_at",
+    "source_code", "rental_post_id", "source_listing_id", "title_raw", "url",
+    "price_amount", "area_value", "location_raw", "latest_observed_at",
 ]
 
 
 @dataclass
 class SilverMetadata:
-    """Publication metadata written alongside a Silver Parquet snapshot."""
-
     generated_at: str
     row_count: int
     unique_listing_count: int
-    source_view: str
+    canonical_table: str
+    compatibility_mirror: str
+    mirror_status: str
     min_observed_at: str | None
     max_observed_at: str | None
     schema_version: str
@@ -51,146 +44,165 @@ class SilverMetadata:
 
 
 class SilverMaterializationError(Exception):
-    """Lỗi xảy ra trong quá trình kiểm tra hoặc materialization tầng Silver."""
-    pass
+    """Raised when canonical Silver or compatibility publication fails."""
 
 
 class SilverMaterializer:
-    """Publish a validated DuckDB latest-state view as Silver Parquet.
-
-    Materialization writes and validates a temporary file before atomic replace;
-    failures leave the previously published snapshot intact.
-    """
+    """Materialize DuckDB Silver, validate it, then export the Parquet mirror."""
 
     def __init__(
         self,
         output_dir: Path | str | None = None,
-        source_view: str = "v_latest_posts",
         valid_sources: set[str] | None = None,
     ) -> None:
-        if output_dir is None:
-            self.output_dir = resolve_runtime_path(env.processing.silver_dir)
-        else:
-            self.output_dir = Path(output_dir).resolve()
-
-        self.source_view = source_view
+        self.output_dir = (
+            resolve_runtime_path(env.processing.silver_dir)
+            if output_dir is None else Path(output_dir).resolve()
+        )
         self.valid_sources = valid_sources
-        self.output_file = self.output_dir / "rental_latest.parquet"
+        self.output_file = self.output_dir / COMPATIBILITY_MIRROR
         self.metadata_file = self.output_dir / "rental_latest.metadata.json"
         self.tmp_file = self.output_dir / "rental_latest.parquet.tmp"
 
-    def materialize(self, conn: Any | None = None) -> SilverMetadata:
-        """Xuất bản snapshot Silver Parquet nguyên tử với đầy đủ validation."""
+    def materialize(self, processed_df: pd.DataFrame, conn: Any | None = None) -> SilverMetadata:
+        """Run the only supported publication order: DuckDB, validate, mirror."""
         self.output_dir.mkdir(parents=True, exist_ok=True)
-
-        if conn is None:
-            conn = create_analytics_connection()
-
-        logger.info("Bắt đầu trích xuất dữ liệu từ view %s...", self.source_view)
-
-        # 1. Trích xuất dữ liệu từ DuckDB view sang DataFrame
-        df = conn.execute(f"SELECT * FROM {self.source_view}").df()
-
-        # 2. Validation sơ bộ trước khi ghi
-        self._validate_dataframe(df)
-
-        # 3. Ghi dữ liệu nguyên tử sang file .tmp
-        if self.tmp_file.exists():
-            self.tmp_file.unlink()
+        connection = conn if conn is not None else create_analytics_connection()
+        self._validate_dataframe(processed_df)
 
         try:
-            df.to_parquet(self.tmp_file, index=False, engine="pyarrow")
-            logger.info("Đã ghi tạm thời Silver dataset tại %s", self.tmp_file)
-
-            # 4. Validation lại file Parquet vừa ghi
-            self._validate_parquet_file(self.tmp_file, expected_rows=len(df))
-
-            # 5. Atomic rename sang file chính
-            self.tmp_file.replace(self.output_file)
-            logger.info("Đã cập nhật nguyên tử Silver dataset tại %s", self.output_file)
-
-            # 6. Tạo và lưu metadata sidecar
-            metadata = self._build_metadata(df)
-            with open(self.metadata_file, "w", encoding="utf-8") as f:
-                json.dump(asdict(metadata), f, indent=2, ensure_ascii=False)
-            logger.info("Đã lưu metadata sidecar tại %s", self.metadata_file)
-
-            return metadata
-
-        except Exception as exc:
-            if self.tmp_file.exists():
-                try:
-                    self.tmp_file.unlink()
-                except Exception:
-                    pass
-            logger.error("Silver materialization failed; previous snapshot preserved (error_class=%s)", type(exc).__name__)
-            raise SilverMaterializationError("Silver materialization failed") from None
-
-    def _validate_dataframe(self, df: pd.DataFrame) -> None:
-        """Kiểm tra tính toàn vẹn của DataFrame trước khi ghi."""
-        row_count = len(df)
-        if row_count == 0:
-            raise SilverMaterializationError("Tập dữ liệu rỗng (0 dòng).")
-
-        # Kiểm tra cột bắt buộc
-        for col in REQUIRED_COLUMNS:
-            if col not in df.columns:
-                raise SilverMaterializationError(f"Thiếu cột bắt buộc: {col}")
-
-        # Kiểm tra tính duy nhất (One-Row-Per-Listing)
-        unique_listings = df["rental_post_id"].nunique()
-        if unique_listings != row_count:
-            dups = row_count - unique_listings
-            raise SilverMaterializationError(
-                f"Vi phạm tính duy nhất: {dups} dòng trùng rental_post_id (Tổng: {row_count}, Độc nhất: {unique_listings})."
+            self.materialize_duckdb_silver(processed_df, connection)
+            canonical = self.validate_silver(connection)
+            self.export_parquet_mirror(connection, canonical)
+            metadata = self._build_metadata(canonical)
+            self.metadata_file.write_text(
+                json.dumps(asdict(metadata), indent=2, ensure_ascii=False),
+                encoding="utf-8",
             )
+            return metadata
+        except SilverMaterializationError:
+            raise
+        except Exception as exc:
+            logger.error("Silver publication failed (error_class=%s)", type(exc).__name__)
+            raise SilverMaterializationError("Silver publication failed") from exc
+        finally:
+            if self.tmp_file.exists():
+                self.tmp_file.unlink()
 
-        # Kiểm tra nguồn hợp lệ (loại bỏ fake/test data)
-        sources = set(df["source_code"].dropna().unique())
+    def materialize_duckdb_silver(self, processed_df: pd.DataFrame, conn: Any) -> None:
+        """Atomically replace ``silver.rental_listings`` from a validated frame."""
+        self._validate_dataframe(processed_df)
+        conn.register("_roombeacon_silver_input", processed_df)
+        try:
+            conn.execute("BEGIN TRANSACTION")
+            conn.execute("CREATE SCHEMA IF NOT EXISTS silver")
+            conn.execute("DROP TABLE IF EXISTS silver._rental_listings_next")
+            conn.execute(
+                "CREATE TABLE silver._rental_listings_next AS "
+                "SELECT * FROM _roombeacon_silver_input"
+            )
+            self._validate_table(conn, "silver._rental_listings_next")
+            conn.execute("DROP TABLE IF EXISTS silver.rental_listings")
+            conn.execute("ALTER TABLE silver._rental_listings_next RENAME TO rental_listings")
+            conn.execute("COMMIT")
+        except Exception as exc:
+            try:
+                conn.execute("ROLLBACK")
+            except Exception:
+                pass
+            if isinstance(exc, SilverMaterializationError):
+                raise
+            raise SilverMaterializationError("Canonical DuckDB Silver materialization failed") from exc
+        finally:
+            try:
+                conn.unregister("_roombeacon_silver_input")
+            except Exception:
+                pass
+
+    def validate_silver(self, conn: Any) -> pd.DataFrame:
+        """Read back and validate the canonical table; return its exact dataset."""
+        self._validate_table(conn, CANONICAL_TABLE)
+        frame = conn.execute(f"SELECT * FROM {CANONICAL_TABLE}").df()
+        self._validate_dataframe(frame)
+        return frame
+
+    def export_parquet_mirror(self, conn: Any, canonical: pd.DataFrame | None = None) -> None:
+        """Atomically refresh the deprecated mirror from canonical DuckDB Silver."""
+        frame = canonical if canonical is not None else self.validate_silver(conn)
+        if self.tmp_file.exists():
+            self.tmp_file.unlink()
+        try:
+            escaped_path = str(self.tmp_file).replace("'", "''")
+            conn.execute(
+                f"COPY (SELECT * FROM {CANONICAL_TABLE}) TO '{escaped_path}' (FORMAT PARQUET)"
+            )
+            mirror_columns = [
+                row[0] for row in conn.execute(
+                    f"DESCRIBE SELECT * FROM read_parquet('{escaped_path}')"
+                ).fetchall()
+            ]
+            mirror_row_count, mirror_unique_count, mirror_null_count = conn.execute(
+                f"SELECT count(*), count(DISTINCT rental_post_id), "
+                f"count(*) FILTER (WHERE rental_post_id IS NULL) "
+                f"FROM read_parquet('{escaped_path}')"
+            ).fetchone()
+            if mirror_columns != list(frame.columns):
+                raise SilverMaterializationError("Compatibility mirror columns differ from canonical Silver")
+            if mirror_row_count != len(frame):
+                raise SilverMaterializationError("Compatibility mirror row count differs from canonical Silver")
+            if mirror_null_count or mirror_row_count != mirror_unique_count:
+                raise SilverMaterializationError("Compatibility mirror violates rental_post_id grain")
+            if mirror_unique_count != frame.rental_post_id.nunique():
+                raise SilverMaterializationError("Compatibility mirror identity count differs from canonical Silver")
+            self.tmp_file.replace(self.output_file)
+        except Exception as exc:
+            if isinstance(exc, SilverMaterializationError):
+                raise
+            raise SilverMaterializationError("Compatibility mirror export failed") from exc
+
+    def _validate_table(self, conn: Any, table_name: str) -> None:
+        row_count, unique_count, null_count = conn.execute(
+            f"SELECT count(*), count(DISTINCT rental_post_id), "
+            f"count(*) FILTER (WHERE rental_post_id IS NULL) FROM {table_name}"
+        ).fetchone()
+        if row_count == 0:
+            raise SilverMaterializationError("Canonical Silver table is empty")
+        if null_count:
+            raise SilverMaterializationError("Canonical Silver contains null rental_post_id")
+        if row_count != unique_count:
+            raise SilverMaterializationError("Canonical Silver rental_post_id must be unique")
+
+    def _validate_dataframe(self, frame: pd.DataFrame) -> None:
+        if frame.empty:
+            raise SilverMaterializationError("Silver dataset is empty")
+        missing = [column for column in REQUIRED_COLUMNS if column not in frame]
+        if missing:
+            raise SilverMaterializationError(f"Missing required Silver columns: {missing}")
+        if frame.rental_post_id.isna().any() or not frame.rental_post_id.is_unique:
+            raise SilverMaterializationError("Silver rental_post_id must be non-null and unique")
+        sources = set(frame.source_code.dropna().unique())
         valid_sources = self.valid_sources
         if valid_sources is None:
             from roombeacon_crawler.sources.registry import source_registry
-
             valid_sources = set(source_registry.list_sources())
         invalid_sources = sources - valid_sources
         if invalid_sources:
-            raise SilverMaterializationError(f"Phát hiện nguồn dữ liệu không hợp lệ: {invalid_sources}")
+            raise SilverMaterializationError(f"Invalid source_code values: {sorted(invalid_sources)}")
 
-    def _validate_parquet_file(self, parquet_path: Path, expected_rows: int) -> None:
-        """Xác nhận file Parquet có thể đọc lại trơn tru và khớp số lượng bản ghi."""
-        if not parquet_path.exists() or parquet_path.stat().st_size == 0:
-            raise SilverMaterializationError(f"File Parquet không tồn tại hoặc rỗng: {parquet_path}")
-
-        try:
-            readback_df = pd.read_parquet(parquet_path)
-            if len(readback_df) != expected_rows:
-                raise SilverMaterializationError(
-                    f"Số dòng đọc lại ({len(readback_df)}) không khớp số dòng dự kiến ({expected_rows})."
-                )
-        except Exception:
-            raise SilverMaterializationError("Silver Parquet read-back validation failed") from None
-
-    def _build_metadata(self, df: pd.DataFrame) -> SilverMetadata:
-        """Xây dựng metadata an toàn không chứa thông tin nhạy cảm."""
-        now_iso = datetime.now(timezone.utc).astimezone().isoformat()
-
-        min_obs = None
-        max_obs = None
-        if "latest_observed_at" in df.columns and not df["latest_observed_at"].dropna().empty:
-            min_obs = str(df["latest_observed_at"].min())
-            max_obs = str(df["latest_observed_at"].max())
-
-        source_dist = df["source_code"].value_counts().to_dict()
-
+    def _build_metadata(self, frame: pd.DataFrame) -> SilverMetadata:
+        observed = frame.latest_observed_at.dropna()
+        source_distribution = frame.source_code.value_counts().to_dict()
         return SilverMetadata(
-            generated_at=now_iso,
-            row_count=len(df),
-            unique_listing_count=int(df["rental_post_id"].nunique()),
-            source_view=self.source_view,
-            min_observed_at=min_obs,
-            max_observed_at=max_obs,
-            schema_version="1.0.0",
-            materializer_version="1.0.0",
-            columns=df.columns.tolist(),
-            source_distribution={k: int(v) for k, v in source_dist.items()},
+            generated_at=datetime.now(timezone.utc).astimezone().isoformat(),
+            row_count=len(frame),
+            unique_listing_count=int(frame.rental_post_id.nunique()),
+            canonical_table=CANONICAL_TABLE,
+            compatibility_mirror=COMPATIBILITY_MIRROR,
+            mirror_status="DEPRECATED_TEMPORARY_COMPATIBILITY_MIRROR",
+            min_observed_at=str(observed.min()) if not observed.empty else None,
+            max_observed_at=str(observed.max()) if not observed.empty else None,
+            schema_version="2.0.0",
+            materializer_version="2.0.0",
+            columns=frame.columns.tolist(),
+            source_distribution={str(key): int(value) for key, value in source_distribution.items()},
         )

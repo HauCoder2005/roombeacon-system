@@ -1,0 +1,6 @@
+# Experimental notebook only; keep the official notebook runtime unchanged.
+-r ../requirements.txt
+-e ../../crawler
+scikit-learn==1.9.1
+scipy==1.18.1
+jinja2==3.1.6

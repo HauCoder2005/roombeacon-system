@@ -101,7 +101,7 @@ class Phongtro123SourceAdapter(BaseSourceAdapter):
                 enabled=True,
                 interval_minutes=5,
                 crawl_details=True,
-                max_details_per_run=40,
+                max_details_per_run=1500,
                 target_type_hint=CrawlTargetType.LISTING_PAGE,
                 label="phongtro123_hcm_phongtro",
             ),
