@@ -4,6 +4,7 @@ from decimal import Decimal
 
 import duckdb
 import pandas as pd
+import pytest
 
 from notebooks.utils.notebook_audit import (
     load_snapshot, missing_mask, raw_semantics, semantic_states,
@@ -101,4 +102,27 @@ def test_snapshot_joins_identity_and_timestamp_with_canonical_tie_break():
     conn.execute('CREATE OR REPLACE VIEW v_latest_posts AS SELECT * REPLACE (99. AS price_amount) FROM frozen_latest')
     _, evidence2, _ = load_snapshot(conn, Path(__file__).resolve().parents[1])
     assert not evidence2.price_lineage_aligned.any()
+    conn.close()
+
+
+def test_snapshot_rejects_genuinely_empty_latest_relation_with_diagnostics():
+    conn = duckdb.connect(':memory:')
+    conn.execute('CREATE SCHEMA mysql_db')
+    conn.execute('''CREATE TABLE mysql_db.rental_post_versions(
+        id BIGINT, rental_post_id BIGINT, observed_at TIMESTAMP)''')
+    conn.execute('''CREATE TABLE mysql_db.post_prices(
+        id BIGINT, rental_post_id BIGINT, rental_post_version_id BIGINT,
+        price_raw VARCHAR, price_amount DOUBLE, currency VARCHAR, period VARCHAR)''')
+    conn.execute('''CREATE TABLE mysql_db.post_details(
+        id BIGINT, rental_post_id BIGINT, rental_post_version_id BIGINT,
+        area_raw VARCHAR, area_value DOUBLE)''')
+    conn.execute('''CREATE VIEW v_latest_posts AS SELECT
+        CAST(NULL AS BIGINT) rental_post_id, CAST(NULL AS VARCHAR) source_code,
+        CAST(NULL AS VARCHAR) source_listing_id, CAST(NULL AS VARCHAR) title_raw,
+        CAST(NULL AS DOUBLE) price_amount, CAST(NULL AS DOUBLE) area_value,
+        CAST(NULL AS VARCHAR) full_address_text, CAST(NULL AS VARCHAR) location_raw,
+        CAST(NULL AS VARCHAR) best_address_text,
+        CAST(NULL AS TIMESTAMP) latest_observed_at WHERE FALSE''')
+    with pytest.raises(AssertionError, match='latest_rows=0.*combined_rows=0'):
+        load_snapshot(conn, Path(__file__).resolve().parents[1])
     conn.close()

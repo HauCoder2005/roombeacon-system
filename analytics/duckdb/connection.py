@@ -6,6 +6,7 @@ and installs analytical views. It never owns crawler writes or schema mutation.
 
 import logging
 import os
+import re
 from pathlib import Path
 from typing import Any
 import duckdb
@@ -14,6 +15,20 @@ from roombeacon_crawler.config.get_env import env
 from analytics.duckdb.views import DuckDBViewManager
 
 logger = logging.getLogger(__name__)
+
+
+class DuckDBSourceConnectionError(RuntimeError):
+    """Raised when required Bronze source attachment is unavailable."""
+
+
+def _sanitize_mysql_error(message: str, password: str) -> str:
+    """Remove credentials while preserving actionable MySQL/DuckDB diagnostics."""
+    sanitized = message.replace(password, "<redacted>") if password else message
+    return re.sub(
+        r"(?i)(password\s*=\s*)(?:'[^']*'|\"[^\"]*\"|\S+)",
+        r"\1<redacted>",
+        sanitized,
+    )
 
 
 def _find_project_root() -> Path:
@@ -39,7 +54,9 @@ def resolve_runtime_path(configured_path: str) -> Path:
             relative_to_data = path.relative_to(container_data_dir)
         except ValueError:
             return path.resolve()
-        if container_data_dir.is_dir() and os.access(container_data_dir, os.W_OK):
+        # `/data` may also exist on an Ubuntu host. Only treat it as the
+        # container volume when the process is actually running in Docker.
+        if Path("/.dockerenv").exists():
             return path
         configured_project_root = os.getenv("ROOMBEACON_PROJECT_ROOT")
         project_root = (
@@ -103,12 +120,19 @@ class DuckDBConnectionFactory:
             escaped_temp_directory = str(temp_directory).replace("'", "''")
             conn.execute(f"SET temp_directory='{escaped_temp_directory}';")
 
-            # Cài đặt và tải extension mysql
+            attached = False
+            attach_errors = []
+            # Load the locally installed extension first. Running INSTALL on every
+            # notebook startup may contact DuckDB's extension repository and can
+            # block an otherwise local connection for several minutes.
             try:
-                conn.execute("INSTALL mysql; LOAD mysql;")
+                try:
+                    conn.execute("LOAD mysql;")
+                except Exception:
+                    conn.execute("INSTALL mysql;")
+                    conn.execute("LOAD mysql;")
                 mysql_cfg = env.mysql_bronze
 
-                attached = False
                 import os
                 candidates = []
                 # Nếu chạy ngoài Docker, việc phân giải tên miền Docker (như roombeacon-mysql-bronze)
@@ -117,16 +141,20 @@ class DuckDBConnectionFactory:
                 if os.path.exists('/.dockerenv') or mysql_cfg.host in ('127.0.0.1', 'localhost'):
                     candidates.append((mysql_cfg.host, mysql_cfg.port))
                 else:
-                    import re
-                    # Nếu là IP thật thì cứ thêm
+                # Nếu là IP thật thì cứ thêm
                     if re.match(r'^\d+\.\d+\.\d+\.\d+$', mysql_cfg.host):
                         candidates.append((mysql_cfg.host, mysql_cfg.port))
                 
-                candidates.extend([
-                    ("127.0.0.1", 3307),
-                    ("localhost", 3307),
-                    ("127.0.0.1", 3306),
-                ])
+                # Host-side notebooks reach the Bronze container through its
+                # published host port. Never fall back to MySQL's default 3306:
+                # another local MySQL instance may expose the same schema name
+                # but contain no RoomBeacon Bronze rows.
+                host_port = os.getenv("BRONZE_MYSQL_HOST_PORT")
+                if host_port:
+                    candidates.extend([
+                        ("127.0.0.1", int(host_port)),
+                        ("localhost", int(host_port)),
+                    ])
                 seen_candidates = set()
                 unique_candidates = []
                 for h, p in candidates:
@@ -159,9 +187,13 @@ class DuckDBConnectionFactory:
                         )
                         attached = True
                         break
-                    except Exception:
+                    except Exception as exc:
                         # DuckDB may echo the full ATTACH statement (including
                         # credentials) in its exception text. Never retain/log it.
+                        attach_errors.append(
+                            f"endpoint={host}:{port}, error_class={type(exc).__name__}, "
+                            f"error={_sanitize_mysql_error(str(exc), mysql_cfg.password)}"
+                        )
                         continue
 
                 if not attached:
@@ -177,14 +209,19 @@ class DuckDBConnectionFactory:
                     type(exc).__name__,
                 )
 
+            if create_views and not attached:
+                detail = "; ".join(attach_errors) if attach_errors else "no reachable configured endpoint"
+                raise DuckDBSourceConnectionError(
+                    "Required Bronze MySQL source could not be attached using the "
+                    "current project configuration; analytical views were not created. "
+                    f"Diagnostics: {detail}"
+                )
+
             if create_views:
-                try:
-                    DuckDBViewManager.create_views(conn)
-                except Exception as exc:
-                    logger.warning(
-                        "DuckDB analytical view initialization failed (error_class=%s)",
-                        type(exc).__name__,
-                    )
+                # Root analytical views are required. A partially initialized
+                # connection would only move the real source/schema error into
+                # downstream notebook assertions, so fail at bootstrap instead.
+                DuckDBViewManager.create_views(conn)
 
             cls._connection = conn
         return cls._connection

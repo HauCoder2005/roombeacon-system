@@ -14,7 +14,9 @@ import pandas as pd
 
 from .address_parser import apply_address_parsing
 from .location_analysis import audit_coordinate_trust
+from .listing_semantics import INTENT_VALUES, SCOPE_VALUES, apply_listing_semantics
 from .notebook_audit import validate_numeric_candidates
+from .price_area_validation import parse_rental_price_evidence, evaluate_price_target_trust
 from .text_standardization import apply_text_standardization
 from .ward_normalization import apply_ward_mapping
 
@@ -29,6 +31,11 @@ STATUS_VALUES: Mapping[str, frozenset[str]] = {
     ),
     "price_parser_comparison_status": frozenset(
         {"MATCH", "DISAGREEMENT", "REPARSED_ONLY", "EXISTING_ONLY", "NO_PRICE_EVIDENCE", "UNCOMPARABLE"}
+    ),
+    "price_target_trust_status": frozenset(
+        {"TRUSTED_EXISTING", "TRUSTED_REPARSED",
+         "SUSPECT_UNIT_SCALE", "PARSER_DISAGREEMENT_REVIEW",
+         "INSUFFICIENT_EVIDENCE", "MISSING"}
     ),
     "numeric_outlier_status": frozenset({"NOT_OUTLIER", "PRICE_OUTLIER", "AREA_OUTLIER", "PRICE_AND_AREA_OUTLIER"}),
     "coordinate_quality_status": frozenset({"USABLE", "INVALID", "UNTRUSTED"}),
@@ -46,6 +53,8 @@ STATUS_VALUES: Mapping[str, frozenset[str]] = {
     "duplicate_scope": frozenset({"SAME_SOURCE", "CROSS_SOURCE", "NOT_APPLICABLE"}),
     "temporal_quality_status": frozenset({"VALID", "REQUIRES_REVIEW", "INSUFFICIENT_DATA"}),
     "row_quality_status": frozenset({"READY", "READY_WITH_FLAGS", "REQUIRES_REVIEW"}),
+    "listing_intent": INTENT_VALUES,
+    "rental_scope": SCOPE_VALUES,
 }
 
 
@@ -115,6 +124,7 @@ def build_silver_dataset(bronze: pd.DataFrame, evidence: pd.DataFrame) -> pd.Dat
         ["MISSING", "TOO_SHORT"],
         default="USABLE",
     )
+    result = apply_listing_semantics(result, "title_clean")
 
     parsed = apply_address_parsing(result, "best_address_text_clean")
     parsed_columns = [
@@ -149,6 +159,39 @@ def build_silver_dataset(bronze: pd.DataFrame, evidence: pd.DataFrame) -> pd.Dat
         ["MATCH", "DISAGREEMENT", "REPARSED_ONLY", "EXISTING_ONLY", "NO_PRICE_EVIDENCE"],
         default="UNCOMPARABLE",
     )
+
+    trust_evaluations = [
+        evaluate_price_target_trust(
+            clean_price=cp,
+            price_quality_status=pqs,
+            price_parser_comparison_status=ppcs,
+            price_lineage_aligned=bool(pla),
+            raw_price=rp,
+            title=tc,
+            listing_intent=li,
+            rental_scope=rs,
+        )
+        for cp, pqs, ppcs, pla, rp, tc, li, rs in zip(
+            result.price_amount_clean,
+            result.price_quality_status,
+            result.price_parser_comparison_status,
+            result.price_lineage_aligned,
+            price_audit.raw,
+            result.title_clean,
+            result.listing_intent,
+            result.rental_scope,
+        )
+    ]
+    trust_status = [t[0] for t in trust_evaluations]
+    trust_reason = [t[1] for t in trust_evaluations]
+    trust_evidence = [t[2] for t in trust_evaluations]
+    model_values = [t[3] for t in trust_evaluations]
+
+    result["price_target_trust_status"] = pd.Series(trust_status, index=result.index, dtype="string")
+    result["price_target_trust_reason"] = pd.Series(trust_reason, index=result.index, dtype="string")
+    result["price_target_trust_evidence"] = pd.Series(trust_evidence, index=result.index, dtype="string")
+    result["price_model_value"] = pd.Series(model_values, index=result.index, dtype="Float64")
+    result["price_target_model_value"] = result["price_model_value"]
 
     price_outlier = _iqr_outlier(result.price_amount_clean)
     area_outlier = _iqr_outlier(result.area_value_clean)
@@ -334,6 +377,32 @@ def evaluate_pre_silver_quality_gate(
             & ~silver.duplicate_scope.eq("CROSS_SOURCE")
         ).any(),
         "documented_status_values_only": status_valid,
+        "semantic_decisions_auditable": all(
+            column in silver and silver[column].notna().all()
+            for column in ["listing_intent", "listing_intent_reason", "listing_intent_evidence",
+                           "rental_scope", "rental_scope_reason", "rental_scope_evidence"]
+        ),
+        "price_target_trust_domain_valid": (
+            set(silver.price_target_trust_status.dropna()).issubset(
+                STATUS_VALUES["price_target_trust_status"]
+            )
+        ),
+        "price_target_trust_reason_evidence_consistent": (
+            silver.price_target_trust_reason.notna().all()
+            and silver.price_target_trust_evidence.notna().all()
+        ),
+        "no_trusted_missing_target": not (
+            silver.price_target_trust_status.isin(["TRUSTED_EXISTING", "TRUSTED_REPARSED"])
+            & silver.price_model_value.isna()
+        ).any(),
+        "trusted_reparsed_has_evidence": not (
+            silver.price_target_trust_status.eq("TRUSTED_REPARSED")
+            & silver.price_target_trust_evidence.eq("")
+        ).any(),
+        "untrusted_has_no_model_value": not (
+            ~silver.price_target_trust_status.isin(["TRUSTED_EXISTING", "TRUSTED_REPARSED"])
+            & silver.price_model_value.notna()
+        ).any(),
     }
     report = SilverQualityGateReport(results)
     if not report.passed:

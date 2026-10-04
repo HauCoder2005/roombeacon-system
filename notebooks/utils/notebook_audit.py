@@ -32,12 +32,27 @@ def load_snapshot(conn, project_root):
     started = datetime.now(timezone.utc).isoformat()
     sql = (Path(project_root) / 'notebooks/sql/eda_snapshot.sql').read_text()
     combined = conn.execute(sql).df()
+    combined_rows = len(combined)
+    evidence_rows = (
+        int(combined['evidence_observation_id'].notna().sum())
+        if 'evidence_observation_id' in combined else 0
+    )
+    aligned_rows = (
+        int((combined['price_lineage_aligned'] | combined['area_lineage_aligned']).sum())
+        if {'price_lineage_aligned', 'area_lineage_aligned'} <= set(combined) else 0
+    )
     required = {'rental_post_id', 'source_code', 'source_listing_id', *CORE_FIELDS,
                 *ADDRESS_FIELDS, *EVIDENCE_FIELDS}
     assert required <= set(combined), f'Missing required columns: {required - set(combined)}'
     assert combined.rental_post_id.notna().all(), 'Null listing identity'
     assert len(combined) == combined.rental_post_id.nunique(), 'Snapshot identity multiplication'
-    assert len(combined) > 0, 'Empty source snapshot; analysis cannot proceed'
+    # The final SELECT is LEFT-anchored on latest, so an empty combined result
+    # proves that v_latest_posts itself is empty rather than an evidence-join loss.
+    assert len(combined) > 0, (
+        'Empty source snapshot; analysis cannot proceed '
+        f'(latest_rows=0, evidence_rows={evidence_rows}, '
+        f'combined_rows={combined_rows}, aligned_rows={aligned_rows})'
+    )
     latest = combined.drop(columns=EVIDENCE_FIELDS).copy()
     evidence = combined[['rental_post_id', *EVIDENCE_FIELDS]].copy()
     context = {

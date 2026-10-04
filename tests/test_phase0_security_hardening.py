@@ -184,6 +184,19 @@ class TestAssetRedirectAndSizeHardening(unittest.TestCase):
 
 
 class TestDuckDBCredentialSafety(unittest.TestCase):
+    def test_mysql_attachment_error_is_useful_but_redacted(self):
+        import analytics.duckdb.connection as module
+
+        marker = "SUPER_SECRET_TEST_MARKER"
+        raw = (
+            "ATTACH host=127.0.0.1 password=" + marker
+            + " failed: Too many connections"
+        )
+        rendered = module._sanitize_mysql_error(raw, marker)
+        self.assertNotIn(marker, rendered)
+        self.assertIn("password=<redacted>", rendered)
+        self.assertIn("Too many connections", rendered)
+
     def test_attach_failure_does_not_leak_synthetic_secret(self):
         import analytics.duckdb.connection as module
 

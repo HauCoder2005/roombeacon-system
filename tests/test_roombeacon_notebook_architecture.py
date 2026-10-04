@@ -15,6 +15,7 @@ def test_canonical_notebook_files_are_present_without_legacy_processing_name():
     assert (NOTEBOOKS / "01_roombeacon_eda.ipynb").exists()
     assert (NOTEBOOKS / "02_roombeacon_silver.ipynb").exists()
     assert (NOTEBOOKS / "03_roombeacon_processing.ipynb").exists()
+    assert (NOTEBOOKS / "04_roombeacon_modeling.ipynb").exists()
     assert not (NOTEBOOKS / "02_roombeacon_processing.ipynb").exists()
 
 
@@ -66,6 +67,7 @@ def test_notebook_readme_documents_canonical_layers_in_order():
         "01_roombeacon_eda.ipynb",
         "02_roombeacon_silver.ipynb",
         "03_roombeacon_processing.ipynb",
+        "04_roombeacon_modeling.ipynb",
     ]
     positions = [readme.index(name) for name in expected]
     assert positions == sorted(positions)
