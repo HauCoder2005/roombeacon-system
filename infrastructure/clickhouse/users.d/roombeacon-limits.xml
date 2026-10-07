@@ -1,0 +1,10 @@
+<!-- Per-query guards for every user (loader and future read-only API user). -->
+<clickhouse>
+    <profiles>
+        <default>
+            <max_memory_usage>536870912</max_memory_usage>
+            <max_execution_time>600</max_execution_time>
+            <max_result_rows>1000000</max_result_rows>
+        </default>
+    </profiles>
+</clickhouse>

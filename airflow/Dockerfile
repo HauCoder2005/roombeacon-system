@@ -23,10 +23,13 @@ COPY --chown=airflow:root crawler/pyproject.toml /opt/roombeacon/crawler/pyproje
 COPY --chown=airflow:root crawler/src/ /opt/roombeacon/crawler/src/
 COPY --chown=airflow:root processing/pyproject.toml /opt/roombeacon/processing/pyproject.toml
 COPY --chown=airflow:root processing/src/ /opt/roombeacon/processing/src/
+COPY --chown=airflow:root warehouse/pyproject.toml /opt/roombeacon/warehouse/pyproject.toml
+COPY --chown=airflow:root warehouse/src/ /opt/roombeacon/warehouse/src/
 
 RUN pip install --no-cache-dir \
     -e /opt/roombeacon/crawler \
     -e /opt/roombeacon/processing \
+    -e /opt/roombeacon/warehouse \
     apache-airflow-providers-mysql \
     mysqlclient \
     cryptography \
