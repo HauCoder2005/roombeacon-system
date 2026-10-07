@@ -104,3 +104,55 @@ def test_materialize_accepts_large_decimal_clean_price(materializer):
     ).df()
 
     assert actual.price_amount_clean.max() == Decimal("1350000000.00")
+
+
+def test_metadata_records_output_hash_and_writer_settings(materializer, monkeypatch):
+    statements = []
+    original_connect = duckdb.connect
+
+    class RecordingConnection:
+        def __init__(self):
+            self.connection = original_connect(":memory:")
+
+        def register(self, *args, **kwargs):
+            return self.connection.register(*args, **kwargs)
+
+        def execute(self, statement, *args, **kwargs):
+            statements.append(str(statement))
+            return self.connection.execute(statement, *args, **kwargs)
+
+        def close(self):
+            return self.connection.close()
+
+    monkeypatch.setattr(duckdb, "connect", lambda *args, **kwargs: RecordingConnection())
+    metadata = materializer.materialize(_silver_frame(), quality_gate_passed=True)
+
+    assert len(metadata.output_sha256) == 64
+    sql = "\n".join(statements).upper()
+    assert "MEMORY_LIMIT" in sql
+    assert "THREADS" in sql
+    assert "PRESERVE_INSERTION_ORDER" in sql
+    assert "COMPRESSION ZSTD" in sql
+    assert "ROW_GROUP_SIZE" in sql
+
+
+def test_metadata_promotion_failure_restores_both_previous_files(
+    materializer, monkeypatch
+):
+    materializer.materialize(_silver_frame(), quality_gate_passed=True)
+    original_parquet = materializer.output_file.read_bytes()
+    original_metadata = materializer.metadata_file.read_bytes()
+    real_replace = Path.replace
+
+    def fail_metadata_promotion(source, target):
+        if source.name.startswith(f".{METADATA_FILENAME}.") and source.suffix == ".tmp":
+            raise OSError("simulated metadata promotion failure")
+        return real_replace(source, target)
+
+    monkeypatch.setattr(Path, "replace", fail_metadata_promotion)
+
+    with pytest.raises(SilverMaterializationError, match="publication failed"):
+        materializer.materialize(_silver_frame(), quality_gate_passed=True)
+
+    assert materializer.output_file.read_bytes() == original_parquet
+    assert materializer.metadata_file.read_bytes() == original_metadata
