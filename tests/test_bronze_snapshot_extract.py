@@ -303,3 +303,49 @@ def test_packaged_snapshot_sql_matches_notebook_copy():
     packaged = (ROOT / "analytics/bronze/sql/latest_evidence.sql").read_bytes()
     notebook = (ROOT / "notebooks/sql/eda_snapshot.sql").read_bytes()
     assert packaged == notebook
+
+
+def test_extraction_streams_batches_into_duckdb_without_pandas_tables():
+    import duckdb
+
+    tables = _tables()
+    connection = FakeConnection(tables)
+    duck = duckdb.connect()
+    fetch_sizes = []
+    original = FakeCursor.fetchmany
+
+    def recording_fetchmany(self, size):
+        fetch_sizes.append(size)
+        return original(self, size)
+
+    FakeCursor.fetchmany = recording_fetchmany
+    try:
+        watermark, extracted = snap.extract_bronze_to_duckdb(connection, duck)
+    finally:
+        FakeCursor.fetchmany = original
+
+    assert extracted and watermark.max_version_id == 103
+    assert set(fetch_sizes) == {snap.FETCH_BATCH_ROWS}
+    for name, frame in tables.items():
+        assert duck.execute(f"SELECT COUNT(*) FROM {name}").fetchone()[0] == len(frame)
+    # Declared staging types, independent of what the first batch looked like.
+    types = dict(duck.execute("SELECT column_name, data_type FROM information_schema.columns "
+                              "WHERE table_name = 'post_prices'").fetchall())
+    assert types["price_amount"] == "DOUBLE"
+
+
+def test_snapshot_job_cleans_up_its_staging_database(tmp_path):
+    snap.build_bronze_snapshot(
+        project_root=ROOT, snapshot_dir=tmp_path, connect=lambda: FakeConnection(_tables()),
+        source_database="fixture",
+    )
+
+    assert not list(tmp_path.glob(".staging.*"))
+    assert not list(tmp_path.glob(".*.tmp"))
+
+
+def test_dags_use_the_airflow_sdk_skip_exception():
+    for dag in ("roombeacon_bronze_snapshot.py", "roombeacon_warehouse_load.py"):
+        source = (ROOT / "airflow/dags/analytics" / dag).read_text(encoding="utf-8")
+        assert "from airflow.sdk.exceptions import AirflowSkipException" in source
+        assert "from airflow.exceptions import" not in source

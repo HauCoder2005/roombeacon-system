@@ -40,7 +40,7 @@ def roombeacon_warehouse_load():
         max_retry_delay=timedelta(minutes=20),
     )
     def load_clickhouse() -> dict:
-        from airflow.exceptions import AirflowSkipException
+        from airflow.sdk.exceptions import AirflowSkipException
 
         from analytics.duckdb.connection import resolve_runtime_path
         from roombeacon_warehouse.config import load_warehouse_settings

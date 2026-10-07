@@ -40,7 +40,7 @@ def roombeacon_bronze_snapshot():
         max_retry_delay=timedelta(minutes=20),
     )
     def extract_bronze_snapshot() -> dict:
-        from airflow.exceptions import AirflowSkipException
+        from airflow.sdk.exceptions import AirflowSkipException
 
         from analytics.bronze.snapshot import build_bronze_snapshot
         from analytics.duckdb.connection import resolve_runtime_path
