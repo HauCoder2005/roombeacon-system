@@ -59,7 +59,7 @@ cp .env.local.example .env.local && chmod 600 .env.local   # rồi điền các 
 | `WAREHOUSE_ENABLED` | DAG/CLI warehouse | Mặc định `false` |
 | `WAREHOUSE_CLICKHOUSE_{HOST,HOST_ACCESS_HOST,PORT,DATABASE,USER,PASSWORD,SECURE}` | loader | User loader chỉ có `SELECT, INSERT, CREATE TABLE, DROP TABLE, TRUNCATE` trên `CLICKHOUSE_DB.*` |
 | `WAREHOUSE_CONNECT_TIMEOUT_SECONDS`, `WAREHOUSE_QUERY_TIMEOUT_SECONDS` | loader | Giới hạn 1–120s / 1–3600s |
-| `WAREHOUSE_READER_USER`, `WAREHOUSE_READER_PASSWORD` | (tuỳ chọn) API/BI sau này | Chỉ `SELECT` |
+| `WAREHOUSE_READER_USER`, `WAREHOUSE_READER_PASSWORD` | (tuỳ chọn) Power BI / API | Chỉ `SELECT`; profile `roombeacon_reader`: `readonly=2`, tối đa 20 triệu dòng/kết quả, 1800s/truy vấn |
 
 Mật khẩu: 16–128 ký tự trong `[A-Za-z0-9._~+=@%^-]` (script init kiểm tra).
 
@@ -102,3 +102,11 @@ GROUP BY d.district, m.market_date ORDER BY m.market_date DESC LIMIT 20;
 - Silver hiện có trên đĩa (do notebook ghi ngày 05/10) **không có `output_sha256`**, nên curated sẽ từ chối nó cho tới khi `roombeacon_silver_build` publish lại.
 - `EXCHANGE TABLES` atomic theo từng bảng. Nếu lỗi xảy ra giữa chuỗi exchange (hiếm), chạy lại DAG sẽ đưa mọi bảng về cùng một snapshot.
 - Thay đổi schema bảng ClickHouse cần migration chủ động: loader so `system.columns` với khai báo và fail closed nếu lệch.
+
+## 7. Power BI (tài khoản reader)
+
+- Điền `WAREHOUSE_READER_*` **trước** lần khởi động ClickHouse đầu tiên, script init sẽ tạo user với profile `roombeacon_reader`.
+- Nếu ClickHouse đã khởi tạo trước đó, tạo user hoặc gắn profile bằng tài khoản admin:
+  `⚠ PRODUCTION: docker compose --profile warehouse exec clickhouse bash -c 'CLICKHOUSE_PASSWORD="$CLICKHOUSE_PASSWORD" clickhouse client --user "$CLICKHOUSE_USER" -q "ALTER USER \`$WAREHOUSE_READER_USER\` SETTINGS PROFILE '"'"'roombeacon_reader'"'"'"' | áp profile reader cho user đã có | rollback: ALTER USER ... SETTINGS NONE`
+- Power BI Desktop (Windows) dùng ClickHouse ODBC driver, kết nối `127.0.0.1:8123`. Từ máy khác thì đi qua `ssh -L 8123:127.0.0.1:8123 <user>@<máy-linux>`, không mở port ra mạng.
+- Nên Import các bảng mart và dim; với `fact_listing_observation` thì lọc theo ngày hoặc dùng DirectQuery.

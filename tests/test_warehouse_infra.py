@@ -88,3 +88,22 @@ def test_clickhouse_init_grants_loader_only_its_database():
     assert "GRANT SELECT, INSERT, CREATE TABLE, DROP TABLE, TRUNCATE ON" in script
     assert "ON *.*" not in script
     assert "set -euo pipefail" in script
+
+
+def test_reader_account_gets_a_readonly_profile_with_a_larger_result_cap():
+    import xml.etree.ElementTree as ET
+
+    limits = ET.parse(ROOT / "infrastructure/clickhouse/users.d/roombeacon-limits.xml").getroot()
+    default = limits.find("profiles/default")
+    reader = limits.find("profiles/roombeacon_reader")
+    script = (ROOT / "infrastructure/clickhouse/initdb/10-roombeacon-users.sh").read_text(encoding="utf-8")
+
+    assert reader is not None
+    assert reader.findtext("profile") == "default"  # inherits memory/time guards
+    assert reader.findtext("readonly") == "2"  # no writes/DDL; BI drivers may still set settings
+    assert int(reader.findtext("max_result_rows")) > int(default.findtext("max_result_rows"))
+    assert reader.findtext("result_overflow_mode") == "throw"
+    assert "SETTINGS PROFILE 'roombeacon_reader'" in script
+    # The loader keeps the stricter default profile.
+    loader_line = next(l for l in script.splitlines() if "WAREHOUSE_CLICKHOUSE_USER}\\` IDENTIFIED" in l)
+    assert "SETTINGS PROFILE" not in loader_line

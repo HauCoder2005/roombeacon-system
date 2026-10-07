@@ -1,4 +1,5 @@
-<!-- Per-query guards for every user (loader and future read-only API user). -->
+<!-- Per-query guards. "default" applies to every user (admin, loader);
+     "roombeacon_reader" is attached to the optional read-only BI/API account. -->
 <clickhouse>
     <profiles>
         <default>
@@ -6,5 +7,14 @@
             <max_execution_time>600</max_execution_time>
             <max_result_rows>1000000</max_result_rows>
         </default>
+        <roombeacon_reader>
+            <profile>default</profile>
+            <!-- 2 = reads only, but drivers such as Power BI ODBC may set session settings. -->
+            <readonly>2</readonly>
+            <!-- Room for Power BI Import of the whole observation fact (~40k rows/day). -->
+            <max_result_rows>20000000</max_result_rows>
+            <result_overflow_mode>throw</result_overflow_mode>
+            <max_execution_time>1800</max_execution_time>
+        </roombeacon_reader>
     </profiles>
 </clickhouse>
