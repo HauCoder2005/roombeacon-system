@@ -21,9 +21,12 @@ USER airflow
 # dependency contract. Source vẫn được bind mount khi development.
 COPY --chown=airflow:root crawler/pyproject.toml /opt/roombeacon/crawler/pyproject.toml
 COPY --chown=airflow:root crawler/src/ /opt/roombeacon/crawler/src/
+COPY --chown=airflow:root processing/pyproject.toml /opt/roombeacon/processing/pyproject.toml
+COPY --chown=airflow:root processing/src/ /opt/roombeacon/processing/src/
 
 RUN pip install --no-cache-dir \
     -e /opt/roombeacon/crawler \
+    -e /opt/roombeacon/processing \
     apache-airflow-providers-mysql \
     mysqlclient \
     cryptography \
