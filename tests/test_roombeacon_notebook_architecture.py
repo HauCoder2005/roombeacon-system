@@ -29,14 +29,16 @@ def test_silver_notebook_contains_complete_executable_pipeline():
         "10. Coordinate Trust Classification", "11. Cross-field Consistency",
         "12. Duplicate / Repost Candidate Hardening", "13. Temporal Semantics Validation",
         "14. Final Row Quality Status", "15. Silver Dataset Contract",
-        "16. Pre-Silver Quality Gate", "17. Save Canonical Silver Dataset",
+        "16. Pre-Silver Quality Gate", "17. Compare with Published Canonical Silver",
         "18. Final Silver Validation",
     ]
     for section in expected_sections:
         assert section in text
     assert "build_silver_dataset" in text
     assert "evaluate_pre_silver_quality_gate" in text
-    assert "COPY (SELECT * FROM _canonical_silver_write)" in text
+    # Publication belongs to roombeacon_silver_build; the notebook only audits.
+    assert "_canonical_silver_write" not in text
+    assert "roombeacon_silver_build" in text
     assert "rental_listings.parquet" in text
     assert "rental_listings.metadata.json" in text
     assert "SilverMaterializer" not in text

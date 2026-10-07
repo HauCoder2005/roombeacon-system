@@ -7,7 +7,6 @@ below has no database access: it consumes only bounded snapshot Parquet files.
 
 import logging
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
 from airflow.sdk import Asset, dag, task
 
@@ -40,12 +39,14 @@ def roombeacon_silver_build():
         max_retry_delay=timedelta(minutes=20),
     )
     def build_snapshot_silver() -> dict:
+        from analytics.duckdb.connection import resolve_runtime_path
         from roombeacon_processing.build import build_silver
 
-        project_root = Path(__file__).resolve().parents[3]
+        # /data is the shared data volume in Docker; on the host it maps to
+        # <project>/data. Never derive it from this file's location.
         result = build_silver(
-            project_root / "data/bronze/snapshot",
-            project_root / "data/silver",
+            resolve_runtime_path("/data/bronze/snapshot"),
+            resolve_runtime_path("/data/silver"),
         )
         logger.info(
             "Published Silver snapshot_id=%s rows=%d columns=%d runtime_seconds=%.2f",

@@ -7,11 +7,20 @@ NEW_DAG = ROOT / "airflow/dags/analytics/roombeacon_silver_build.py"
 LEGACY_DAG = ROOT / "airflow/dags/analytics/roombeacon_silver_materializer.py"
 
 
-def test_legacy_dag_is_retained_and_marked_deprecated():
-    source = LEGACY_DAG.read_text(encoding="utf-8")
+def test_legacy_mysql_attach_materializer_dag_is_removed():
+    # It ATTACHed MySQL through DuckDB (OOM path) and duplicated publication.
+    assert not LEGACY_DAG.exists()
+    for dag_file in (ROOT / "airflow/dags").rglob("*.py"):
+        assert 'DAG_ID = "roombeacon_silver_materializer"' not in dag_file.read_text(encoding="utf-8")
 
-    assert 'DAG_ID = "roombeacon_silver_materializer"' in source
-    assert "DEPRECATED" in source
+
+def test_silver_paths_resolve_to_the_container_data_volume():
+    source = NEW_DAG.read_text(encoding="utf-8")
+
+    # parents[3] of /opt/airflow/dags/analytics/<dag>.py is /opt, not the data volume.
+    assert "parents[3]" not in source
+    assert 'resolve_runtime_path("/data/bronze/snapshot")' in source
+    assert 'resolve_runtime_path("/data/silver")' in source
 
 
 def test_snapshot_only_asset_dag_contract():
