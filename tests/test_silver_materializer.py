@@ -156,3 +156,17 @@ def test_metadata_promotion_failure_restores_both_previous_files(
 
     assert materializer.output_file.read_bytes() == original_parquet
     assert materializer.metadata_file.read_bytes() == original_metadata
+
+
+def test_publication_validates_parquet_without_full_dataframe_readback(
+    materializer, monkeypatch
+):
+    monkeypatch.setattr(
+        materializer,
+        "_read_parquet",
+        lambda path: (_ for _ in ()).throw(AssertionError("full readback is forbidden")),
+    )
+
+    metadata = materializer.materialize(_silver_frame(), quality_gate_passed=True)
+
+    assert metadata.row_count == 2

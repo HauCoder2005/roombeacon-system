@@ -68,3 +68,42 @@ def test_apply_address_parsing():
     assert 'district_text_extracted' in res_df.columns
     assert res_df.loc[0, 'district_text_extracted'] == 'Quận 1'
     assert res_df.loc[1, 'ward_text_extracted'] == 'Phường 2'
+
+
+def test_quang_trung_not_misparsed_as_quan_uang():
+    res1 = parse_address_text("Đường Quang Trung, Phường 8, Gò Vấp")
+    assert res1["district_text_extracted"] != "Quận uang Trung"
+    assert res1["district_text_extracted"] != "Quận uang"
+    assert res1["district_text_extracted"] == "Quận Gò Vấp"
+    assert res1["ward_text_extracted"] == "Phường 8"
+    assert res1["street_text_extracted"] == "Đường Quang Trung"
+
+    res2 = parse_address_text("Quang Trung, Gò Vấp")
+    assert res2["district_text_extracted"] != "Quận uang Trung"
+    assert res2["district_text_extracted"] != "Quận uang"
+    assert res2["district_text_extracted"] == "Quận Gò Vấp"
+
+    res3 = parse_address_text("Đường Nguyễn Oanh")
+    assert res3["district_text_extracted"] is None
+    assert res3["street_text_extracted"] == "Đường Nguyễn Oanh"
+
+    res4 = parse_address_text("123 Đường Quang Trung, Phường 10, Gò Vấp")
+    assert res4["district_text_extracted"] == "Quận Gò Vấp"
+    assert res4["ward_text_extracted"] == "Phường 10"
+    assert res4["street_text_extracted"] == "Đường Quang Trung"
+
+
+def test_valid_q_abbreviations_still_work():
+    cases = {
+        "Q.1": "Quận 1",
+        "Q1": "Quận 1",
+        "Q. 10": "Quận 10",
+        "Quận 7": "Quận 7",
+        "Q. Tân Bình": "Quận Tân Bình",
+        "Q.Bình Thạnh": "Quận Bình Thạnh",
+        "Q Bình Thạnh": "Quận Bình Thạnh",
+    }
+    for text, expected in cases.items():
+        res = parse_address_text(text)
+        assert res["district_text_extracted"] == expected, f"Failed for {text}: got {res['district_text_extracted']}"
+

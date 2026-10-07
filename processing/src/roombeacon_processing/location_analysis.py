@@ -27,7 +27,7 @@ def audit_coordinate_trust(
     address at that rounded point is the same. This preserves legitimate
     building-level reuse while rejecting observed ward/district centroids.
     """
-    result = listings.copy()
+    result = listings.copy(deep=False)
     required = {latitude_col, longitude_col, provider_col, address_col}
     missing = required - set(result.columns)
     if missing:

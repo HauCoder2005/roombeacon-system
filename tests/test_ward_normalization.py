@@ -2,7 +2,7 @@ import pytest
 import sys
 import pandas as pd
 sys.path.append('.')
-from notebooks.utils.ward_normalization import map_ward, normalize_ward_text
+from notebooks.utils.ward_normalization import audit_ward_district_consistency, map_ward, normalize_ward_text
 
 def test_null_missing():
     res = map_ward(None, None)
@@ -41,3 +41,30 @@ def test_with_phuong_number_prefix_key():
     assert res['ward_mapping_status'] == 'MAPPED'
     assert res['ward_current'] == 'Phường Gia Định'
 
+
+def test_ward_district_consistency_uses_canonical_mapping_without_rewrite():
+    result = audit_ward_district_consistency(
+        "Phường 14", "Quận Gò Vấp", "Phường An Hội Tây"
+    )
+    assert result["admin_consistency_status"] == "CONSISTENT"
+    assert result["admin_consistency_candidates"] == ["Phường An Hội Tây"]
+
+
+def test_ward_district_inconsistency_is_audited():
+    result = audit_ward_district_consistency(
+        "Phường 14", "Quận Gò Vấp", "Phường Bến Thành"
+    )
+    assert result["admin_consistency_status"] == "INCONSISTENT"
+    assert result["admin_consistency_reason"] == "CURRENT_WARD_NOT_IN_CANONICAL_PAIR_CANDIDATES"
+
+
+def test_ward_district_ambiguous_and_unverifiable_are_not_guessed():
+    ambiguous = audit_ward_district_consistency(
+        "Phường 15", "Quận Tân Bình", None
+    )
+    unverifiable = audit_ward_district_consistency(
+        "Phường XYZ", "Quận 1", None
+    )
+    assert ambiguous["admin_consistency_status"] == "AMBIGUOUS"
+    assert len(ambiguous["admin_consistency_candidates"]) > 1
+    assert unverifiable["admin_consistency_status"] == "UNVERIFIABLE"

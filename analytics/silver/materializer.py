@@ -107,10 +107,9 @@ class SilverMaterializer:
             parquet_tmp = temporary[CANONICAL_FILENAME]
             metadata_tmp = temporary[METADATA_FILENAME]
             self._write_parquet(processed_df, parquet_tmp)
-            readback = self._read_parquet(parquet_tmp)
-            self._validate_readback(processed_df, readback)
+            self._validate_parquet_readback(processed_df, parquet_tmp)
             metadata = self._build_metadata(
-                readback, source_snapshot, self._sha256(parquet_tmp)
+                processed_df, source_snapshot, self._sha256(parquet_tmp)
             )
             metadata_tmp.write_text(
                 json.dumps(asdict(metadata), indent=2, ensure_ascii=False),
@@ -184,13 +183,30 @@ class SilverMaterializer:
         finally:
             connection.close()
 
-    def _validate_readback(self, expected: pd.DataFrame, actual: pd.DataFrame) -> None:
-        self._validate_dataframe(actual)
-        if len(actual) != len(expected):
+    def _validate_parquet_readback(self, expected: pd.DataFrame, path: Path) -> None:
+        connection = duckdb.connect(":memory:")
+        try:
+            memory_limit, threads, _ = self._writer_settings()
+            connection.execute(f"SET memory_limit = '{memory_limit}'")
+            connection.execute(f"SET threads = {threads}")
+            escaped_path = str(path).replace("'", "''")
+            columns = [
+                row[0]
+                for row in connection.execute(
+                    f"DESCRIBE SELECT * FROM read_parquet('{escaped_path}')"
+                ).fetchall()
+            ]
+            row_count, non_null_ids, distinct_ids = connection.execute(
+                "SELECT COUNT(*), COUNT(rental_post_id), "
+                f"COUNT(DISTINCT rental_post_id) FROM read_parquet('{escaped_path}')"
+            ).fetchone()
+        finally:
+            connection.close()
+        if row_count != len(expected):
             raise SilverMaterializationError("Silver read-back row count differs")
-        if actual.rental_post_id.nunique() != expected.rental_post_id.nunique():
+        if non_null_ids != row_count or distinct_ids != expected.rental_post_id.nunique():
             raise SilverMaterializationError("Silver read-back identity count differs")
-        if list(actual.columns) != list(expected.columns):
+        if columns != list(expected.columns):
             raise SilverMaterializationError("Silver read-back columns differ")
 
     def _validate_dataframe(self, frame: pd.DataFrame) -> None:

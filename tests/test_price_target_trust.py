@@ -26,11 +26,11 @@ def test_vietnamese_rental_shorthand_parser():
         assert parsed == expected, f"Failed for text: {text}, got: {parsed}, expected: {expected}"
 
 
-def _bronze_and_evidence(title, numeric, raw, lineage_aligned=True, parser_match=True):
+def _bronze_and_evidence(title, numeric, raw, lineage_aligned=True, parser_match=True, area=30.0):
     bronze = pd.DataFrame([{
         "source_code": "test", "rental_post_id": 1, "source_listing_id": "x",
         "title_raw": title, "url": "https://example.test/1", "price_amount": numeric,
-        "area_value": 30.0, "full_address_text": "Phường 1, Quận 1",
+        "area_value": area, "full_address_text": "Phường 1, Quận 1",
         "location_raw": "Quận 1", "full_address_inherited": False,
         "map_provider": None, "map_latitude": None, "map_longitude": None,
         "map_query_raw": None, "best_address_text": "Phường 1, Quận 1",
@@ -42,10 +42,25 @@ def _bronze_and_evidence(title, numeric, raw, lineage_aligned=True, parser_match
         "rental_post_id": 1, "evidence_observation_id": 1,
         "evidence_version_time_matches": 1, "evidence_price_id": 1,
         "price_raw": raw, "currency": "VND", "period": "MONTH",
-        "evidence_area_id": 1, "area_raw": "30 m2",
+        "evidence_area_id": 1, "area_raw": f"{area} m2",
         "price_lineage_aligned": lineage_aligned, "area_lineage_aligned": True,
     }])
     return bronze, evidence
+
+
+def _price_population(extreme_title: str, extreme_price: int, extreme_raw: str, extreme_area: float = 30.0):
+    bronze_rows, evidence_rows = [], []
+    for index, price in enumerate([3_000_000, 4_000_000, 5_000_000, 6_000_000, 7_000_000, 8_000_000, 9_000_000, extreme_price]):
+        title = extreme_title if index == 7 else f"Cho thuê căn hộ giá {price // 1_000_000} triệu/tháng"
+        raw = extreme_raw if index == 7 else f"{price // 1_000_000} triệu/tháng"
+        area = extreme_area if index == 7 else 30.0
+        bronze, evidence = _bronze_and_evidence(title, price, raw, area=area)
+        bronze.loc[0, "rental_post_id"] = index + 1
+        bronze.loc[0, "source_listing_id"] = f"x-{index + 1}"
+        evidence.loc[0, "rental_post_id"] = index + 1
+        bronze_rows.append(bronze)
+        evidence_rows.append(evidence)
+    return pd.concat(bronze_rows, ignore_index=True), pd.concat(evidence_rows, ignore_index=True)
 
 
 def test_explicit_title_evidence_repairs_scale_without_deleting_row():
@@ -89,6 +104,83 @@ def test_high_rental_is_not_rejected_by_magnitude_alone():
     silver = build_silver_dataset(bronze, evidence)
     assert silver.loc[0, "price_model_value"] == 100_000_000
     assert silver.loc[0, "price_target_trust_status"] == "TRUSTED_EXISTING"
+
+
+def test_lineage_trusted_extreme_room_price_can_be_reviewed_for_modeling():
+    bronze, evidence = _price_population(
+        "Cho thuê phòng trọ giá rẻ gần trường đại học",
+        100_000_000,
+        "100 triệu/tháng",
+    )
+
+    silver = build_silver_dataset(bronze, evidence)
+    row = silver.iloc[-1]
+
+    assert len(silver) == len(bronze)
+    assert row.price_target_trust_status == "TRUSTED_EXISTING"
+    assert row.price_model_value == 100_000_000
+    assert row.price_semantic_status in {"ORDINARY_UNIT_OUTLIER_UNCORROBORATED", "CROSS_FIELD_CONTRADICTION"}
+    assert row.price_model_suitability == "REVIEW"
+
+
+def test_student_cbcnv_extreme_billion_rent_reviewed_not_model_suitable():
+    bronze, evidence = _price_population(
+        "Cho CBCNV & SV thuê , được nấu ăn , giờ giấc tự do",
+        2_200_000_000,
+        "2.2 tỷ/tháng",
+        extreme_area=24.0,
+    )
+    silver = build_silver_dataset(bronze, evidence)
+    row = silver.iloc[-1]
+    assert row.price_target_trust_status == "TRUSTED_EXISTING"
+    assert row.price_model_value == 2_200_000_000
+    assert row.price_semantic_status == "CROSS_FIELD_CONTRADICTION"
+    assert row.price_model_suitability == "REVIEW"
+
+
+def test_ordinary_unit_compact_area_extreme_100m_rent_reviewed():
+    bronze, evidence = _price_population(
+        "Nhà trọ sạch đẹp rộng rãi giá rẻ [quận8]",
+        100_000_000,
+        "100 triệu/tháng",
+        extreme_area=20.0,
+    )
+    silver = build_silver_dataset(bronze, evidence)
+    row = silver.iloc[-1]
+    assert row.price_target_trust_status == "TRUSTED_EXISTING"
+    assert row.price_model_value == 100_000_000
+    assert row.price_semantic_status == "CROSS_FIELD_CONTRADICTION"
+    assert row.price_model_suitability == "REVIEW"
+
+
+def test_legitimate_large_commercial_170m_rent_remains_supported():
+    bronze, evidence = _price_population(
+        "Mô tả chi tiết",
+        170_000_000,
+        "170tr",
+        extreme_area=189.0,
+    )
+    silver = build_silver_dataset(bronze, evidence)
+    row = silver.iloc[-1]
+    assert row.price_target_trust_status == "TRUSTED_EXISTING"
+    assert row.price_model_value == 170_000_000
+    assert row.price_semantic_status == "SUPPORTED_MONTHLY_RENT"
+    assert row.price_model_suitability == "SUPPORTED"
+
+
+def test_explicit_supported_high_monthly_rent_remains_model_usable():
+    bronze, evidence = _price_population(
+        "Cho thuê biệt thự nguyên căn giá 120 triệu/tháng",
+        120_000_000,
+        "120 triệu/tháng",
+    )
+
+    silver = build_silver_dataset(bronze, evidence)
+    row = silver.iloc[-1]
+
+    assert row.price_target_trust_status == "TRUSTED_EXISTING"
+    assert row.price_semantic_status == "SUPPORTED_MONTHLY_RENT"
+    assert row.price_model_suitability == "SUPPORTED"
 
 
 def test_conflicting_text_prices_become_suspect_unit_scale():

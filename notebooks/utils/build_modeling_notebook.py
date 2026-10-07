@@ -33,6 +33,7 @@ from analytics.duckdb.connection import resolve_runtime_path
 from roombeacon_crawler.config.get_env import env
 from notebooks.utils.modeling_benchmark import *
 from notebooks.utils.modeling_benchmark import prepare_lightgbm_categories
+from notebooks.utils.shadow_validation import build_reference_profile,file_sha256,persist_champion_artifact
 from notebooks.utils.listing_semantics import BUSINESS_TARGET_DEFINITION,semantic_model_eligibility
 SEED=42; np.random.seed(SEED); plt.style.use('seaborn-v0_8-whitegrid')
 SILVER_PATH=resolve_runtime_path(env.processing.silver_dir)/'rental_listings.parquet'
@@ -49,26 +50,27 @@ md("""## 02 Business target, semantic population, and leakage contract
 SALE, TRANSFER, WHOLE_BUILDING, and MULTI_UNIT_BUSINESS evidence is incompatible. UNKNOWN is retained when no conflicting evidence exists; sparse text is not guessed. Semantic labels are eligibility/audit fields and are not predictors."""),
 code("""prepared=engineer_safe_features(silver_df)
 TRUSTED_PRICE_STATUSES={'TRUSTED_EXISTING','TRUSTED_REPARSED'}
-numeric_candidate=prepared.price_amount_clean.notna()&prepared.price_amount_clean.gt(0)&~prepared.price_quality_status.eq('MISSING_OR_REVIEW')
-numeric_trusted=prepared.price_target_trust_status.isin(TRUSTED_PRICE_STATUSES)&prepared.price_model_value.notna()&prepared.price_model_value.gt(0)
-semantic_compatible,semantic_reason=semantic_model_eligibility(prepared); prepared['semantic_eligibility_reason']=semantic_reason
-eligible=numeric_candidate&numeric_trusted&semantic_compatible
+permissive_masks=build_modeling_eligibility(prepared,policy='PERMISSIVE'); strict_masks=build_modeling_eligibility(prepared,policy='STRICT')
+eligibility_funnel_permissive=eligibility_funnel(permissive_masks); eligibility_funnel_strict=eligibility_funnel(strict_masks)
+numeric_candidate=permissive_masks.numeric_target_candidate; numeric_trusted=permissive_masks.lineage_trusted
+semantic_compatible=permissive_masks.rental_compatible; semantic_reason=pd.Series(np.where(semantic_compatible,'SEMANTICALLY_COMPATIBLE','NOT_RENTAL_COMPATIBLE'),index=prepared.index,dtype='string'); prepared['semantic_eligibility_reason']=semantic_reason
+eligible=permissive_masks.final_eligible
 model_df=prepared.loc[eligible].copy(); model_df[TARGET]=model_df.price_model_value.astype(float); model_df['group_key']=build_group_key(model_df)
 FEATURE_SETS=build_feature_sets(model_df.columns)
 for features in FEATURE_SETS.values(): audit_features(features)
 before=prepared.loc[numeric_candidate,'price_amount_clean'].astype(float); target=model_df[TARGET].astype(float)
-semantic_population_summary=pd.DataFrame([{'Population':'Total Silver','Rows':len(prepared)},{'Population':'Numeric price candidates','Rows':int(numeric_candidate.sum())},{'Population':'Semantic compatible','Rows':int(semantic_compatible.sum())},{'Population':'Numeric target trusted','Rows':int(numeric_trusted.sum())},{'Population':'Final model eligible','Rows':len(model_df)}]); semantic_population_summary['Percent of Silver']=semantic_population_summary.Rows/len(prepared)*100
-prepared['model_exclusion_reason']=np.select([~numeric_candidate,numeric_candidate&~numeric_trusted,numeric_candidate&numeric_trusted&~semantic_compatible],['NO_NUMERIC_CANDIDATE','NUMERIC_TARGET_NOT_TRUSTED',semantic_reason],default='MODEL_ELIGIBLE')
+semantic_population_summary=eligibility_funnel_permissive.rename(columns={'Stage':'Population'})
+prepared['model_exclusion_reason']=np.select([~numeric_candidate,numeric_candidate&~numeric_trusted,numeric_trusted&~permissive_masks.semantic_target_supported,permissive_masks.semantic_target_supported&~permissive_masks.area_supported,permissive_masks.area_supported&~permissive_masks.rental_compatible],['NO_NUMERIC_CANDIDATE','NUMERIC_TARGET_NOT_TRUSTED','PRICE_SEMANTIC_NOT_SUPPORTED','AREA_NOT_SUPPORTED','NOT_RENTAL_COMPATIBLE'],default='MODEL_ELIGIBLE')
 semantic_exclusion_summary=prepared.groupby(['model_exclusion_reason','price_target_trust_status','listing_intent','rental_scope','source_code'],dropna=False).size().rename('Rows').reset_index().sort_values('Rows',ascending=False)
 target_distribution_comparison=pd.DataFrame([{'Population':'Before numeric-trust filtering','Rows':len(before),'Min':before.min(),'P01':before.quantile(.01),'P05':before.quantile(.05),'P25':before.quantile(.25),'Median':before.median(),'P75':before.quantile(.75),'P95':before.quantile(.95),'P99':before.quantile(.99),'Max':before.max()},{'Population':'Final eligible trusted target','Rows':len(target),'Min':target.min(),'P01':target.quantile(.01),'P05':target.quantile(.05),'P25':target.quantile(.25),'Median':target.median(),'P75':target.quantile(.75),'P95':target.quantile(.95),'P99':target.quantile(.99),'Max':target.max()}])
 semantic_exclusion_examples=prepared.loc[prepared.model_exclusion_reason.ne('MODEL_ELIGIBLE'),['rental_post_id','source_code','title_clean','price_amount_clean','price_model_value','price_target_model_value','price_target_trust_status','price_target_trust_reason','listing_intent','rental_scope','model_exclusion_reason']].groupby('model_exclusion_reason',group_keys=False).head(8)
 valid_high_price_examples=prepared.loc[eligible,['rental_post_id','source_code','title_clean',TARGET,'area_value_clean','listing_intent','rental_scope']].nlargest(20,TARGET)
-display(pd.Series({'Business target':BUSINESS_TARGET_DEFINITION,'UNKNOWN policy':'Retain unless conflicting SALE/TRANSFER/aggregate evidence exists','Accepted numeric trust statuses':', '.join(sorted(TRUSTED_PRICE_STATUSES))},name='Policy').to_frame()); display(semantic_population_summary); display(prepared.listing_intent.value_counts(dropna=False).to_frame('Rows')); display(prepared.rental_scope.value_counts(dropna=False).to_frame('Rows')); display(prepared.price_target_trust_status.value_counts(dropna=False).to_frame('Rows')); display(semantic_exclusion_summary); display(target_distribution_comparison); display(semantic_exclusion_examples); display(Markdown('### Valid high-price rows retained by canonical trust evidence')); display(valid_high_price_examples)
+display(pd.Series({'Business target':BUSINESS_TARGET_DEFINITION,'UNKNOWN policy':'PERMISSIVE by default; STRICT evaluated separately','Accepted numeric trust statuses':', '.join(sorted(TRUSTED_PRICE_STATUSES))},name='Policy').to_frame()); display(eligibility_funnel_permissive); display(eligibility_funnel_strict); display(prepared.listing_intent.value_counts(dropna=False).to_frame('Rows')); display(prepared.rental_scope.value_counts(dropna=False).to_frame('Rows')); display(prepared.price_target_trust_status.value_counts(dropna=False).to_frame('Rows')); display(prepared.price_model_suitability.value_counts(dropna=False).to_frame('Rows')); display(prepared.area_model_suitability.value_counts(dropna=False).to_frame('Rows')); display(semantic_exclusion_summary); display(target_distribution_comparison); display(semantic_exclusion_examples); display(Markdown('### Valid high-price rows retained by canonical trust evidence')); display(valid_high_price_examples)
 display(pd.DataFrame([{'Feature Set':k,'Features':', '.join(v)} for k,v in FEATURE_SETS.items()]))
 display(Markdown('**Leakage exclusions:** identifiers, duplicate group keys, raw/canonical price evidence, `price_per_area`, parser/quality fields, and every target-reconstructive field are excluded.'))
 q=target.quantile([.01,.5,.95,.99])
 fig,ax=plt.subplots(1,2,figsize=(12,4)); ax[0].hist(target.clip(upper=q.loc[.99]),bins=60); ax[1].hist(np.log1p(target),bins=60,color='#F58518'); ax[0].set_title('Target (display clipped at P99)'); ax[1].set_title('Target log1p'); plt.tight_layout(); plt.show()"""),
-md("## 03 Sealed strict group-chronological split"),
+md("## 03 Group-isolated chronological split using representative group time\\n\\nSplit isolates duplicate groups to avoid leakage and orders by representative group time."),
 code("""split_result=group_aware_split(model_df,model_df.group_key,seed=SEED)
 model_df['split']=split_result.labels; assert_group_isolation(model_df.group_key,model_df.split); assert_split_chronology(model_df,model_df.group_key,split_result)
 development_df=model_df.loc[model_df.split.ne('TEST')].copy(); test_df=model_df.loc[model_df.split.eq('TEST')].copy()
@@ -144,12 +146,13 @@ md("## 05 F1–F5 development comparison and F4 vs F5 decision"),
 code("""feature_rows=[]
 for feature_set,features in FEATURE_SETS.items(): feature_rows+=evaluate_config('LightGBM Regressor',BASE_PARAMS['LightGBM Regressor'],features,feature_set,'LOG1P')
 for feature_set in ['F4 — AREA + SOURCE + LOCATION','F5 — FULL SAFE TABULAR']: feature_rows+=evaluate_config('CatBoost Regressor',BASE_PARAMS['CatBoost Regressor'],FEATURE_SETS[feature_set],feature_set,'LOG1P')
+for feature_set in ['F4 — AREA + SOURCE + LOCATION','F5 — FULL SAFE TABULAR']: feature_rows+=evaluate_config('LightGBM Regressor',BASE_PARAMS['LightGBM Regressor'],FEATURE_SETS[feature_set],feature_set,'RAW')
 feature_fold_results=pd.DataFrame(feature_rows); feature_summary=summarize_development(feature_fold_results)
 f45=feature_summary.loc[feature_summary['Feature Set'].isin(['F4 — AREA + SOURCE + LOCATION','F5 — FULL SAFE TABULAR'])].copy(); display(feature_summary); display(f45)
 f45_rows=[]
-for model,g in f45.groupby('Model'):
+for (model,transform),g in f45.groupby(['Model','Target Transform']):
  f4=g.loc[g['Feature Set'].str.startswith('F4')].iloc[0]; f5=g.loc[g['Feature Set'].str.startswith('F5')].iloc[0]
- f45_rows.append({'Model':model,'F4 MAE':f4.MAE_Mean,'F5 MAE':f5.MAE_Mean,'F5 absolute improvement':f4.MAE_Mean-f5.MAE_Mean,'F5 improvement %':(f4.MAE_Mean-f5.MAE_Mean)/f4.MAE_Mean*100,'F5 better':f5.MAE_Mean<f4.MAE_Mean})
+ f45_rows.append({'Model':model,'Target Transform':transform,'F4 MAE':f4.MAE_Mean,'F5 MAE':f5.MAE_Mean,'F5 absolute improvement':f4.MAE_Mean-f5.MAE_Mean,'F5 improvement %':(f4.MAE_Mean-f5.MAE_Mean)/f4.MAE_Mean*100,'F5 better':f5.MAE_Mean<f4.MAE_Mean})
 f45_decision=pd.DataFrame(f45_rows); consistent=bool(f45_decision['F5 better'].all()); aggregate_gain=f45_decision['F5 absolute improvement'].sum()/f45_decision['F4 MAE'].sum()*100
 SELECTED_FEATURE_SET='F5 — FULL SAFE TABULAR' if consistent and aggregate_gain>=1.0 else 'F4 — AREA + SOURCE + LOCATION'; SELECTED_FEATURES=FEATURE_SETS[SELECTED_FEATURE_SET]
 display(f45_decision); display(pd.Series({'F5 consistently better':consistent,'Aggregate F5 improvement %':aggregate_gain,'Decision':SELECTED_FEATURE_SET},name='Value').to_frame())"""),
@@ -172,7 +175,8 @@ TUNING={
 'Extra Trees Regressor':[BASE_PARAMS['Extra Trees Regressor'],{**BASE_PARAMS['Extra Trees Regressor'],'n_estimators':140}]}
 tuning_rows=[]
 for _,row in ml_shortlist.iterrows():
- for params in TUNING.get(row['Model'],[BASE_PARAMS[row['Model']]]): tuning_rows+=evaluate_config(row['Model'],params,SELECTED_FEATURES,SELECTED_FEATURE_SET,row['Target Transform'])
+ transform='RAW' if row['Model']=='LightGBM Regressor' else row['Target Transform']
+ for params in TUNING.get(row['Model'],[BASE_PARAMS[row['Model']]]): tuning_rows+=evaluate_config(row['Model'],params,SELECTED_FEATURES,SELECTED_FEATURE_SET,transform)
 tuning_fold_results=pd.DataFrame(tuning_rows); tuning_summary=summarize_development(tuning_fold_results)
 candidate_pool=pd.concat([development_comparison.loc[development_comparison.Model.str.contains('Median')],tuning_summary],ignore_index=True)
 COMPLEXITY={'Global Median':0,'Hierarchical Location Median':1,'Hierarchical Segment Median':2,'Linear Regression':3,'Ridge Regression':4,'ElasticNet':5,'Decision Tree Regressor':6,'HistGradientBoosting Regressor':7,'Gradient Boosting Regressor':8,'Random Forest Regressor':9,'Extra Trees Regressor':10,'LightGBM Regressor':11,'XGBoost Regressor':12,'CatBoost Regressor':13}
@@ -198,6 +202,36 @@ for source in sorted(development_df.source_code.dropna().unique()):
  base=baseline_predict('Global Median',train,score); metrics=regression_metrics(score[TARGET],pred)
  loso.append({'Held-out Source':source,'Rows':len(score),'Target Median':score[TARGET].median(),'Target P95':score[TARGET].quantile(.95),'Target Max':score[TARGET].max(),**metrics,'Global Median MAE':regression_metrics(score[TARGET],base)['MAE'],'Baseline Beats Locked':regression_metrics(score[TARGET],base)['MAE']<metrics['MAE']})
 leave_one_source_out=pd.DataFrame(loso).sort_values('MAE'); display(leave_one_source_out)"""),
+md("## 08b UNKNOWN sensitivity — PERMISSIVE vs STRICT (development only)"),
+code("""def evaluate_sensitivity_population(policy):
+ masks=build_modeling_eligibility(prepared,policy=policy)
+ population=prepared.loc[masks.final_eligible].copy(); population[TARGET]=population.price_model_value.astype(float); population['group_key']=build_group_key(population)
+ population_split=group_aware_split(population,population.group_key,seed=SEED); population['split']=population_split.labels
+ development=population.loc[population['split'].ne('TEST')].copy(); population_folds=build_expanding_group_time_folds(development,development.group_key,n_splits=3)
+ rows=[]
+ for fold in population_folds:
+  fit=development.loc[fold.train_index]; score=development.loc[fold.validation_index]
+  configurations=[('Hierarchical Segment Median','RAW',{}),(LOCKED_MODEL,LOCKED_TRANSFORM,LOCKED_PARAMS)]
+  for name,transform,params in configurations:
+   if name=='Hierarchical Segment Median': pred=hierarchical_segment_median(fit,score)
+   else: _,pred,_,_=fit_predict(name,params,SELECTED_FEATURES,fit,score,transform)
+   metrics=regression_metrics(score[TARGET],pred); threshold=fit[TARGET].quantile(.99); squared=(score[TARGET].to_numpy(float)-pred)**2; extreme=score[TARGET].to_numpy(float)>threshold
+   rows.append({'Policy':policy,'Population Rows':len(population),'Development Rows':len(development),'Fold':fold.fold,'Train Rows':len(fit),'Validation Rows':len(score),'Model':name,'Target Transform':transform,**metrics,'Extreme Tail Squared Error %':float(squared[extreme].sum()/squared.sum()*100) if squared.sum() else 0.0})
+ stats={'Policy':policy,'Population Rows':len(population),'Development Rows':len(development),'Target Median':population[TARGET].median(),'Target P95':population[TARGET].quantile(.95),'Target P99':population[TARGET].quantile(.99),'Area Median':population.area_value_clean.median(),'Area P95':population.area_value_clean.quantile(.95),'Area P99':population.area_value_clean.quantile(.99),'UNKNOWN Rows':int(population.listing_intent.eq('UNKNOWN').sum())}
+ return rows,stats
+
+sensitivity_rows=[]; sensitivity_populations=[]; sensitivity_source_rows=[]
+for policy in ['PERMISSIVE','STRICT']:
+ rows,stats=evaluate_sensitivity_population(policy); sensitivity_rows.extend(rows); sensitivity_populations.append(stats)
+ m=build_modeling_eligibility(prepared,policy=policy); sub=prepared.loc[m.final_eligible]; counts=sub.source_code.value_counts(); pcts=sub.source_code.value_counts(normalize=True)*100
+ for src in counts.index: sensitivity_source_rows.append({'Policy':policy,'Source':src,'Rows':int(counts[src]),'Share %':round(float(pcts[src]),2)})
+unknown_sensitivity_sources=pd.DataFrame(sensitivity_source_rows)
+unknown_sensitivity_fold_results=pd.DataFrame(sensitivity_rows)
+unknown_sensitivity_summary=unknown_sensitivity_fold_results.groupby(['Policy','Population Rows','Development Rows','Model','Target Transform'],as_index=False).agg(Folds=('Fold','nunique'),MAE=('MAE','mean'),MAE_Std=('MAE','std'),MedianAE=('Median AE','mean'),RMSE=('RMSE','mean'),RMSLE=('RMSLE','mean'),R2=('R²','mean'),Tail_Squared_Error_Pct=('Extreme Tail Squared Error %','mean'))
+baseline_mae=unknown_sensitivity_summary.loc[unknown_sensitivity_summary.Model.eq('Hierarchical Segment Median'),['Policy','MAE']].rename(columns={'MAE':'Baseline MAE'})
+unknown_sensitivity_summary=unknown_sensitivity_summary.merge(baseline_mae,on='Policy',how='left'); unknown_sensitivity_summary['Baseline Improvement %']=(unknown_sensitivity_summary['Baseline MAE']-unknown_sensitivity_summary.MAE)/unknown_sensitivity_summary['Baseline MAE']*100
+unknown_sensitivity_population=pd.DataFrame(sensitivity_populations)
+display(unknown_sensitivity_population); display(unknown_sensitivity_sources); display(unknown_sensitivity_summary); assert not TEST_ACCESSED_FOR_SELECTION"""),
 md("## 09 FINAL TEST — ONE-TIME EVALUATION\n\nThe candidate above is immutable. It is now retrained on all development rows and evaluated once on the sealed future TEST. Baselines are evaluated on the identical TEST rows."),
 code("""assert LOCKED_MODEL and not TEST_ACCESSED_FOR_SELECTION
 TEST_ACCESSED_FOR_SELECTION=True
@@ -256,10 +290,21 @@ verdict=pd.DataFrame([
  ],columns=['Criterion','Current Runtime Result']); display(verdict)"""),
 md("## 12 Persist auditable benchmark evidence"),
 code("""ARTIFACT_DIR=PROJECT_ROOT/'data'/'modeling'/'roombeacon_price_benchmark_v3'; ARTIFACT_DIR.mkdir(parents=True,exist_ok=True)
-tables={'semantic_population_summary.csv':semantic_population_summary,'semantic_exclusion_summary.csv':semantic_exclusion_summary,'semantic_exclusion_examples.csv':semantic_exclusion_examples,'target_distribution_comparison.csv':target_distribution_comparison,'valid_high_price_examples.csv':valid_high_price_examples,'development_fold_results.csv':development_fold_results,'development_comparison.csv':development_comparison,'feature_fold_results.csv':feature_fold_results,'feature_summary.csv':feature_summary,'f4_f5_decision.csv':f45_decision,'tuning_fold_results.csv':tuning_fold_results,'tuning_summary.csv':tuning_summary,'source_ablation.csv':source_ablation,'leave_one_source_out.csv':leave_one_source_out,'final_test.csv':final_test,'tail_diagnostics.csv':tail_diagnostics,'segment_diagnostics.csv':segment_diagnostics,'prediction_sanity.csv':sanity,'feature_importance.csv':feature_importance,'final_verdict.csv':verdict}
+tables={'eligibility_funnel_permissive.csv':eligibility_funnel_permissive,'eligibility_funnel_strict.csv':eligibility_funnel_strict,'semantic_population_summary.csv':semantic_population_summary,'semantic_exclusion_summary.csv':semantic_exclusion_summary,'semantic_exclusion_examples.csv':semantic_exclusion_examples,'target_distribution_comparison.csv':target_distribution_comparison,'valid_high_price_examples.csv':valid_high_price_examples,'development_fold_results.csv':development_fold_results,'development_comparison.csv':development_comparison,'feature_fold_results.csv':feature_fold_results,'feature_summary.csv':feature_summary,'f4_f5_decision.csv':f45_decision,'tuning_fold_results.csv':tuning_fold_results,'tuning_summary.csv':tuning_summary,'source_ablation.csv':source_ablation,'leave_one_source_out.csv':leave_one_source_out,'unknown_sensitivity_population.csv':unknown_sensitivity_population,'unknown_sensitivity_sources.csv':unknown_sensitivity_sources,'unknown_sensitivity_fold_results.csv':unknown_sensitivity_fold_results,'unknown_sensitivity_summary.csv':unknown_sensitivity_summary,'final_test.csv':final_test,'tail_diagnostics.csv':tail_diagnostics,'segment_diagnostics.csv':segment_diagnostics,'prediction_sanity.csv':sanity,'feature_importance.csv':feature_importance,'final_verdict.csv':verdict}
 for filename,table in tables.items(): table.to_csv(ARTIFACT_DIR/filename,index=False)
 with duckdb.connect(':memory:') as con: con.register('_pred',test_predictions); con.execute('copy _pred to ? (format parquet)',[str(ARTIFACT_DIR/'test_predictions.parquet')])
-metadata={'benchmark':'roombeacon_price_benchmark_v3','generated_at':datetime.now(timezone.utc).astimezone().isoformat(),'versions':versions,'hardware':{'platform':platform.platform(),'processor':platform.processor(),'cpu_count':__import__('os').cpu_count()},'seed':SEED,'silver_path':str(SILVER_PATH),'silver_metadata':silver_metadata,'business_target_definition':BUSINESS_TARGET_DEFINITION,'semantic_eligibility_policy':'Keep UNKNOWN absent strong conflict; exclude SALE/TRANSFER/WHOLE_BUILDING/MULTI_UNIT_BUSINESS independently of numeric trust','numeric_trust_policy':sorted(TRUSTED_PRICE_STATUSES),'eligible_rows':len(model_df),'semantic_excluded_rows':int((numeric_candidate&numeric_trusted&~semantic_compatible).sum()),'numeric_untrusted_rows':int((numeric_candidate&~numeric_trusted).sum()),'intent_distribution':prepared.listing_intent.value_counts(dropna=False).to_dict(),'scope_distribution':prepared.rental_scope.value_counts(dropna=False).to_dict(),'trust_distribution':prepared.price_target_trust_status.value_counts(dropna=False).to_dict(),'split_strategy':split_result.strategy,'folds':fold_report.astype(str).to_dict('records'),'selected_feature_set':SELECTED_FEATURE_SET,'locked_candidate':LOCKED_MODEL,'locked_transform':LOCKED_TRANSFORM,'locked_parameters':LOCKED_PARAMS,'categorical_strategy':'LightGBM train-defined pandas categories with explicit __MISSING__/__UNKNOWN__; CatBoost native strings; sklearn fold-fitted unknown-safe encoders','selection_rule':'Development fold MAE mean/median/variability; within 1% prefer lower complexity; then MedianAE/RMSLE/runtime','test_used_for_selection':False,'readiness':readiness,'limitations':['~10-day temporal window','group-level chronology uses representative max timestamp and does not claim row-level isolation','source mix is dataset representation, not market share','extreme trusted target tail retained and reported']}
+generated_at=datetime.now(timezone.utc).astimezone().isoformat()
+metadata={'benchmark':'roombeacon_price_benchmark_v3','generated_at':generated_at,'versions':versions,'hardware':{'platform':platform.platform(),'processor':platform.processor(),'cpu_count':__import__('os').cpu_count()},'seed':SEED,'silver_path':str(SILVER_PATH),'silver_sha256':file_sha256(SILVER_PATH),'silver_metadata':silver_metadata,'business_target_definition':BUSINESS_TARGET_DEFINITION,'semantic_eligibility_policy':'PERMISSIVE default keeps unresolved UNKNOWN absent strong conflict; STRICT is development-only sensitivity evidence','numeric_trust_policy':sorted(TRUSTED_PRICE_STATUSES),'price_model_suitability_policy':['SUPPORTED'],'area_model_suitability_policy':['SUPPORTED'],'eligible_rows':len(model_df),'numeric_untrusted_rows':int((numeric_candidate&~numeric_trusted).sum()),'intent_distribution':prepared.listing_intent.value_counts(dropna=False).to_dict(),'scope_distribution':prepared.rental_scope.value_counts(dropna=False).to_dict(),'trust_distribution':prepared.price_target_trust_status.value_counts(dropna=False).to_dict(),'price_suitability_distribution':prepared.price_model_suitability.value_counts(dropna=False).to_dict(),'area_suitability_distribution':prepared.area_model_suitability.value_counts(dropna=False).to_dict(),'split_strategy':split_result.strategy,'folds':fold_report.astype(str).to_dict('records'),'selected_feature_set':SELECTED_FEATURE_SET,'feature_names':SELECTED_FEATURES,'locked_candidate':LOCKED_MODEL,'locked_transform':LOCKED_TRANSFORM,'locked_parameters':LOCKED_PARAMS,'categorical_strategy':'LightGBM train-defined pandas categories with explicit __MISSING__/__UNKNOWN__; CatBoost native strings; sklearn fold-fitted unknown-safe encoders','selection_rule':'Development fold MAE mean/median/variability; within 1% prefer lower complexity; then MedianAE/RMSLE/runtime','historical_test_previously_observed':True,'test_used_for_current_selection':False,'readiness':readiness,'limitations':['~10-day temporal window','historical temporal test range has already been observed and is not a fresh unbiased champion-comparison window','group-level chronology uses representative max timestamp and does not claim row-level isolation','source mix is dataset representation, not market share']}
+assert LOCKED_MODEL=='LightGBM Regressor' and LOCKED_TRANSFORM=='RAW' and SELECTED_FEATURE_SET=='F4 — AREA + SOURCE + LOCATION'
+champion_cats=[c for c in SELECTED_FEATURES if c in CATS]
+reference_matrix,_,champion_vocabularies=prepare_lightgbm_categories(development_df[SELECTED_FEATURES],development_df[SELECTED_FEATURES],champion_cats,return_vocabularies=True)
+reference_predictions=inverse_target(final_model.predict(reference_matrix),LOCKED_TRANSFORM)
+reference_profile=build_reference_profile(development_df,reference_predictions,target_column=TARGET,population_name='DEVELOPMENT',uses_test=False)
+training_reference={'population':'DEVELOPMENT','row_count':len(development_df),'group_count':development_df.group_key.nunique(),'min_observed_at':development_df.latest_observed_at.min().isoformat(),'max_observed_at':development_df.latest_observed_at.max().isoformat(),'training_cutoff':development_df.latest_observed_at.max().isoformat(),'evidence_cutoff':silver_df.latest_observed_at.max().isoformat(),'uses_test':False,'silver_sha256':metadata['silver_sha256'],'source_snapshot_id':silver_metadata.get('source_snapshot',{}).get('snapshot_id')}
+champion_metadata=persist_champion_artifact(final_model,ARTIFACT_DIR,model_family=LOCKED_MODEL,target_transform=LOCKED_TRANSFORM,feature_set=SELECTED_FEATURE_SET,feature_names=SELECTED_FEATURES,hyperparameters=LOCKED_PARAMS,random_seed=SEED,categorical_vocabularies=champion_vocabularies,training_reference=training_reference,expected_schema={'area_value_clean':'numeric','source_code':'categorical','ward_current':'categorical','district_text_extracted':'categorical'},reference_profile=reference_profile,created_at=generated_at)
+metadata['training_reference']=training_reference
+metadata['model_version']=champion_metadata['model_id']
+metadata['champion']={'model_id':champion_metadata['model_id'],'artifact_path':champion_metadata['artifact_path'],'metadata_path':'champion_metadata.json','reference_profile_path':'champion_reference_profile.json','artifact_sha256':champion_metadata['artifact_sha256']}
 (ARTIFACT_DIR/'experiment_metadata.json').write_text(json.dumps(metadata,indent=2,ensure_ascii=False),encoding='utf-8')
 display(pd.DataFrame([{'Artifact':p.name,'Bytes':p.stat().st_size} for p in sorted(ARTIFACT_DIR.iterdir())])); display(Markdown('**Benchmark V3 complete. Candidate was locked before the one-time final TEST evaluation.**'))""")]
 

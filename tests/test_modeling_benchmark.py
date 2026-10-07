@@ -15,12 +15,82 @@ from notebooks.utils.modeling_benchmark import (
     hierarchical_location_median,
     inverse_target,
     lightgbm_gain_importance,
+    build_modeling_eligibility,
+    build_inference_eligibility,
+    inference_eligibility_funnel,
+    eligibility_funnel,
     lock_candidate,
     prepare_lightgbm_categories,
     regression_metrics,
     transform_target,
     unique_price_bands,
 )
+
+
+def test_modeling_eligibility_requires_separate_price_and_area_suitability():
+    frame = pd.DataFrame({
+        "price_amount_clean": [3_000_000.0] * 4,
+        "price_quality_status": ["VALIDATED_EXISTING"] * 4,
+        "price_target_trust_status": ["TRUSTED_EXISTING"] * 4,
+        "price_model_value": [3_000_000.0] * 4,
+        "price_model_suitability": ["SUPPORTED", "REVIEW", "SUPPORTED", "SUPPORTED"],
+        "area_value_clean": [20.0, 20.0, 2.0, 20.0],
+        "area_model_suitability": ["SUPPORTED", "SUPPORTED", "REVIEW", "SUPPORTED"],
+        "listing_intent": ["RENT", "RENT", "RENT", "UNKNOWN"],
+        "rental_scope": ["SINGLE_OR_ORDINARY_UNIT", "SINGLE_OR_ORDINARY_UNIT", "SINGLE_OR_ORDINARY_UNIT", "UNKNOWN"],
+    })
+
+    permissive = build_modeling_eligibility(frame, policy="PERMISSIVE")
+    strict = build_modeling_eligibility(frame, policy="STRICT")
+
+    assert permissive.final_eligible.tolist() == [True, False, False, True]
+    assert strict.final_eligible.tolist() == [True, False, False, False]
+
+
+def test_eligibility_funnel_reports_monotonic_rows_and_deltas():
+    frame = pd.DataFrame({
+        "price_amount_clean": [3_000_000.0, 4_000_000.0],
+        "price_quality_status": ["VALIDATED_EXISTING", "VALIDATED_EXISTING"],
+        "price_target_trust_status": ["TRUSTED_EXISTING", "TRUSTED_EXISTING"],
+        "price_model_value": [3_000_000.0, 4_000_000.0],
+        "price_model_suitability": ["SUPPORTED", "REVIEW"],
+        "area_value_clean": [20.0, 30.0],
+        "area_model_suitability": ["SUPPORTED", "SUPPORTED"],
+        "listing_intent": ["RENT", "RENT"],
+        "rental_scope": ["SINGLE_OR_ORDINARY_UNIT", "SINGLE_OR_ORDINARY_UNIT"],
+    })
+    masks = build_modeling_eligibility(frame, policy="PERMISSIVE")
+    funnel = eligibility_funnel(masks)
+
+    assert funnel.Stage.tolist() == [
+        "Silver rows", "Numeric target candidate", "Lineage trusted",
+        "Semantic target supported", "Area supported",
+        "Rental-compatible", "Final model eligible",
+    ]
+    assert funnel.Rows.tolist() == [2, 2, 2, 1, 1, 1, 1]
+    assert funnel["Removed / reviewed"].tolist() == [0, 0, 0, 1, 0, 0, 0]
+
+
+def test_shared_inference_eligibility_is_target_free_and_preserves_unknown_policy():
+    frame = pd.DataFrame({
+        "area_value_clean": [20.0, 20.0, 20.0, 20.0],
+        "area_model_suitability": ["SUPPORTED", "REVIEW", "SUPPORTED", "SUPPORTED"],
+        "listing_intent": ["RENT", "RENT", "UNKNOWN", "SALE"],
+        "rental_scope": [
+            "SINGLE_OR_ORDINARY_UNIT",
+            "SINGLE_OR_ORDINARY_UNIT",
+            "UNKNOWN",
+            "SINGLE_OR_ORDINARY_UNIT",
+        ],
+    })
+
+    permissive = build_inference_eligibility(frame, policy="PERMISSIVE")
+    strict = build_inference_eligibility(frame, policy="STRICT")
+    funnel = inference_eligibility_funnel(permissive)
+
+    assert permissive.final_eligible.tolist() == [True, False, True, False]
+    assert strict.final_eligible.tolist() == [True, False, False, False]
+    assert funnel["Rows"].tolist() == [4, 3, 2, 2]
 
 
 def _split_frame(rows: int = 60) -> pd.DataFrame:
@@ -260,6 +330,8 @@ def test_source_ablation_uses_locked_configuration_and_final_diagnostics_do_not_
 
 def test_notebook_04_consumes_canonical_numeric_trust_without_reparsing():
     text = (Path(__file__).resolve().parents[1] / "notebooks" / "utils" / "build_modeling_notebook.py").read_text()
-    assert "price_target_trust_status.isin(TRUSTED_PRICE_STATUSES)" in text
+    assert "build_modeling_eligibility(prepared,policy='PERMISSIVE')" in text
+    assert "price_model_suitability" in text
+    assert "area_model_suitability" in text
     assert "price_target_model_value" in text
     assert "parse_price(" not in text

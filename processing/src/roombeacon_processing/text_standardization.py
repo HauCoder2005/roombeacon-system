@@ -156,3 +156,20 @@ def apply_text_standardization(
     series = series.astype(object).where(series.notna(), None)
     result[target_col] = series
     return result
+
+
+def apply_text_standardization_batch(
+    df: pd.DataFrame,
+    columns: dict[str, str],
+) -> pd.DataFrame:
+    """Standardize several columns while evaluating each distinct value once."""
+    result = df.copy(deep=False)
+    combined = pd.concat(
+        [result[source_col] for source_col in columns], ignore_index=True
+    )
+    unique_values = pd.unique(combined.dropna())
+    standardized = {value: standardize_text(value) for value in unique_values}
+    for source_col, target_col in columns.items():
+        series = result[source_col].map(standardized)
+        result[target_col] = series.astype(object).where(series.notna(), None)
+    return result

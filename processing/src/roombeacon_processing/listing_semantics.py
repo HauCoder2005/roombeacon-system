@@ -153,7 +153,7 @@ def classify_listing_semantics(title: object) -> dict[str, str]:
     }
 
 def apply_listing_semantics(frame: pd.DataFrame, title_column: str = "title_clean") -> pd.DataFrame:
-    result = frame.copy()
+    result = frame.copy(deep=False)
     semantic = pd.DataFrame(
         [classify_listing_semantics(value) for value in result[title_column]],
         index=result.index,

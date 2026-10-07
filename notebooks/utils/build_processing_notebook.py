@@ -22,7 +22,7 @@ load_dotenv(PROJECT_ROOT/'.env',override=False)
 from analytics.duckdb.connection import resolve_runtime_path
 from roombeacon_crawler.config.get_env import env
 from notebooks.utils.location_analysis import haversine_distance_km
-from notebooks.utils.modeling_benchmark import TARGET,FORBIDDEN_PREDICTORS,audit_features,build_feature_sets
+from notebooks.utils.modeling_benchmark import TARGET,FORBIDDEN_PREDICTORS,audit_features,build_feature_sets,build_modeling_eligibility,eligibility_funnel
 pd.set_option('display.max_columns',30); SEED=42"""),
 md("## 01 Load Canonical Silver"),
 code("""SILVER_PATH=resolve_runtime_path(env.processing.silver_dir)/'rental_listings.parquet'
@@ -32,13 +32,15 @@ assert len(silver_df)>0 and silver_df.rental_post_id.notna().all() and silver_df
 display(pd.Series({'path':str(SILVER_PATH),'rows':len(silver_df),'columns':len(silver_df.columns)},name='value').to_frame())"""),
 md("## 02 Analytical eligibility and diagnostic-only variables"),
 code("""processed_df=silver_df.copy()
-processed_df['analytical_price_eligible']=processed_df[TARGET].notna()
-processed_df['analytical_area_eligible']=processed_df.area_value_clean.notna()
-processed_df['model_base_eligible']=processed_df.analytical_price_eligible&processed_df.analytical_area_eligible&processed_df.row_quality_status.ne('REQUIRES_REVIEW')
+processing_masks=build_modeling_eligibility(processed_df,policy='PERMISSIVE')
+processed_df['analytical_price_eligible']=processing_masks.semantic_target_supported
+processed_df['analytical_area_eligible']=processing_masks.area_supported
+processed_df['model_base_eligible']=processing_masks.final_eligible
 price=pd.to_numeric(processed_df[TARGET],errors='coerce'); area=pd.to_numeric(processed_df.area_value_clean,errors='coerce')
 processed_df['price_per_area_analysis']=price/area.where(area.gt(0))
 processed_df.loc[~np.isfinite(processed_df.price_per_area_analysis),'price_per_area_analysis']=np.nan
 display(processed_df[['analytical_price_eligible','analytical_area_eligible','model_base_eligible']].sum().to_frame('rows'))
+display(eligibility_funnel(processing_masks))
 display(processed_df.price_per_area_analysis.describe().to_frame())
 display(Markdown('`price_per_area_analysis` is **TARGET-DERIVED / ANALYSIS-ONLY** and is programmatically forbidden from every modeling feature set.'))"""),
 md("## 03 Optional trusted spatial diagnostic"),
@@ -66,7 +68,7 @@ contract_summary=pd.DataFrame([
  {'Contract Item':'Grouping key source','Fields':'duplicate_candidate_group, falling back to rental_post_id in Notebook 04'},
  {'Contract Item':'Chronological time','Fields':'latest_observed_at'},
  {'Contract Item':'Analysis-only','Fields':'price_per_area_analysis, distance_km_analysis'},
- {'Contract Item':'Eligibility/audit','Fields':'listing_intent, rental_scope, price_target_trust_status/reason/evidence, price_model_value; not predictors'},
+ {'Contract Item':'Eligibility/audit','Fields':'listing_intent, rental_scope, price_target_trust_status, price_model_suitability, area_model_suitability, admin_consistency_status; not predictors'},
  {'Contract Item':'Excluded/leakage','Fields':', '.join(excluded)},
  {'Contract Item':'Split owner','Fields':'Notebook 04 only'},
 ])

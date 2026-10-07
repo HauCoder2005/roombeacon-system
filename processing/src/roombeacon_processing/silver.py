@@ -22,7 +22,7 @@ from .price_area_validation import (
     evaluate_price_model_suitability,
     evaluate_price_target_trust,
 )
-from .text_standardization import apply_text_standardization
+from .text_standardization import apply_text_standardization_batch
 from .ward_normalization import apply_admin_consistency_audit, apply_ward_mapping
 
 
@@ -115,6 +115,32 @@ def _group_key(frame: pd.DataFrame, fields: list[str], rule: str) -> pd.Series:
     return hashed.map(lambda value: f"{rule}:{int(value):016x}")
 
 
+def _compact_derived_strings(frame: pd.DataFrame, raw_columns: list[str]) -> None:
+    """Use dictionary encoding when it reduces a derived string column in memory."""
+    object_contract_columns = {
+        "full_address_text_clean",
+        "location_raw_clean",
+        "best_address_text_clean",
+        "title_clean",
+        "ward_mapping_candidates",
+        "admin_consistency_candidates",
+    }
+    for column in frame.columns:
+        if column in raw_columns or column in object_contract_columns:
+            continue
+        series = frame[column]
+        if not (
+            pd.api.types.is_string_dtype(series.dtype)
+            or pd.api.types.is_object_dtype(series.dtype)
+        ):
+            continue
+        categorical = series.astype("category")
+        if categorical.memory_usage(index=False, deep=True) < series.memory_usage(
+            index=False, deep=True
+        ):
+            frame[column] = categorical
+
+
 def build_silver_dataset(bronze: pd.DataFrame, evidence: pd.DataFrame) -> pd.DataFrame:
     """Return one enriched Silver row per Bronze ``rental_post_id``.
 
@@ -127,14 +153,21 @@ def build_silver_dataset(bronze: pd.DataFrame, evidence: pd.DataFrame) -> pd.Dat
     if bronze.rental_post_id.isna().any() or not bronze.rental_post_id.is_unique:
         raise SilverQualityGateError("Bronze rental_post_id must be non-null and unique")
 
-    raw = bronze.reset_index(drop=True).copy(deep=True)
-    evidence = evidence.reset_index(drop=True).copy(deep=True)
+    canonical_index = pd.RangeIndex(len(bronze))
+    raw = bronze if bronze.index.equals(canonical_index) else bronze.reset_index(drop=True)
+    evidence = (
+        evidence
+        if evidence.index.equals(canonical_index)
+        else evidence.reset_index(drop=True)
+    )
     if len(evidence) != len(raw) or not evidence.rental_post_id.equals(raw.rental_post_id):
         raise SilverQualityGateError("Numeric evidence must align one-to-one with Bronze identity")
 
-    result = raw.copy(deep=True)
-    for field in ["title_raw", "full_address_text", "location_raw", "best_address_text"]:
-        result = apply_text_standardization(result, field, f"{field}_clean")
+    result = raw.copy(deep=False)
+    text_fields = ["title_raw", "full_address_text", "location_raw", "best_address_text"]
+    result = apply_text_standardization_batch(
+        result, {field: f"{field}_clean" for field in text_fields}
+    )
 
     title_length = result.title_raw_clean.astype("string").str.len()
     result["title_clean"] = result.pop("title_raw_clean")
@@ -155,6 +188,7 @@ def build_silver_dataset(bronze: pd.DataFrame, evidence: pd.DataFrame) -> pd.Dat
     result = apply_admin_consistency_audit(
         result, "ward_text_extracted", "district_text_extracted", "ward_current"
     )
+    _compact_derived_strings(result, list(raw.columns))
 
     price_audit = validate_numeric_candidates(raw, evidence, "price")
     area_audit = validate_numeric_candidates(raw, evidence, "area")
@@ -227,6 +261,7 @@ def build_silver_dataset(bronze: pd.DataFrame, evidence: pd.DataFrame) -> pd.Dat
     result["price_target_trust_evidence"] = pd.Series(trust_evidence, index=result.index, dtype="string")
     result["price_model_value"] = pd.Series(model_values, index=result.index, dtype="Float64")
     result["price_target_model_value"] = result["price_model_value"]
+    _compact_derived_strings(result, list(raw.columns))
 
     price_outlier = _iqr_outlier(result.price_amount_clean)
     area_outlier = _iqr_outlier(result.area_value_clean)
@@ -253,6 +288,7 @@ def build_silver_dataset(bronze: pd.DataFrame, evidence: pd.DataFrame) -> pd.Dat
     result["price_semantic_status"] = pd.Series([item[0] for item in price_suitability], index=result.index, dtype="string")
     result["price_model_suitability"] = pd.Series([item[1] for item in price_suitability], index=result.index, dtype="string")
     result["price_semantic_evidence"] = pd.Series([item[2] for item in price_suitability], index=result.index, dtype="string")
+    _compact_derived_strings(result, list(raw.columns))
 
     result = audit_coordinate_trust(result, address_col="full_address_text")
     result["coordinate_quality_status"] = np.select(
@@ -260,6 +296,7 @@ def build_silver_dataset(bronze: pd.DataFrame, evidence: pd.DataFrame) -> pd.Dat
         ["USABLE", "INVALID"],
         default="UNTRUSTED",
     )
+    _compact_derived_strings(result, list(raw.columns))
 
     price = pd.to_numeric(result.price_amount_clean, errors="coerce")
     area = pd.to_numeric(result.area_value_clean, errors="coerce")
@@ -367,6 +404,7 @@ def build_silver_dataset(bronze: pd.DataFrame, evidence: pd.DataFrame) -> pd.Dat
     result["row_quality_status"] = np.select(
         [requires_review, has_flags], ["REQUIRES_REVIEW", "READY_WITH_FLAGS"], default="READY"
     )
+    _compact_derived_strings(result, list(raw.columns))
     return result
 
 
