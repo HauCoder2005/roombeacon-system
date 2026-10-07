@@ -107,3 +107,21 @@ def test_reader_account_gets_a_readonly_profile_with_a_larger_result_cap():
     # The loader keeps the stricter default profile.
     loader_line = next(l for l in script.splitlines() if "WAREHOUSE_CLICKHOUSE_USER}\\` IDENTIFIED" in l)
     assert "SETTINGS PROFILE" not in loader_line
+
+
+def test_clickhouse_listens_on_ipv4_only_inside_the_container():
+    # Docker networks here have IPv6 disabled; the default [::] listeners only
+    # produce startup warnings. Exposure is still limited by the loopback port map.
+    import xml.etree.ElementTree as ET
+
+    override = ROOT / "infrastructure/clickhouse/config.d/docker_related_config.xml"
+    config = ET.parse(override).getroot()
+
+    # Overrides the image file of the same name instead of merging with it.
+    assert [e.text for e in config.findall("listen_host")] == ["0.0.0.0"]
+    assert (
+        '"./infrastructure/clickhouse/config.d/docker_related_config.xml:'
+        '/etc/clickhouse-server/config.d/docker_related_config.xml:ro"'
+    ) in _service_block("clickhouse")
+    roombeacon = ET.parse(ROOT / "infrastructure/clickhouse/config.d/roombeacon.xml").getroot()
+    assert roombeacon.find("listen_host") is None

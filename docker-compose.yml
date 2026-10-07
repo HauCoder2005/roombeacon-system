@@ -1354,6 +1354,7 @@ services:
       - "127.0.0.1:8123:8123"
     volumes:
       - "roombeacon-clickhouse-data:/var/lib/clickhouse"
+      - "./infrastructure/clickhouse/config.d/docker_related_config.xml:/etc/clickhouse-server/config.d/docker_related_config.xml:ro"
       - "./infrastructure/clickhouse/config.d/roombeacon.xml:/etc/clickhouse-server/config.d/roombeacon.xml:ro"
       - "./infrastructure/clickhouse/users.d/roombeacon-limits.xml:/etc/clickhouse-server/users.d/roombeacon-limits.xml:ro"
       - "./infrastructure/clickhouse/initdb:/docker-entrypoint-initdb.d:ro"
