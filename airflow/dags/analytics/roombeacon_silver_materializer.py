@@ -1,7 +1,10 @@
-"""Schedule canonical RoomBeacon Silver construction and file publication.
+"""DEPRECATED: legacy direct-database Silver materializer; retain but pause manually.
 
 Airflow owns ordering and retries. The shared notebook utilities own Bronze
 cleaning and the pre-Silver gate; Parquet is the persistent Silver checkpoint.
+
+Use ``roombeacon_silver_build`` after rebuilding the Airflow image. This DAG is
+kept for rollback visibility and is intentionally not deleted or auto-paused.
 """
 
 import json
