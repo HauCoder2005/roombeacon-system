@@ -522,11 +522,18 @@ def load_bronze_observations(snapshot_dir: Path) -> tuple[pd.DataFrame, dict[str
 
 
 _VERSION_BOUND = "%(max_version_id)s"
+# Key-range pagination on the primary key: every statement returns at most
+# FETCH_BATCH_ROWS rows and is individually capped by MAX_EXECUTION_TIME, so
+# one slow scan (e.g. while the reconciler is writing) cannot hold a single
+# huge result set or exceed the socket read timeout. All pages are read in
+# the same consistent snapshot, so they form one coherent population.
+_PAGE_MARKER = "%(after_id)s"
+_PAGE = f"id > {_PAGE_MARKER} ORDER BY id LIMIT %(page_rows)s"
 BRONZE_QUERIES: dict[str, str] = {
     "platforms": "SELECT id, code, name FROM platforms",
     "rental_posts": (
         "SELECT id, platform_id, platform_post_id, first_observed_at, "
-        "last_observed_at FROM rental_posts"
+        f"last_observed_at FROM rental_posts WHERE {_PAGE}"
     ),
     "rental_post_versions": f"""
         SELECT id, rental_post_id, crawl_run_id, observed_at, url, title_raw,
@@ -541,21 +548,21 @@ BRONZE_QUERIES: dict[str, str] = {
                  )
                ) AS source_payload
         FROM rental_post_versions
-        WHERE id <= {_VERSION_BOUND}
+        WHERE id <= {_VERSION_BOUND} AND {_PAGE}
     """,
     "post_prices": (
         "SELECT id, rental_post_id, rental_post_version_id, price_raw, "
         "price_amount, currency, period FROM post_prices "
-        f"WHERE rental_post_version_id <= {_VERSION_BOUND}"
+        f"WHERE rental_post_version_id <= {_VERSION_BOUND} AND {_PAGE}"
     ),
     "post_addresses": (
         "SELECT id, rental_post_id, rental_post_version_id, full_address_text, "
         "created_at FROM post_addresses "
-        f"WHERE rental_post_version_id <= {_VERSION_BOUND}"
+        f"WHERE rental_post_version_id <= {_VERSION_BOUND} AND {_PAGE}"
     ),
     "post_details": (
         "SELECT id, rental_post_id, rental_post_version_id, area_raw, area_value "
-        f"FROM post_details WHERE rental_post_version_id <= {_VERSION_BOUND}"
+        f"FROM post_details WHERE rental_post_version_id <= {_VERSION_BOUND} AND {_PAGE}"
     ),
 }
 
@@ -611,33 +618,39 @@ def _stream_into_duckdb(
     mysql: Any, duck: duckdb.DuckDBPyConnection, name: str, query: str,
     params: dict[str, Any] | None,
 ) -> int:
-    """Copy one MySQL result set into a DuckDB staging table, batch by batch."""
+    """Copy one MySQL table into a DuckDB staging table, page by page."""
     schema = STAGING_SCHEMAS[name]
     expected = [column for column, _ in schema]
     duck.execute(
         f"CREATE TABLE {name} (" + ", ".join(f'"{c}" {t}' for c, t in schema) + ")"
     )
     projection = ", ".join(f'CAST("{c}" AS {t}) AS "{c}"' for c, t in schema)
-    started, rows = time.perf_counter(), 0
+    paged = _PAGE_MARKER in query
+    started, rows, after_id = time.perf_counter(), 0, 0
     try:
-        with mysql.cursor() as cursor:
-            cursor.execute(query, params)
-            columns = [description[0] for description in cursor.description]
-            if columns != expected:
-                raise BronzeSnapshotError(f"Unexpected {name} columns: {columns}")
-            while True:
-                batch = cursor.fetchmany(FETCH_BATCH_ROWS)
-                if not batch:
-                    break
+        while True:
+            bind = dict(params or {})
+            if paged:
+                bind.update(after_id=after_id, page_rows=int(FETCH_BATCH_ROWS))
+            with mysql.cursor() as cursor:
+                cursor.execute(query, bind or None)
+                columns = [description[0] for description in cursor.description]
+                if columns != expected:
+                    raise BronzeSnapshotError(f"Unexpected {name} columns: {columns}")
+                batch = cursor.fetchmany(FETCH_BATCH_ROWS) if paged else cursor.fetchall()
+            if batch:
                 frame = pd.DataFrame.from_records(batch, columns=columns)
-                del batch
                 for column in NUMERIC_COLUMNS & set(columns):
                     frame[column] = pd.to_numeric(frame[column], errors="coerce")
                 duck.register("_batch", frame)
                 duck.execute(f"INSERT INTO {name} SELECT {projection} FROM _batch")
                 duck.unregister("_batch")
                 rows += len(frame)
+                after_id = int(frame["id"].iloc[-1])
                 del frame
+            if not paged or len(batch) < FETCH_BATCH_ROWS:
+                break
+            del batch
     except BronzeSnapshotError:
         raise
     except Exception as exc:
@@ -646,6 +659,15 @@ def _stream_into_duckdb(
         ) from exc
     print(f"Extracted {name}: {rows:,} rows in {time.perf_counter() - started:.2f}s")
     return rows
+
+
+def _release(mysql: Any) -> None:
+    """End the read transaction; a dead link must not mask the real error."""
+    for action in (mysql.rollback, mysql.close):
+        try:
+            action()
+        except Exception:
+            pass
 
 
 def extract_bronze_to_duckdb(
@@ -671,8 +693,7 @@ def extract_bronze_to_duckdb(
             _stream_into_duckdb(mysql, duck, name, query, bound if _VERSION_BOUND in query else None)
         return watermark, True
     finally:
-        mysql.rollback()
-        mysql.close()
+        _release(mysql)
 
 
 def extract_bronze_frames(

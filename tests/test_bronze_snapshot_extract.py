@@ -115,6 +115,12 @@ class FakeCursor:
         for name in ("rental_post_versions", "post_prices", "post_addresses", "post_details", "rental_posts", "platforms"):
             if f"FROM {name.upper()}" in normalized:
                 frame = self.conn.tables[name]
+                params = params or {}
+                if "max_version_id" in params:
+                    key = "id" if name == "rental_post_versions" else "rental_post_version_id"
+                    frame = frame[frame[key] <= params["max_version_id"]]
+                if "after_id" in params:
+                    frame = frame[frame["id"] > params["after_id"]].sort_values("id").head(params["page_rows"])
                 self.description = [(column,) for column in frame.columns]
                 self._rows = [tuple(row) for row in frame.itertuples(index=False)]
                 return
@@ -189,10 +195,12 @@ def test_extraction_is_bounded_by_watermark_inside_read_only_snapshot():
         if any(f"FROM {name}" in sql for name in ("rental_post_versions", "post_prices", "post_addresses", "post_details"))
         and "MAX(id)" not in sql
     ]
-    assert len(bounded) == 4
+    assert {sql.split(" FROM ")[1].split()[0] for sql, _ in bounded} == {
+        "rental_post_versions", "post_prices", "post_addresses", "post_details"
+    }
     for sql, params in bounded:
         assert "%(max_version_id)s" in sql
-        assert params == {"max_version_id": 103}
+        assert params["max_version_id"] == 103
     assert connection.rolled_back is True
     assert set(frames) == {
         "platforms", "rental_posts", "rental_post_versions",
@@ -349,3 +357,48 @@ def test_dags_use_the_airflow_sdk_skip_exception():
         source = (ROOT / "airflow/dags/analytics" / dag).read_text(encoding="utf-8")
         assert "from airflow.sdk.exceptions import AirflowSkipException" in source
         assert "from airflow.exceptions import" not in source
+
+
+def test_large_tables_are_read_in_bounded_key_range_pages(monkeypatch):
+    monkeypatch.setattr(snap, "FETCH_BATCH_ROWS", 2)
+    tables = _tables()
+    connection = FakeConnection(tables)
+
+    frames, _ = snap.extract_bronze_frames(connection)
+
+    for name in ("rental_posts", "rental_post_versions", "post_prices", "post_addresses", "post_details"):
+        pages = [
+            (sql, p) for sql, p in connection.executed
+            if f"FROM {name} " in sql + " " and "MAX(id)" not in sql
+        ]
+        assert pages, name
+        for sql, params in pages:
+            assert "id > %(after_id)s" in sql and "ORDER BY id LIMIT %(page_rows)s" in sql, sql
+            assert params["page_rows"] == 2
+        # Pages continue after the last id seen and stop on a short page.
+        assert [p["after_id"] for _, p in pages][0] == 0
+        assert len(frames[name]) == len(tables[name])
+    versions = [
+        p["after_id"] for sql, p in connection.executed
+        if "FROM rental_post_versions " in sql + " " and "MAX(id)" not in sql
+    ]
+    assert versions == [0, 102]
+
+
+def test_failed_rollback_does_not_mask_the_original_error():
+    class Broken(FakeConnection):
+        def rollback(self):
+            raise RuntimeError("connection already lost")
+
+    class Timeout(FakeCursor):
+        def execute(self, sql, params=None):
+            if "FROM post_prices" in sql:
+                raise TimeoutError("timed out")
+            return super().execute(sql, params)
+
+    connection = Broken(_tables())
+    connection.cursor = lambda: Timeout(connection)
+
+    with pytest.raises(snap.BronzeSnapshotError, match="post_prices: TimeoutError"):
+        snap.extract_bronze_frames(connection)
+    assert connection.closed is True
