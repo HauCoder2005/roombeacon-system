@@ -841,9 +841,11 @@ services:
 
     restart: "${DOCKER_RESTART_POLICY}"
 
-    mem_limit: "768m"
+    # Raised from 768m: Silver build peaks ~856MB RSS and runs here next to
+    # the crawler (LocalExecutor). Measured 2026-10-07.
+    mem_limit: "1536m"
     mem_reservation: "384m"
-    memswap_limit: "1280m"
+    memswap_limit: "2048m"
     mem_swappiness: 40
     cpus: 1.0
 

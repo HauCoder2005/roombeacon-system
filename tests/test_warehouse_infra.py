@@ -125,3 +125,12 @@ def test_clickhouse_listens_on_ipv4_only_inside_the_container():
     ) in _service_block("clickhouse")
     roombeacon = ET.parse(ROOT / "infrastructure/clickhouse/config.d/roombeacon.xml").getroot()
     assert roombeacon.find("listen_host") is None
+
+
+def test_scheduler_memory_fits_silver_build_alongside_the_crawler():
+    # Silver build peaks ~856MB RSS (measured 2026-10-07) on top of the
+    # scheduler's ~385MB idle footprint; 768MB OOM-killed it.
+    block = _service_block("airflow-scheduler")
+
+    assert 'mem_limit: "1536m"' in block
+    assert 'memswap_limit: "2048m"' in block
