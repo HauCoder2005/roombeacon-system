@@ -358,8 +358,8 @@ def load_bronze_snapshot(snapshot_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame
     return latest, evidence, context
 
 
-def load_bronze_observations(snapshot_dir: Path) -> tuple[pd.DataFrame, dict[str, Any]]:
-    """Load the version-level observation history published with a snapshot."""
+def verify_bronze_observations(snapshot_dir: Path) -> tuple[Path, dict[str, Any]]:
+    """Verify observations.parquet against snapshot metadata without loading it."""
     snapshot_dir = Path(snapshot_dir)
     metadata_path = snapshot_dir / METADATA_FILE
     path = snapshot_dir / OBSERVATIONS_FILE
@@ -379,14 +379,28 @@ def load_bronze_observations(snapshot_dir: Path) -> tuple[pd.DataFrame, dict[str
         )
     if _sha256(path) != expected:
         raise BronzeSnapshotError("Bronze snapshot file does not match metadata: observations")
-    observations = _read_parquet(path)
-    missing = set(REQUIRED_OBSERVATION_COLUMNS) - set(observations.columns)
+    connection = duckdb.connect(":memory:")
+    try:
+        columns = {
+            row[0] for row in connection.execute(
+                "DESCRIBE SELECT * FROM read_parquet(?)", [str(path)]
+            ).fetchall()
+        }
+        (rows,) = connection.execute("SELECT COUNT(*) FROM read_parquet(?)", [str(path)]).fetchone()
+    finally:
+        connection.close()
+    missing = set(REQUIRED_OBSERVATION_COLUMNS) - columns
     if missing:
         raise BronzeSnapshotError(f"Observation history contract is incomplete: {sorted(missing)}")
-    if len(observations) != metadata.get("observation_row_count"):
+    if rows != metadata.get("observation_row_count"):
         raise BronzeSnapshotError("Bronze snapshot metadata mismatch for observation_row_count")
-    context = {**metadata, "observations_path": str(path.resolve())}
-    return observations, context
+    return path.resolve(), {**metadata, "observations_path": str(path.resolve())}
+
+
+def load_bronze_observations(snapshot_dir: Path) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """Load the version-level observation history published with a snapshot."""
+    path, context = verify_bronze_observations(snapshot_dir)
+    return _read_parquet(path), context
 
 
 def _read_mysql_frame(

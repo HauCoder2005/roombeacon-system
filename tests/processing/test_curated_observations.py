@@ -235,3 +235,21 @@ def test_failed_publication_restores_previous_output(tmp_path, monkeypatch):
 
     assert (output_dir / "_metadata.json").read_bytes() == before
     assert not list(tmp_path.glob(".curated_observations.*"))
+
+
+def test_published_files_store_columns_in_contract_order(tmp_path):
+    snapshot_dir, silver_dir = _write_inputs(tmp_path)
+    output_dir = tmp_path / "curated_observations"
+    build_curated_observations(snapshot_dir, silver_dir, output_dir)
+
+    connection = duckdb.connect()
+    try:
+        columns = [
+            row[0] for row in connection.execute(
+                "DESCRIBE SELECT * FROM read_parquet(?, hive_partitioning = false)",
+                [str(output_dir / "**" / "*.parquet")],
+            ).fetchall()
+        ]
+    finally:
+        connection.close()
+    assert columns == list(CURATED_COLUMNS)

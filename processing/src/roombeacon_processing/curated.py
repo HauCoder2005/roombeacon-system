@@ -22,10 +22,9 @@ from typing import Any
 from uuid import uuid4
 
 import duckdb
-import numpy as np
 import pandas as pd
 
-from analytics.bronze.snapshot import load_bronze_observations
+from analytics.bronze.snapshot import verify_bronze_observations
 
 from .price_area_validation import validate_area, validate_price
 
@@ -34,8 +33,12 @@ SCHEMA_VERSION = "1.0.0"
 METADATA_FILENAME = "_metadata.json"
 SILVER_FILENAME = "rental_listings.parquet"
 SILVER_METADATA_FILENAME = "rental_listings.metadata.json"
-DUCKDB_MEMORY_LIMIT = "512MB"
-DUCKDB_THREADS = 2
+# Measured on ~400k observations: 256MB/1 thread peaks near 370MB RSS, which
+# fits the low-RAM Airflow scheduler; larger inputs spill to temp_directory.
+# The partitioned COPY must not carry a global ORDER BY: that sort cannot
+# spill and was the out-of-memory point below ~320MB.
+DUCKDB_MEMORY_LIMIT = "256MB"
+DUCKDB_THREADS = 1
 
 # Silver column -> curated column (post-level attributes of the latest state).
 SILVER_ATTRIBUTES: dict[str, str] = {
@@ -109,64 +112,106 @@ class CuratedBuildResult:
         return asdict(self)
 
 
-def _status_map(values: pd.Series, rule) -> pd.Series:
-    """Apply a scalar Decimal validator once per distinct value."""
-    unique = values.drop_duplicates()
-    mapping = {
-        value: rule(None if pd.isna(value) else Decimal(str(value))) for value in unique
-    }
-    return values.map(mapping)
+def _sql_literals(values) -> str:
+    return ", ".join("'" + v.replace("'", "''") + "'" for v in sorted(values))
 
 
-def _changed(current: pd.Series, previous: pd.Series, has_previous: pd.Series) -> pd.Series:
-    same = (current == previous) | (current.isna() & previous.isna())
-    return has_previous & ~same
+# Single definition used for both in-memory frames and Parquet inputs. The
+# window keeps version order per post; LAG gives null-safe change detection.
+CURATE_SQL = f"""
+WITH ordered AS (
+    SELECT o.*,
+           ROW_NUMBER() OVER w AS version_seq,
+           LAG(o.content_hash) OVER w AS previous_content_hash,
+           LAG(CAST(o.price_amount AS DOUBLE)) OVER w AS previous_price_amount
+    FROM observations o
+    WINDOW w AS (PARTITION BY o.rental_post_id ORDER BY o.observed_at, o.observation_id)
+)
+SELECT
+    CAST(o.observation_id AS BIGINT) AS observation_id,
+    CAST(o.rental_post_id AS BIGINT) AS rental_post_id,
+    o.source_code,
+    o.source_listing_id,
+    o.crawl_run_id,
+    CAST(o.observed_at AS TIMESTAMP) AS observed_at,
+    CAST(o.observed_at AS DATE) AS observed_date,
+    CAST(o.version_seq AS BIGINT) AS version_seq,
+    o.content_hash,
+    (o.version_seq = 1 OR o.content_hash IS DISTINCT FROM o.previous_content_hash) AS is_content_change,
+    (o.version_seq > 1
+     AND CAST(o.price_amount AS DOUBLE) IS DISTINCT FROM o.previous_price_amount) AS is_price_change,
+    o.ingestion_origin,
+    CAST(o.price_amount AS DOUBLE) AS price_amount,
+    o.currency,
+    o.period,
+    ps.status AS price_status,
+    CAST(o.area_value AS DOUBLE) AS area_value,
+    ast.status AS area_status,
+    CASE WHEN ps.status = 'ACCEPTED_CLEAN' AND ast.status = 'ACCEPTED_CLEAN'
+         THEN CAST(o.price_amount AS DOUBLE) / CAST(o.area_value AS DOUBLE) END AS price_per_m2,
+    {", ".join(
+        f"COALESCE(s.{src}, FALSE) AS {dst}" if dst == "has_trusted_coordinate" else f"s.{src} AS {dst}"
+        for src, dst in SILVER_ATTRIBUTES.items()
+    )},
+    COALESCE(
+        ps.status = 'ACCEPTED_CLEAN'
+        AND s.price_model_suitability = 'SUPPORTED'
+        AND s.listing_intent IN ({_sql_literals(MARKET_INTENTS)}),
+        FALSE
+    ) AS is_market_eligible
+FROM ordered o
+JOIN silver s ON s.rental_post_id = o.rental_post_id
+LEFT JOIN price_status ps ON ps.value IS NOT DISTINCT FROM CAST(o.price_amount AS DOUBLE)
+LEFT JOIN area_status ast ON ast.value IS NOT DISTINCT FROM CAST(o.area_value AS DOUBLE)
+"""
+
+
+def _status_table(connection, column: str, rule) -> pd.DataFrame:
+    """Apply a scalar Silver Decimal validator once per distinct value."""
+    values = [
+        row[0] for row in connection.execute(
+            f"SELECT DISTINCT CAST({column} AS DOUBLE) FROM observations"
+        ).fetchall()
+    ]
+    return pd.DataFrame(
+        {
+            "value": pd.Series(values, dtype="float64"),
+            "status": [rule(None if v is None else Decimal(str(v))) for v in values],
+        }
+    )
+
+
+def _prepare(connection) -> None:
+    """Validate inputs registered as ``observations``/``silver``; add status tables."""
+    silver_columns = {row[0] for row in connection.execute("DESCRIBE silver").fetchall()}
+    missing = set(SILVER_ATTRIBUTES) - silver_columns
+    if missing:
+        raise CuratedBuildError(f"Silver is missing curated attributes: {sorted(missing)}")
+    rows, distinct = connection.execute(
+        "SELECT COUNT(*), COUNT(DISTINCT rental_post_id) FROM silver"
+    ).fetchone()
+    if rows != distinct:
+        raise CuratedBuildError("Silver must have one row per rental_post_id")
+    (absent,) = connection.execute(
+        "SELECT COUNT(DISTINCT o.rental_post_id) FROM observations o "
+        "ANTI JOIN silver s ON s.rental_post_id = o.rental_post_id"
+    ).fetchone()
+    if absent:
+        raise CuratedBuildError(f"{absent} observed rental_post_id values are absent from Silver")
+    connection.register("price_status", _status_table(connection, "price_amount", validate_price))
+    connection.register("area_status", _status_table(connection, "area_value", validate_area))
 
 
 def curate_observations(observations: pd.DataFrame, silver: pd.DataFrame) -> pd.DataFrame:
     """Return one curated row per observation, ordered by observation_id."""
-    missing = set(SILVER_ATTRIBUTES) - set(silver.columns)
-    if missing:
-        raise CuratedBuildError(f"Silver is missing curated attributes: {sorted(missing)}")
-    attributes = silver[["rental_post_id", *SILVER_ATTRIBUTES]].rename(columns=SILVER_ATTRIBUTES)
-    if not attributes.rental_post_id.is_unique:
-        raise CuratedBuildError("Silver must have one row per rental_post_id")
-    absent = set(observations.rental_post_id) - set(attributes.rental_post_id)
-    if absent:
-        raise CuratedBuildError(
-            f"{len(absent)} observed rental_post_id values are absent from Silver"
-        )
-
-    frame = observations.copy()
-    frame["observed_at"] = pd.to_datetime(frame["observed_at"])
-    frame = frame.sort_values(["rental_post_id", "observed_at", "observation_id"], kind="stable")
-    by_post = frame.groupby("rental_post_id", sort=False)
-    frame["version_seq"] = by_post.cumcount().add(1).astype("int64")
-    has_previous = frame["version_seq"].gt(1)
-    frame["is_content_change"] = ~has_previous | _changed(
-        frame["content_hash"], by_post["content_hash"].shift(), has_previous
-    )
-    frame["is_price_change"] = _changed(
-        frame["price_amount"], by_post["price_amount"].shift(), has_previous
-    )
-    frame["observed_date"] = frame["observed_at"].dt.date
-
-    frame["price_status"] = _status_map(frame["price_amount"], validate_price)
-    frame["area_status"] = _status_map(frame["area_value"], validate_area)
-    clean_pair = frame.price_status.eq("ACCEPTED_CLEAN") & frame.area_status.eq("ACCEPTED_CLEAN")
-    frame["price_per_m2"] = np.where(
-        clean_pair, frame["price_amount"] / frame["area_value"], np.nan
-    )
-
-    frame = frame.merge(attributes, on="rental_post_id", how="left", validate="many_to_one")
-    frame["has_trusted_coordinate"] = frame["has_trusted_coordinate"].fillna(False).astype(bool)
-    frame["is_market_eligible"] = (
-        frame.price_status.eq("ACCEPTED_CLEAN")
-        & frame.post_price_model_suitability.eq("SUPPORTED")
-        & frame.listing_intent.isin(MARKET_INTENTS)
-    )
-    frame = frame.sort_values("observation_id", kind="stable").reset_index(drop=True)
-    return frame[list(CURATED_COLUMNS)]
+    connection = _connect()
+    try:
+        connection.register("observations", observations)
+        connection.register("silver", silver)
+        _prepare(connection)
+        return connection.execute(f"{CURATE_SQL} ORDER BY observation_id").df()[list(CURATED_COLUMNS)]
+    finally:
+        connection.close()
 
 
 def _sha256(path: Path) -> str:
@@ -177,14 +222,21 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _connect() -> duckdb.DuckDBPyConnection:
+def _connect(temp_directory: Path | None = None) -> duckdb.DuckDBPyConnection:
     connection = duckdb.connect(":memory:")
     connection.execute(f"SET memory_limit = '{DUCKDB_MEMORY_LIMIT}'")
     connection.execute(f"SET threads = {int(DUCKDB_THREADS)}")
+    connection.execute("SET preserve_insertion_order = false")
+    if temp_directory is not None:
+        connection.execute(f"SET temp_directory = {_path_literal(temp_directory)}")
     return connection
 
 
-def _load_silver(silver_dir: Path) -> tuple[pd.DataFrame, dict[str, Any]]:
+def _path_literal(path: Path) -> str:
+    return "'" + str(path).replace("'", "''") + "'"
+
+
+def _verified_silver(silver_dir: Path) -> tuple[Path, dict[str, Any]]:
     silver_path = Path(silver_dir) / SILVER_FILENAME
     metadata_path = Path(silver_dir) / SILVER_METADATA_FILENAME
     if not silver_path.is_file() or not metadata_path.is_file():
@@ -193,75 +245,82 @@ def _load_silver(silver_dir: Path) -> tuple[pd.DataFrame, dict[str, Any]]:
     expected = metadata.get("output_sha256")
     if not expected or _sha256(silver_path) != expected:
         raise CuratedBuildError("Canonical Silver does not match its metadata output_sha256")
-    columns = ", ".join(f'"{name}"' for name in ("rental_post_id", *SILVER_ATTRIBUTES))
+    return silver_path, metadata
+
+
+def _write_partitions(connection, directory: Path) -> None:
+    connection.execute(
+        f"COPY ({CURATE_SQL}) TO ? "
+        "(FORMAT PARQUET, COMPRESSION ZSTD, PARTITION_BY (observed_date), "
+        "WRITE_PARTITION_COLUMNS true, FILENAME_PATTERN 'part_{i}')",
+        [str(directory)],
+    )
+
+
+def _verify_readback(directory: Path, expected_rows: int) -> dict[str, Any]:
     connection = _connect()
     try:
-        silver = connection.execute(
-            f"SELECT {columns} FROM read_parquet(?)", [str(silver_path)]
-        ).df()
-    finally:
-        connection.close()
-    return silver, metadata
-
-
-def _write_partitions(frame: pd.DataFrame, directory: Path) -> None:
-    connection = _connect()
-    try:
-        connection.register("_curated", frame)
-        connection.execute(
-            "COPY (SELECT * FROM _curated ORDER BY observed_date, observation_id) TO ? "
-            "(FORMAT PARQUET, COMPRESSION ZSTD, PARTITION_BY (observed_date), "
-            "WRITE_PARTITION_COLUMNS true, FILENAME_PATTERN 'part_{i}')",
-            [str(directory)],
-        )
-    finally:
-        connection.close()
-
-
-def _verify_readback(directory: Path, frame: pd.DataFrame) -> None:
-    connection = _connect()
-    try:
-        rows, ids, distinct_ids = connection.execute(
-            "SELECT COUNT(*), COUNT(observation_id), COUNT(DISTINCT observation_id) "
+        rows, ids, distinct_ids, posts, first, last = connection.execute(
+            "SELECT COUNT(*), COUNT(observation_id), COUNT(DISTINCT observation_id), "
+            "COUNT(DISTINCT rental_post_id), MIN(observed_at), MAX(observed_at) "
             "FROM read_parquet(?, hive_partitioning = false)",
             [str(directory / "**" / "*.parquet")],
         ).fetchone()
     finally:
         connection.close()
-    if not rows == ids == distinct_ids == len(frame):
+    if not rows == ids == distinct_ids == expected_rows:
         raise CuratedBuildError("Curated read-back does not preserve observation grain")
+    return {"row_count": rows, "post_count": posts, "min": str(first), "max": str(last)}
 
 
 def build_curated_observations(
     snapshot_dir: Path, silver_dir: Path, output_dir: Path
 ) -> CuratedBuildResult:
-    """Build curated observations from Parquet inputs and publish atomically."""
+    """Build curated observations from Parquet inputs and publish atomically.
+
+    The transformation runs inside DuckDB directly over the verified Parquet
+    files, so memory stays bounded by DUCKDB_MEMORY_LIMIT (spilling to disk)
+    rather than by the size of the observation history.
+    """
     started = time.perf_counter()
-    observations, snapshot = load_bronze_observations(Path(snapshot_dir))
-    silver, silver_metadata = _load_silver(Path(silver_dir))
+    observations_path, snapshot = verify_bronze_observations(Path(snapshot_dir))
+    silver_path, silver_metadata = _verified_silver(Path(silver_dir))
     silver_snapshot_id = (silver_metadata.get("source_snapshot") or {}).get("snapshot_id")
     if silver_snapshot_id != snapshot["snapshot_id"]:
         raise CuratedBuildError(
             f"Silver was built from snapshot {silver_snapshot_id}, "
             f"not the current snapshot {snapshot['snapshot_id']}"
         )
-    frame = curate_observations(observations, silver)
-    del observations, silver
 
     output_dir = Path(output_dir)
     output_dir.parent.mkdir(parents=True, exist_ok=True)
     token = uuid4().hex
     staging = output_dir.parent / f".{output_dir.name}.{token}.tmp"
     backup = output_dir.parent / f".{output_dir.name}.{token}.bak"
+    silver_projection = ", ".join(("rental_post_id", *SILVER_ATTRIBUTES))
     try:
         staging.mkdir()
-        _write_partitions(frame, staging)
-        _verify_readback(staging, frame)
+        spill = output_dir.parent / f".{output_dir.name}.{token}.spill"
+        connection = _connect(spill)
+        try:
+            # Views cannot take prepared parameters; paths are escaped literals.
+            connection.execute(
+                f"CREATE VIEW observations AS SELECT * FROM read_parquet({_path_literal(observations_path)})"
+            )
+            connection.execute(
+                f"CREATE VIEW silver AS SELECT {silver_projection} "
+                f"FROM read_parquet({_path_literal(silver_path)})"
+            )
+            _prepare(connection)
+            _write_partitions(connection, staging)
+        finally:
+            connection.close()
+            shutil.rmtree(spill, ignore_errors=True)
+        stats = _verify_readback(staging, int(snapshot["observation_row_count"]))
         files = {
             path.relative_to(staging).as_posix(): {"sha256": _sha256(path)}
             for path in sorted(staging.rglob("*.parquet"))
         }
-        observed = frame["observed_at"]
         metadata = {
             "dataset_name": "listing_observations",
             "layer": "historical_curated_observations",
@@ -271,10 +330,10 @@ def build_curated_observations(
             "source_snapshot_id": snapshot["snapshot_id"],
             "source_watermark": snapshot.get("watermark"),
             "silver_output_sha256": silver_metadata["output_sha256"],
-            "row_count": len(frame),
-            "post_count": int(frame["rental_post_id"].nunique()),
-            "min_observed_at": str(observed.min()),
-            "max_observed_at": str(observed.max()),
+            "row_count": stats["row_count"],
+            "post_count": stats["post_count"],
+            "min_observed_at": stats["min"],
+            "max_observed_at": stats["max"],
             "partitioning": "observed_date",
             "columns": list(CURATED_COLUMNS),
             "files": files,
