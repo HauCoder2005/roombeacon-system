@@ -25,13 +25,17 @@ SILVER_RENTAL_LISTINGS_ASSET = Asset("silver_rental_listings")
     start_date=datetime(2026, 10, 1, tzinfo=timezone.utc),
     catchup=False,
     max_active_runs=1,
-    dagrun_timeout=timedelta(minutes=90),
+    # Queue time counts: PARALLELISM=2 slots can be held by crawler tasks
+    # (up to 180 min), so budget one crawler task plus every attempt.
+    dagrun_timeout=timedelta(hours=8),
     tags=["roombeacon", "analytics", "silver", "asset", "snapshot"],
 )
 def roombeacon_silver_build():
     @task(
         outlets=[SILVER_RENTAL_LISTINGS_ASSET],
         pool="duckdb_analytics_pool",
+        priority_weight=100,
+        weight_rule="absolute",
         execution_timeout=timedelta(minutes=75),
         retries=2,
         retry_delay=timedelta(minutes=5),

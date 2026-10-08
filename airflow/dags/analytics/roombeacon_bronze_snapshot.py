@@ -26,13 +26,17 @@ BRONZE_SNAPSHOT_ASSET = Asset("bronze_snapshot")
     start_date=datetime(2026, 10, 1, tzinfo=timezone.utc),
     catchup=False,
     max_active_runs=1,
-    dagrun_timeout=timedelta(minutes=60),
+    # Queue time counts: PARALLELISM=2 slots can be held by crawler tasks
+    # (up to 180 min), so budget one crawler task plus every attempt.
+    dagrun_timeout=timedelta(hours=6),
     tags=["roombeacon", "analytics", "bronze", "snapshot", "asset"],
 )
 def roombeacon_bronze_snapshot():
     @task(
         outlets=[BRONZE_SNAPSHOT_ASSET],
         pool="duckdb_analytics_pool",
+        priority_weight=100,
+        weight_rule="absolute",
         execution_timeout=timedelta(minutes=45),
         retries=2,
         retry_delay=timedelta(minutes=5),
