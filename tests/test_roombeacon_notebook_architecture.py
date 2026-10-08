@@ -83,18 +83,18 @@ def test_notebook_readme_documents_canonical_layers_in_order():
 def test_silver_notebook_is_an_auditable_processing_report():
     text = _text(NOTEBOOKS / "02_roombeacon_silver.ipynb")
     required = [
-        "Silver Processing Pipeline Overview",
+        "How Bronze becomes Silver",
         "Processing Contract Matrix",
-        "Before → After Examples",
-        "Raw Price Evidence",
-        "Reparsed Price",
-        "Raw Area Evidence",
-        "Reparsed Area",
-        "Top Flag Reasons",
-        "Number of Flags per Row",
-        "Raw → Silver Lineage Examples",
-        "What It Protects",
-        "Final Silver Health Summary",
+        "Before → after examples",
+        "raw price evidence",
+        "reparsed price",
+        "raw area evidence",
+        "reparsed area",
+        "Most common flag reasons",
+        "Flags per row",
+        "Raw → Silver lineage examples",
+        "Protects against",
+        "Silver health by quality dimension",
     ]
     for label in required:
         assert label in text

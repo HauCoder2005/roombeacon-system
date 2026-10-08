@@ -8,7 +8,7 @@ reserved status palette (good/warning/critical); text never wears a series color
 from __future__ import annotations
 
 import matplotlib.pyplot as plt
-from matplotlib.ticker import FuncFormatter
+from matplotlib.ticker import FuncFormatter, MaxNLocator
 import numpy as np
 import pandas as pd
 from cycler import cycler
@@ -61,6 +61,12 @@ def compact_number(value: float, _position=None) -> str:
     return f"{value:.3g}"
 
 
+def percent(share: float) -> str:
+    """0.75 -> '75%', 0.998 -> '99.8%': one decimal only when it carries information."""
+    value = round(share * 100, 1)
+    return f"{value:.0f}%" if value == int(value) else f"{value:.1f}%"
+
+
 def _axes(ax, rows: int):
     if ax is None:
         _, ax = plt.subplots(figsize=(9, max(2.2, 0.38 * rows + 1.2)))
@@ -83,6 +89,9 @@ def bar_chart(values: pd.Series, *, title: str, xlabel: str = "Rows", color: str
     ax.invert_yaxis()
     _label_bars(ax, bars, [fmt.format(v) for v in data.to_numpy()])
     ax.xaxis.set_major_formatter(FuncFormatter(compact_number))
+    values = data.to_numpy(dtype=float)
+    if len(values) and values.max() < 25 and np.allclose(values, np.round(values)):
+        ax.xaxis.set_major_locator(MaxNLocator(integer=True))
     ax.set_title(title)
     ax.set_xlabel(xlabel)
     ax.margins(x=0.12)
@@ -97,7 +106,7 @@ def funnel_chart(stages: pd.Series, *, title: str, xlabel: str = "Rows", ax=None
     bars = ax.barh([str(i) for i in stages.index], stages.to_numpy(), color=colors, height=0.62)
     ax.invert_yaxis()
     first = stages.iloc[0] or 1
-    _label_bars(ax, bars, [f"{v:,.0f} ({v / first:.0%})" for v in stages.to_numpy()])
+    _label_bars(ax, bars, [f"{v:,.0f} ({percent(v / first)})" for v in stages.to_numpy()])
     ax.xaxis.set_major_formatter(FuncFormatter(compact_number))
     ax.set_title(title)
     ax.set_xlabel(xlabel)
@@ -151,3 +160,30 @@ def share_chart(table: pd.DataFrame, *, title: str, colors: dict | None = None, 
     ax.set_title(title)
     ax.legend(ncol=min(4, len(shares.columns)), loc="upper left", bbox_to_anchor=(0, -0.18))
     return ax
+
+
+def status_chart(counts: pd.Series, *, tiers: dict, title: str, xlabel: str = "Rows", ax=None):
+    """Status counts in their given order; color = tier (good/warning/serious/critical).
+
+    Every bar keeps its status label and a count/percent label, so the tier
+    color is never the only carrier of meaning. Untiered statuses are neutral.
+    """
+    ax = _axes(ax, len(counts))
+    labels = [str(i) for i in counts.index]
+    colors = [STATUS.get(tiers.get(label, ""), NEUTRAL) for label in labels]
+    bars = ax.barh(labels, counts.to_numpy(), color=colors, height=0.62)
+    ax.invert_yaxis()
+    total = counts.sum() or 1
+    _label_bars(ax, bars, [f"{v:,.0f} ({v / total:.1%})" for v in counts.to_numpy()])
+    ax.xaxis.set_major_formatter(FuncFormatter(compact_number))
+    ax.set_title(title)
+    ax.set_xlabel(xlabel)
+    ax.margins(x=0.2)
+    return ax
+
+
+def scatter_legend(ax) -> None:
+    """Place a scatter legend below the plot so it never hides points."""
+    ax.legend(loc="upper left", bbox_to_anchor=(0, -0.14), ncol=2, markerscale=2)
+    for handle in ax.get_legend().legend_handles:
+        handle.set_alpha(1)

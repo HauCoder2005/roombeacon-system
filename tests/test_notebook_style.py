@@ -59,3 +59,25 @@ def test_share_chart_stacks_each_row_to_one_hundred_percent():
 @pytest.mark.parametrize(("value", "label"), [(950, "950"), (1250, "1.25k"), (150000, "150k"), (2_400_000, "2.4M")])
 def test_compact_number_formats_axis_ticks(value, label):
     assert style.compact_number(value) == label
+
+
+def test_status_chart_colors_bars_by_status_tier_and_keeps_labels():
+    counts = pd.Series({"USABLE": 90, "TOO_SHORT": 6, "MISSING": 4})
+
+    ax = style.status_chart(counts, tiers={"USABLE": "good", "TOO_SHORT": "warning", "MISSING": "critical"}, title="T")
+
+    assert [tick.get_text() for tick in ax.get_yticklabels()] == ["USABLE", "TOO_SHORT", "MISSING"]
+    colors = [matplotlib.colors.to_hex(patch.get_facecolor()) for patch in ax.patches]
+    assert colors == [style.STATUS["good"], style.STATUS["warning"], style.STATUS["critical"]]
+    assert [text.get_text() for text in ax.texts] == ["90 (90.0%)", "6 (6.0%)", "4 (4.0%)"]
+
+
+def test_status_chart_uses_neutral_for_untiered_status():
+    ax = style.status_chart(pd.Series({"OTHER": 1}), tiers={}, title="T")
+
+    assert matplotlib.colors.to_hex(ax.patches[0].get_facecolor()) == style.NEUTRAL
+
+
+@pytest.mark.parametrize(("share", "label"), [(1.0, "100%"), (0.75, "75%"), (0.998, "99.8%"), (0.0004, "0%")])
+def test_percent_keeps_a_decimal_only_when_informative(share, label):
+    assert style.percent(share) == label
