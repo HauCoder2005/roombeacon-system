@@ -245,3 +245,40 @@ def range_chart(frame: pd.DataFrame, *, low: str, mid: str, high: str, title: st
     ax.set_xlabel(xlabel)
     ax.legend(loc="lower right", bbox_to_anchor=(1, 1), ncol=2, borderaxespad=0.2)
     return ax
+
+
+def box_chart(groups: dict, *, title: str, xlabel: str, log_x: bool = False, show_outliers: bool = True, ax=None):
+    """Horizontal box plots (1.5×IQR whiskers), one per group, labelled with the sample size.
+
+    ``log_x`` keeps positive values only (stated in the n label) so skewed prices stay readable.
+    """
+    cleaned = {}
+    for name, values in groups.items():
+        data = pd.to_numeric(pd.Series(values), errors="coerce").dropna()
+        cleaned[name] = data[data > 0] if log_x else data
+    empty = [name for name, data in cleaned.items() if data.empty]
+    cleaned = {name: data for name, data in cleaned.items() if not data.empty}
+    ax = _axes(ax, len(cleaned))
+    ax.boxplot(
+        [data.to_numpy() for data in cleaned.values()],
+        orientation="horizontal",
+        whis=1.5,
+        widths=0.55,
+        patch_artist=True,
+        showfliers=show_outliers,
+        boxprops={"facecolor": ORDINAL_BLUES[0], "edgecolor": CATEGORICAL[0], "linewidth": 1},
+        medianprops={"color": TEXT_PRIMARY, "linewidth": 1.5},
+        whiskerprops={"color": CATEGORICAL[0], "linewidth": 1},
+        capprops={"color": CATEGORICAL[0], "linewidth": 1},
+        flierprops={"marker": "o", "markersize": 2.5, "markerfacecolor": CATEGORICAL[1],
+                    "markeredgecolor": "none", "alpha": 0.35},
+    )
+    ax.set_yticks(range(1, len(cleaned) + 1), [f"{name} (n={len(data):,})" for name, data in cleaned.items()])
+    ax.invert_yaxis()
+    if log_x:
+        ax.set_xscale("log")
+    ax.xaxis.set_major_formatter(FuncFormatter(compact_number))
+    ax.xaxis.set_minor_formatter(plt.NullFormatter())
+    ax.set_title(title)
+    ax.set_xlabel(xlabel + (f"  ·  No data: {', '.join(map(str, empty))}" if empty else ""))
+    return ax

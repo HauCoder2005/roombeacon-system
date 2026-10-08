@@ -105,3 +105,25 @@ def test_histogram_log_scale_uses_log_axis():
     ax = style.histogram(pd.Series([1.0, 10.0, 100.0, 1000.0]), title="L", xlabel="v", clip_quantile=None, log_x=True)
 
     assert ax.get_xscale() == "log"
+
+
+def test_box_chart_draws_one_box_per_group_with_sample_size_labels():
+    groups = {"a": pd.Series([1.0, 2.0, 3.0, 100.0]), "b": pd.Series([5.0, 6.0, None])}
+
+    ax = style.box_chart(groups, title="B", xlabel="v")
+
+    assert [tick.get_text() for tick in ax.get_yticklabels()] == ["a (n=4)", "b (n=2)"]
+
+
+def test_box_chart_log_scale_drops_non_positive_values():
+    ax = style.box_chart({"a": pd.Series([0.0, 1.0, 10.0, 100.0])}, title="B", xlabel="v", log_x=True)
+
+    assert ax.get_xscale() == "log"
+    assert [tick.get_text() for tick in ax.get_yticklabels()] == ["a (n=3)"]
+
+
+def test_box_chart_skips_empty_groups_and_names_them():
+    ax = style.box_chart({"a": pd.Series([1.0, 2.0]), "empty": pd.Series([None, None])}, title="B", xlabel="v")
+
+    assert [tick.get_text() for tick in ax.get_yticklabels()] == ["a (n=2)"]
+    assert "No data: empty" in ax.get_xlabel()
