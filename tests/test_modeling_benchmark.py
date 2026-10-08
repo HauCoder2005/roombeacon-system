@@ -1,3 +1,4 @@
+import json
 import numpy as np
 import pandas as pd
 import pytest
@@ -289,12 +290,24 @@ def test_raw_and_log_target_round_trip():
         transform_target(np.array([-1.0]), "LOG1P")
 
 
+def _normalized_code(path: Path) -> str:
+    """Notebook code with whitespace removed and quotes unified, so checks survive formatting."""
+    cells = json.loads(path.read_text(encoding="utf-8"))["cells"]
+    code = "\n".join("".join(c["source"]) for c in cells if c["cell_type"] == "code")
+    return "".join(code.split()).replace('"', "'")
+
+
+def _normalized_text(path: Path) -> str:
+    cells = json.loads(path.read_text(encoding="utf-8"))["cells"]
+    return "".join("\n".join("".join(c["source"]) for c in cells).split()).replace('"', "'")
+
+
 def test_notebook_preprocessing_handles_unseen_categories_and_fits_train_only():
-    notebook = (Path(__file__).resolve().parents[1] / "notebooks" / "04_roombeacon_modeling.ipynb").read_text()
+    notebook = _normalized_text(Path(__file__).resolve().parents[1] / "notebooks" / "04_roombeacon_modeling.ipynb")
     assert "OneHotEncoder(handle_unknown='ignore',sparse_output=True)" in notebook
     assert "build_expanding_group_time_folds" in notebook
     assert "LOCKED_CANDIDATE" in notebook
-    assert notebook.index("LOCKED_CANDIDATE") < notebook.index("FINAL TEST — ONE-TIME EVALUATION")
+    assert notebook.index("LOCKED_CANDIDATE") < notebook.index("##10.FINALTEST—ONE-TIMEEVALUATION")
 
 
 def test_v2_executes_required_model_families_and_notebook_03_does_not_fit():
@@ -321,15 +334,15 @@ def test_notebook_03_has_no_legacy_split_and_declares_analysis_only_ratio():
 
 
 def test_source_ablation_uses_locked_configuration_and_final_diagnostics_do_not_mutate_source():
-    text = (Path(__file__).resolve().parents[1] / "notebooks" / "utils" / "build_modeling_notebook.py").read_text()
+    text = _normalized_text(Path(__file__).resolve().parents[1] / "notebooks" / "04_roombeacon_modeling.ipynb")
     assert "evaluate_config(LOCKED_MODEL,LOCKED_PARAMS" in text
-    assert "Without source_code" in text and "With source_code" in text
+    assert "Withoutsource_code" in text and "Withsource_code" in text
     assert "test_predictions[name]=pred" in text
-    assert "drop(" not in text[text.index("largest=test_predictions"):text.index("## 11 Locked-model")]
+    assert "drop(" not in text[text.index("largest=test_predictions"):text.index("Locked-modelfeatureimportance")]
 
 
 def test_notebook_04_consumes_canonical_numeric_trust_without_reparsing():
-    text = (Path(__file__).resolve().parents[1] / "notebooks" / "utils" / "build_modeling_notebook.py").read_text()
+    text = _normalized_code(Path(__file__).resolve().parents[1] / "notebooks" / "04_roombeacon_modeling.ipynb")
     assert "build_modeling_eligibility(prepared,policy='PERMISSIVE')" in text
     assert "price_model_suitability" in text
     assert "area_model_suitability" in text
