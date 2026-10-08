@@ -81,3 +81,27 @@ def test_status_chart_uses_neutral_for_untiered_status():
 @pytest.mark.parametrize(("share", "label"), [(1.0, "100%"), (0.75, "75%"), (0.998, "99.8%"), (0.0004, "0%")])
 def test_percent_keeps_a_decimal_only_when_informative(share, label):
     assert style.percent(share) == label
+
+
+def test_heatmap_annotates_every_non_missing_cell():
+    table = pd.DataFrame({"a": [10.0, None], "b": [55.5, 100.0]}, index=["x", "y"])
+
+    ax = style.heatmap(table, title="H", fmt="{:.0f}", vmax=100)
+
+    assert sorted(text.get_text() for text in ax.texts) == ["10", "100", "56"]
+    assert [tick.get_text() for tick in ax.get_yticklabels()] == ["x", "y"]
+
+
+def test_range_chart_draws_iqr_lines_and_median_points():
+    frame = pd.DataFrame({"p25": [1.0, 2.0], "median": [2.0, 3.0], "p75": [3.0, 5.0]}, index=["a", "b"])
+
+    ax = style.range_chart(frame, low="p25", mid="median", high="p75", title="R", xlabel="v")
+
+    assert [tick.get_text() for tick in ax.get_yticklabels()] == ["a", "b"]
+    assert len(ax.collections) == 2  # P25–P75 line collection + median points
+
+
+def test_histogram_log_scale_uses_log_axis():
+    ax = style.histogram(pd.Series([1.0, 10.0, 100.0, 1000.0]), title="L", xlabel="v", clip_quantile=None, log_x=True)
+
+    assert ax.get_xscale() == "log"

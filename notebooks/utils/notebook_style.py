@@ -115,9 +115,14 @@ def funnel_chart(stages: pd.Series, *, title: str, xlabel: str = "Rows", ax=None
 
 
 def histogram(values: pd.Series, *, title: str, xlabel: str, bins: int = 50,
-              clip_quantile: float | None = 0.99, ax=None):
-    """Distribution with the median marked; the long tail is clipped and stated."""
+              clip_quantile: float | None = 0.99, log_x: bool = False, ax=None):
+    """Distribution with the median marked; the long tail is clipped and stated.
+
+    ``log_x`` shows heavily skewed raw values on log-spaced bins (positive values only).
+    """
     data = pd.to_numeric(values, errors="coerce").dropna()
+    if log_x:
+        data = data[data > 0]
     if ax is None:
         _, ax = plt.subplots(figsize=(9, 3.6))
     shown = data
@@ -125,6 +130,9 @@ def histogram(values: pd.Series, *, title: str, xlabel: str, bins: int = 50,
         upper = data.quantile(clip_quantile)
         shown = data[data <= upper]
         xlabel = f"{xlabel}  ·  axis cut at p{clip_quantile * 100:.0f}, {len(data) - len(shown):,} higher rows not shown"
+    if log_x and len(shown):
+        bins = np.logspace(np.log10(shown.min()), np.log10(shown.max()), bins)
+        ax.set_xscale("log")
     ax.hist(shown, bins=bins, color=CATEGORICAL[0], edgecolor="white", linewidth=0.5)
     median = float(data.median()) if len(data) else np.nan
     ax.axvline(median, color=TEXT_PRIMARY, linewidth=1.2, label=f"median = {median:,.0f}")
@@ -187,3 +195,53 @@ def scatter_legend(ax) -> None:
     ax.legend(loc="upper left", bbox_to_anchor=(0, -0.14), ncol=2, markerscale=2)
     for handle in ax.get_legend().legend_handles:
         handle.set_alpha(1)
+
+
+def heatmap(table: pd.DataFrame, *, title: str, fmt: str = "{:.0f}", vmin: float = 0,
+            vmax: float | None = None, label: str = "", ax=None):
+    """Sequential one-hue (blue) matrix; every non-missing cell carries its value."""
+    from matplotlib.colors import LinearSegmentedColormap
+
+    cmap = LinearSegmentedColormap.from_list("rb_blues", ["#f4f8fd", *ORDINAL_BLUES[1:]]).with_extremes(bad="#f0efec")
+    values = table.to_numpy(dtype=float)
+    if ax is None:
+        _, ax = plt.subplots(figsize=(max(6, 0.9 * table.shape[1] + 3), max(2.6, 0.42 * table.shape[0] + 1.4)))
+    upper = vmax if vmax is not None else np.nanmax(values)
+    image = ax.imshow(np.ma.masked_invalid(values), aspect="auto", cmap=cmap, vmin=vmin, vmax=upper)
+    ax.set_xticks(range(table.shape[1]), [str(c) for c in table.columns], rotation=35, ha="right")
+    ax.set_yticks(range(table.shape[0]), [str(i) for i in table.index])
+    ax.grid(False)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    for row in range(table.shape[0]):
+        for col in range(table.shape[1]):
+            value = values[row, col]
+            if np.isfinite(value):
+                dark = (value - vmin) / ((upper - vmin) or 1) > 0.55
+                ax.text(col, row, fmt.format(value), ha="center", va="center", fontsize=8,
+                        color="white" if dark else TEXT_PRIMARY)
+    colorbar = plt.colorbar(image, ax=ax, fraction=0.03, pad=0.02)
+    colorbar.outline.set_visible(False)
+    colorbar.set_label(label)
+    ax.set_title(title)
+    return ax
+
+
+def range_chart(frame: pd.DataFrame, *, low: str, mid: str, high: str, title: str, xlabel: str,
+                ax=None, fmt=compact_number):
+    """Median dot with a P25-P75 line per row (replaces box plots; order is kept)."""
+    ax = _axes(ax, len(frame))
+    positions = np.arange(len(frame))
+    ax.hlines(positions, frame[low], frame[high], color=ORDINAL_BLUES[0], linewidth=4, label="P25–P75")
+    ax.scatter(frame[mid], positions, color=CATEGORICAL[0], s=36, zorder=3, edgecolors="white",
+               linewidths=1.5, label="median")
+    for y, value in zip(positions, frame[mid]):
+        ax.annotate(fmt(value), (value, y), xytext=(0, 7), textcoords="offset points", ha="center",
+                    fontsize=8, color=TEXT_SECONDARY)
+    ax.set_yticks(positions, [str(i) for i in frame.index])
+    ax.set_ylim(len(frame) - 0.5, -0.8)  # top-down order, room for the first median label
+    ax.xaxis.set_major_formatter(FuncFormatter(compact_number))
+    ax.set_title(title)
+    ax.set_xlabel(xlabel)
+    ax.legend(loc="lower right", bbox_to_anchor=(1, 1), ncol=2, borderaxespad=0.2)
+    return ax
