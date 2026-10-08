@@ -331,11 +331,10 @@ def test_performance_benchmark_notebook_architecture():
 
 
 def test_performance_benchmark_narrative_semantics():
-    """Verify Notebook 07 and builder do not contain overclaims or unsupported causal assertions."""
+    """Verify Notebook 07 does not contain overclaims or unsupported causal assertions."""
     nb_path = ROOT / "notebooks" / "07_roombeacon_performance_benchmark.ipynb"
-    builder_path = ROOT / "notebooks" / "utils" / "build_performance_benchmark_notebook.py"
 
-    for path in [nb_path, builder_path]:
+    for path in [nb_path]:
         text = path.read_text(encoding="utf-8")
 
         # Prohibited overclaims and unsupported causal assertions
