@@ -20,3 +20,7 @@ Drafts giữ nguyên bootstrap cũ (`from utils ...`), nên nếu sau này cần
 Có **29 Python scripts** còn tham chiếu path legacy `notebooks/roombeacon_eda.ipynb`: 20 trong `scripts/` và 9 trong `processing/`. Chúng là tools kiểm tra/generate/rewrite notebook cũ, không được redirect sang official notebooks vì có thể ghi đè analysis. Giữ nguyên để review riêng; không chạy chúng như current validation.
 
 Các tên helper trùng cần review semantics, chưa phải bằng chứng implementation trùng: `validate_area` (`area_validator.py`, `price_area_validation.py`), `validate_price` (`price_validator.py`, `price_area_validation.py`), `remove_vietnamese_accents` (`ward_normalization.py`, `location_normalizer.py`). Không sửa helpers trong cleanup.
+
+## legacy_builders/
+
+Scripts that used to generate Notebooks 03–07. The notebooks are now edited directly and are the source of truth; these scripts are kept for history only and must not be run (they would overwrite the curated notebooks).

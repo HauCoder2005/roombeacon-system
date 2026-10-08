@@ -38,6 +38,28 @@ notebooks/
 └── sql/
 ```
 
+## Notebook layout
+
+Every canonical notebook follows the same structure so they read alike:
+
+1. **Header** — objective, input, output and what is out of scope.
+2. **Where this notebook sits** — a pipeline diagram (Mermaid) highlighting the current step.
+3. **Setup** — imports and paths only.
+4. **Numbered sections `## 01.` …** — each opens with a one-line *Why*, then code, a chart and a table.
+5. **Summary** — key findings computed at runtime (never hard-coded numbers) and the next step.
+
+Charts are static matplotlib PNGs (visible on GitHub) built with the shared helpers in
+[`utils/notebook_style.py`](utils/notebook_style.py): one validated palette, status colors only for
+status, and labels on every bar.
+
+Cells that write artifacts (Notebook 04 champion package, 05 CSVs, 06 shadow runs, 07 benchmark runs) carry
+the `skip-execution` tag: they are kept in the notebook but skipped when outputs are regenerated, so a normal
+run never overwrites the locked champion. Run them manually only when that write is intended. Notebook 04 also
+compares its selection with the locked champion and reports any difference instead of re-selecting.
+
+Select the **RoomBeacon (venv)** kernel. The notebooks are the source of truth; the former generator scripts
+live in `drafts/legacy_builders/` for history only.
+
 Use the Python environment from [requirements.txt](requirements.txt), configure `.env`, refresh the Bronze checkpoint, and run the notebooks from the repository root or `notebooks/`. Notebook 02 publishes canonical Silver Parquet only after its pre-Silver gate passes; normal notebook execution requires the local checkpoint rather than a live database connection.
 
 Legacy experiments remain under [drafts](drafts/README.md). Notebook 04 is the
