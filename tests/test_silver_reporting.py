@@ -1,6 +1,7 @@
 import pandas as pd
 
 from notebooks.utils.silver_reporting import (
+    duplicate_group_summary,
     flag_reason_breakdown,
     multi_flag_distribution,
     status_summary,
@@ -77,3 +78,24 @@ def test_multi_flag_distribution_buckets_four_or_more_without_scoring():
     assert result.set_index("Flag Count")["Rows"].to_dict() == {
         "0": 1, "1": 0, "2": 1, "3": 0, "4+": 1,
     }
+
+
+def test_duplicate_group_summary_labels_categorical_scope():
+    # build_silver_dataset() returns duplicate_scope as a pandas Categorical.
+    silver = pd.DataFrame(
+        {
+            "rental_post_id": [1, 2, 3, 4],
+            "source_code": ["mogi", "nhatot", "mogi", "mogi"],
+            "duplicate_candidate_status": ["POSSIBLE_DUPLICATE"] * 4,
+            "duplicate_candidate_group": ["g1", "g1", "g2", "g2"],
+            "duplicate_scope": pd.Categorical(["CROSS_SOURCE", "CROSS_SOURCE", "SAME_SOURCE", "SAME_SOURCE"]),
+        }
+    )
+
+    groups, distribution = duplicate_group_summary(silver)
+
+    assert groups[["Group ID", "Candidate Scope"]].to_dict("records") == [
+        {"Group ID": "g1", "Candidate Scope": "Cross-source"},
+        {"Group ID": "g2", "Candidate Scope": "Same-source"},
+    ]
+    assert distribution.to_dict("records") == [{"Group Size": 2, "Candidate Groups": 2}]

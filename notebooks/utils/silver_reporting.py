@@ -188,7 +188,7 @@ def duplicate_group_summary(silver: pd.DataFrame) -> tuple[pd.DataFrame, pd.Data
         Sources=("source_code", "nunique"),
         Candidate_Scope=("duplicate_scope", "first"),
     ).reset_index().rename(columns={"duplicate_candidate_group": "Group ID"})
-    groups["Candidate Scope"] = groups.pop("Candidate_Scope").replace(
+    groups["Candidate Scope"] = groups.pop("Candidate_Scope").astype("string").replace(
         {"CROSS_SOURCE": "Cross-source", "SAME_SOURCE": "Same-source"}
     )
     distribution = groups.Listings.value_counts().sort_index().rename_axis("Group Size").reset_index(name="Candidate Groups")
