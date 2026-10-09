@@ -39,13 +39,13 @@ import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), ""); // đọc ROOMBEACON_API_KEY từ .env.local của frontend (git-ignored)
+  const env = loadEnv(mode, process.cwd(), ""); // đọc ROOMBEACON_API_URL / ROOMBEACON_API_KEY từ frontend/.env.local (git-ignored; mẫu: frontend/.env.example)
   return {
     plugins: [react()],
     server: {
       proxy: {
         "/api": {
-          target: "http://127.0.0.1:8000",
+          target: env.ROOMBEACON_API_URL ?? "http://127.0.0.1:8000",
           changeOrigin: true,
           headers: { "X-API-Key": env.ROOMBEACON_API_KEY },
         },
