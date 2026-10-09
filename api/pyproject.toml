@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "roombeacon-api"
+version = "0.1.0"
+description = "RoomBeacon read-only REST API over the ClickHouse warehouse"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi==0.141.1",
+    "starlette==1.6.0",
+    "pydantic==2.13.5",
+    "uvicorn==0.53.0",
+    "clickhouse-connect==0.8.18",
+]
+
+[project.optional-dependencies]
+test = ["httpx==0.28.1", "pytest>=8"]
+
+[tool.setuptools.packages.find]
+where = ["src"]

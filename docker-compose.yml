@@ -1380,6 +1380,54 @@ services:
         max-file: "3"
 
 # ============================================================
+# READ-ONLY REST API (FastAPI) - profile: api
+# ============================================================
+# Disabled by default: docker compose --profile warehouse --profile api up -d api
+# Reads ClickHouse with the read-only WAREHOUSE_READER_* account; needs
+# API_KEY_SHA256 in .env.local. Never reads MySQL.
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    image: "roombeacon-api:0.1.0"
+    container_name: "roombeacon-api"
+    profiles:
+      - api
+    restart: "unless-stopped"
+    env_file:
+      - path: ".env.local"
+        required: false
+    environment:
+      API_CLICKHOUSE_HOST: "clickhouse"
+    user: "10001:10001"
+    read_only: true
+    tmpfs:
+      - "/tmp:size=16m"
+    mem_limit: "384m"
+    mem_reservation: "128m"
+    memswap_limit: "384m"
+    cpus: 1.0
+    security_opt:
+      - "no-new-privileges:true"
+    cap_drop:
+      - ALL
+    networks:
+      - roombeacon-data-net
+    ports:
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# ============================================================
 
 # CRAWLER RUNTIME
 
