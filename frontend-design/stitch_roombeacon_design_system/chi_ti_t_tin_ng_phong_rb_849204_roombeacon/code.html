@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+
+<html lang="vi"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_standard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&amp;family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "surface-dim": "#d3daef", "surface": "#f9f9ff", "secondary-fixed": "#ffdeaa", "on-tertiary-fixed": "#002115", "on-background": "#141b2b", "tertiary": "#004732", "inverse-surface": "#293040", "primary": "#004640", "on-error": "#ffffff", "tertiary-fixed": "#97f5cc", "on-secondary-container": "#755100", "surface-bright": "#f9f9ff", "on-tertiary": "#ffffff", "on-surface": "#141b2b", "surface-container-high": "#e1e8fd", "on-secondary-fixed-variant": "#5f4100", "on-primary-fixed-variant": "#00504a", "on-tertiary-container": "#7edbb4", "primary-fixed-dim": "#8ed3ca", "primary-fixed": "#a9f0e6", "inverse-on-surface": "#edf0ff", "inverse-primary": "#8ed3ca", "on-secondary-fixed": "#271900", "secondary-fixed-dim": "#f3be5e", "secondary": "#7d5700", "on-tertiary-fixed-variant": "#00513a", "tertiary-fixed-dim": "#7bd8b1", "secondary-container": "#fcc665", "primary-container": "#0f5f58", "error-container": "#ffdad6", "surface-container": "#e9edff", "surface-container-lowest": "#ffffff", "surface-variant": "#dce2f7", "on-error-container": "#93000a", "background": "#f9f9ff", "tertiary-container": "#006145", "outline": "#6f7977", "on-surface-variant": "#3f4947", "surface-container-low": "#f1f3ff", "on-secondary": "#ffffff", "on-primary-container": "#91d6cd", "surface-tint": "#1f6962", "on-primary-fixed": "#00201d", "surface-container-highest": "#dce2f7", "outline-variant": "#bec9c6", "error": "#ba1a1a", "on-primary": "#ffffff" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": { "space-sm": "0.75rem", "gutter-mobile": "1rem", "margin": "3rem", "gutter": "1.5rem", "space-lg": "2rem", "space-xl": "3.5rem", "space-md": "1.25rem", "space-xs": "0.375rem", "margin-mobile": "1.25rem" }, "fontFamily": { "display": [ "Playfair Display" ], "price-card": [ "Be Vietnam Pro" ], "headline-sm": [ "Playfair Display" ], "headline-md": [ "Playfair Display" ], "label-md": [ "Be Vietnam Pro" ], "body-md": [ "Be Vietnam Pro" ], "headline-lg-mobile": [ "Playfair Display" ], "body-sm": [ "Be Vietnam Pro" ], "label-sm": [ "Be Vietnam Pro" ], "body-lg": [ "Be Vietnam Pro" ], "display-mobile": [ "Playfair Display" ], "headline-lg": [ "Playfair Display" ], "price-hero": [ "Be Vietnam Pro" ] }, "fontSize": { "display": [ "56px", { "lineHeight": "68px", "letterSpacing": "-0.02em", "fontWeight": "600" } ], "price-card": [ "20px", { "lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "600" } ], "headline-sm": [ "22px", { "lineHeight": "30px", "fontWeight": "500" } ], "headline-md": [ "28px", { "lineHeight": "36px", "fontWeight": "500" } ], "label-md": [ "14px", { "lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "500" } ], "body-md": [ "15px", { "lineHeight": "24px", "fontWeight": "400" } ], "headline-lg-mobile": [ "28px", { "lineHeight": "36px", "letterSpacing": "-0.01em", "fontWeight": "500" } ], "body-sm": [ "13px", { "lineHeight": "20px", "fontWeight": "400" } ], "label-sm": [ "11px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600" } ], "body-lg": [ "18px", { "lineHeight": "28px", "fontWeight": "400" } ], "display-mobile": [ "36px", { "lineHeight": "44px", "letterSpacing": "-0.01em", "fontWeight": "600" } ], "headline-lg": [ "40px", { "lineHeight": "50px", "letterSpacing": "-0.015em", "fontWeight": "500" } ], "price-hero": [ "32px", { "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700" } ] } } } };</script></head><body class="bg-surface font-body-md text-body-md text-on-surface antialiased"><header class="fixed top-0 left-0 right-0 w-full z-50 bg-surface-container-lowest/90 backdrop-blur-md shadow-[0_1px_8px_rgba(17,24,39,0.04)]"><div class="h-16 max-w-[1280px] mx-auto px-gutter flex items-center justify-between"><div class="flex items-center gap-space-sm"><img alt="Minimal geometric lighthouse line icon wordmark for RoomBeacon in deep teal and champagne gold. Brand logo. - Primary color: #0f5f58
+- Font: playfairDisplay
+- Mode: light
+- Roundness: rounded-md
+" class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida/AEtjO1VnlThgi_As3MVl2zOh-oeK0A8brL56pL2K_o4c9Jh4kYc2waXdNTHRilNWtrSo_dzgJDQcFlTCJtibxuzmUWRBRH5W5AhLHl_-xzkBEauNHvvOXtFfvocSvaiLAeD-2oA4R2wYb0FkeWEC7mVx84zodK0aghrBq2Odd4iM56CylisNjrfZIsSSXwlhd2b1HjwxxNabMMchULSSny5GIYfobbLEzNpfCes_7oYKzSY6Kz-pb82fRdRbbOA"/><a class="font-headline-sm text-headline-sm text-primary tracking-tight" data-path="tim-phong" href="#">RoomBeacon</a></div><nav class="hidden md:flex items-center gap-space-md" data-active-classes="bg-surface-container-low text-primary font-medium rounded-full"><a class="px-space-sm py-space-xs text-on-surface-variant hover:text-on-surface font-label-md text-label-md transition-colors" data-path="tim-phong" href="#">Tìm phòng</a><span class="text-outline-variant font-label-sm text-label-sm select-none">·</span><a class="px-space-sm py-space-xs text-on-surface-variant hover:text-on-surface font-label-md text-label-md transition-colors" data-path="khu-vuc" href="#">Khu vực</a><span class="text-outline-variant font-label-sm text-label-sm select-none">·</span><a class="px-space-sm py-space-xs text-on-surface-variant hover:text-on-surface font-label-md text-label-md transition-colors" data-path="dinh-gia" href="#">Định giá</a><span class="text-outline-variant font-label-sm text-label-sm select-none">·</span><a class="px-space-sm py-space-xs text-on-surface-variant hover:text-on-surface font-label-md text-label-md transition-colors" data-path="bang-gia" href="#">Bảng giá</a></nav><div class="flex items-center gap-space-sm"><a class="hidden sm:inline-flex items-center justify-center px-space-md py-space-xs rounded-full bg-surface-container-low hover:bg-surface-container text-primary font-label-md text-label-md transition-colors" data-path="dang-tin" href="#">Đăng tin</a><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="w-full pt-16 bg-[#FAF8F5] min-h-screen"><div class="max-w-[1280px] mx-auto px-gutter"><div class="flex flex-col w-full">
+<!-- Top Breadcrumb & Quick Actions Bar -->
+<section class="w-full pt-6 pb-4">
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+<!-- Breadcrumb -->
+<nav class="flex items-center flex-wrap gap-2 font-label-md text-label-md text-on-surface-variant">
+<a class="hover:text-primary transition-colors" href="#">Trang chủ</a>
+<span class="text-outline-variant font-label-sm text-label-sm">/</span>
+<a class="hover:text-primary transition-colors" href="#">TP. Hồ Chí Minh</a>
+<span class="text-outline-variant font-label-sm text-label-sm">/</span>
+<a class="hover:text-primary transition-colors" href="#">Quận 7</a>
+<span class="text-outline-variant font-label-sm text-label-sm">/</span>
+<a class="hover:text-primary transition-colors" href="#">Phường Tân Hưng</a>
+<span class="text-outline-variant font-label-sm text-label-sm">/</span>
+<span class="text-on-surface font-medium truncate max-w-[280px]">Studio Ban công thoáng KDC Him Lam</span>
+</nav>
+<!-- Action buttons -->
+<div class="flex items-center gap-3">
+<button class="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-surface-container-lowest text-primary text-label-md font-label-md shadow-sm hover:shadow-md transition-all active:scale-95" id="save-btn">
+<span class="material-symbols-outlined text-[18px]">favorite_border</span>
+<span>Lưu tin</span>
+</button>
+<button class="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-surface-container-lowest text-on-surface text-label-md font-label-md shadow-sm hover:shadow-md transition-all active:scale-95" id="share-btn">
+<span class="material-symbols-outlined text-[18px]">ios_share</span>
+<span>Chia sẻ</span>
+</button>
+</div>
+</div>
+<!-- Title and Metadata Bar -->
+<div class="mt-4 flex flex-col gap-3">
+<div class="flex flex-wrap items-center gap-2.5">
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-primary/10 text-primary font-label-sm text-label-sm tracking-wider uppercase font-semibold">
+<span class="material-symbols-outlined text-[14px]">verified</span>
+          Đã thẩm định hồ sơ
+        </span>
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm">
+          Mã tin: RB-849204
+        </span>
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[14px]">photo_camera_front</span>
+          Kiểm duyệt ảnh 100%
+        </span>
+<span class="font-body-sm text-body-sm text-on-surface-variant ml-auto hidden sm:inline">
+          Cập nhật thực địa: 2 ngày trước
+        </span>
+</div>
+<h1 class="font-headline-lg text-headline-lg text-on-surface tracking-tight">
+        Studio Ban công thoáng KDC Him Lam — Nội thất Indochine
+      </h1>
+</div>
+</section>
+<!-- Main 2-Column Architectural Layout -->
+<section class="w-full pb-16">
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+<!-- LEFT COLUMN (Approx 68% -> lg:col-span-8) -->
+<div class="lg:col-span-8 flex flex-col gap-10">
+<!-- Visual Media Gallery -->
+<div class="flex flex-col gap-3">
+<!-- Main Hero Photo -->
+<div class="relative w-full aspect-[16/10] rounded-2xl overflow-hidden shadow-sm bg-surface-container-high group">
+<img alt="Studio Ban công Him Lam" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.02]" data-alt="Sun-drenched luxury studio apartment in Ho Chi Minh City with light cream walls, warm natural timber woodwork, high ceilings, arched french doors leading to a spacious leafy balcony with tropical palms, soft beige linen sofa, subtle Indochine ceramic tile accents, photographed in bright warm architectural daylight." id="main-gallery-img" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDe-hZ3bJx8vHgT9K-ec-UE21TlzT7DITBGSNM6RwXmfSTHlLo3dgKenr-nCzCSMngIjPAAfq0mPIJ8EIo6hh4WQvciJzxaCQnxFWhGD-Xlh5MdbdElBv7Uz8TySEdCEUSNH0nDQUtncbEVbXpHvDtRJI24LsScvsCLr6mCTGOLEnNKs2b6D-Af5WcqVYQUqFgtMn5jyQ6R3NyJqOlj5Wrb_X61SGgT8kIS95pqnL5lk7RAijhC6S0K"/>
+<!-- Gallery Counter Pill -->
+<div class="absolute top-4 left-4 z-10 px-3 py-1 rounded-full bg-inverse-surface/70 backdrop-blur-md text-inverse-on-surface font-label-sm text-label-sm tracking-wider">
+<span id="counter-display">1 / 18</span> ẢNH
+            </div>
+<!-- Architectural Verified Stamp -->
+<div class="absolute top-4 right-4 z-10 px-3 py-1 rounded-full bg-surface-container-lowest/90 backdrop-blur-md text-primary font-label-sm text-label-sm flex items-center gap-1 shadow-sm">
+<span class="material-symbols-outlined text-[15px]">verified_user</span>
+<span>Ảnh thực tế chuẩn RoomBeacon</span>
+</div>
+<!-- Side arrows -->
+<div class="absolute inset-y-0 inset-x-3 flex items-center justify-between pointer-events-none">
+<button class="pointer-events-auto w-10 h-10 rounded-full bg-surface-container-lowest/85 backdrop-blur hover:bg-surface-container-lowest text-on-surface flex items-center justify-center shadow-md transition-all active:scale-95" onclick="prevGalleryImage()">
+<span class="material-symbols-outlined text-[20px]">chevron_left</span>
+</button>
+<button class="pointer-events-auto w-10 h-10 rounded-full bg-surface-container-lowest/85 backdrop-blur hover:bg-surface-container-lowest text-on-surface flex items-center justify-center shadow-md transition-all active:scale-95" onclick="nextGalleryImage()">
+<span class="material-symbols-outlined text-[20px]">chevron_right</span>
+</button>
+</div>
+</div>
+<!-- Thumbnails Row (5 items) -->
+<div class="grid grid-cols-5 gap-3">
+<div class="cursor-pointer aspect-[4/3] rounded-xl overflow-hidden shadow-sm ring-2 ring-primary bg-surface-container transition-all" onclick="selectGalleryThumb(0)">
+<img alt="Góc ngủ" class="w-full h-full object-cover hover:opacity-90" data-alt="Warm modern bedroom nook with queen bed draped in oatmeal linen, natural cane headboard, soft bedside lighting, and warm parquet floor in an urban Saigon apartment." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDM33Ae5D6PonR4nCXMsb4BzBqzjC0fvo5_Zpfrc4wBZwf5XNxq5jrDHFCs_i5UaBT4HX5ogTrhm-TQAIglpnZlYP_HjDwN9KzPHUeY0tHb2oG5DN3Ks715SxhP-m3SS7ApHymNGu2MJb-3oJV5ui6iwUDMseGiH_AC45TAbRse1Z_QSl05mMnOb35YesKvtKF96uNS-kk_KZsW8hx-ioQ5kJvdNP8Ula51fYKrmYogcFPSeyEVyFVk"/>
+</div>
+<div class="cursor-pointer aspect-[4/3] rounded-xl overflow-hidden shadow-sm bg-surface-container transition-all hover:ring-2 hover:ring-primary/60" onclick="selectGalleryThumb(1)">
+<img alt="Phòng tắm" class="w-full h-full object-cover hover:opacity-90" data-alt="Minimalist modern bathroom with terrazzo tiles, brass tap fixtures, glass rain shower partition, framed round mirror, warm ambient glow." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCf4NohNAkoBMvar3iIJhdaYvDhbedCmKbvqitltF3wTPbXbIxH6IfJsXyFgtACTsArRaf7u06OpshBEJcXezqCiZfm6VGOuVpRrOiQxkKAOeAdqnrefqczgTGHIiL56LzOBMv90NhaDuXnanC_zR_rfqU_QY8H3iKq-262jZZV-x9qy7dCxjBgmPu8gAm3OHT-myh22rVgk2H2tiOp2mMb-g_VwVy2AhUrJAEvzgzJfGnjgUkLmDgQ"/>
+</div>
+<div class="cursor-pointer aspect-[4/3] rounded-xl overflow-hidden shadow-sm bg-surface-container transition-all hover:ring-2 hover:ring-primary/60" onclick="selectGalleryThumb(2)">
+<img alt="Khu bếp" class="w-full h-full object-cover hover:opacity-90" data-alt="Compact Indochine kitchen island with polished white quartz countertop, induction cooker, minimalist wooden cabinetry and matte green subway tiles." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD7d-3k9GJ-gEBdozSn_AwtlUZDSqm-_Yl5TsNrJciOl1Kvo-frqUelXSeDY2BQUe9fsZr3dBmCf5mGZ1ivVj7SwaVHbIHx_ZtHa6ceVC2m0PbSpKaD2nMkcXurI77yEu1194_GCIsASpWm6kyfZ1yyUseoB7qNL465ww3AXg3iRAikPGhxc4OEgj4dh7fIxq9Nkawa95rYJtU9R-DmxBM7QWxAxmRal343d4xoN1FRocuc4mPaxWWQ"/>
+</div>
+<div class="cursor-pointer aspect-[4/3] rounded-xl overflow-hidden shadow-sm bg-surface-container transition-all hover:ring-2 hover:ring-primary/60" onclick="selectGalleryThumb(3)">
+<img alt="Ban công công viên" class="w-full h-full object-cover hover:opacity-90" data-alt="Expansive open balcony view overlooking peaceful green canopy and quiet paved street in Him Lam Tan Hung residential quarter in District 7 Ho Chi Minh City." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBF0fGfvZE2a0qMo0r1Muvf0W1ecKUolQ07nl9Jd58UjXo7_8D-uBL0T8Sf3Tnm0Z9SgtEqBqWqoWhh-oO22lk7wxpCyg6NrMemjFx5MNWlVvOsRev9_1Acn4RaUVz8Nb8N9i2fYsObgtv9vdUr9V6Qoiul_vuaxL659YEaKOaI7w_BIL9uY4jj6Sc77ObJg6vldDFHtLnS8QZV-XDg63UF0RrXt3UL7jKW3qGj2OvLVJQRaJIa0gPs"/>
+</div>
+<div class="cursor-pointer aspect-[4/3] rounded-xl relative overflow-hidden shadow-sm bg-surface-container-highest transition-all group" onclick="openFullGalleryModal()">
+<img alt="Góc không gian khác" class="w-full h-full object-cover group-hover:scale-105 transition-transform" data-alt="Architectural detail of vintage Saigon louvered wooden shutters casting soft linear morning shadows onto lime plaster walls." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCoQNT7t93MAFksn70f9PBe2aQJwQPR8Kwe0u5kcOiJYkoxGj-qyQ8Br2d0PCZ1W8yjjrn4IOHA7MQAFg9qTjzvvyLqK88GFlBqWEdFdtiV0vPvBp1j-kwKsrAApZq0km91rDL8d2vo4-d0GdSWdaHsmZqsm79BJ3yG_5hQrTUVkhzygUwY-HgpFL8a6PsTqGDLVzSXjsxJrr0zWPawTWsWE_AYIb8m2B9OwxBZhGxFJYfkBPTLRIU9"/>
+<div class="absolute inset-0 bg-primary-container/80 backdrop-blur-[2px] flex flex-col items-center justify-center text-on-primary">
+<span class="font-price-card text-price-card font-semibold">+13</span>
+<span class="font-label-sm text-label-sm uppercase tracking-wider">Xem tất cả</span>
+</div>
+</div>
+</div>
+<!-- Secondary Preview Variant: No-Photo / Under verification state -->
+<div class="mt-2 p-4 rounded-xl bg-surface-container-low flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-secondary-fixed flex items-center justify-center text-on-secondary-fixed shrink-0">
+<span class="material-symbols-outlined text-[20px]">architecture</span>
+</div>
+<div>
+<p class="font-label-md text-label-md text-on-surface font-medium">Biến thể sơ đồ kỹ thuật &amp; mô hình 3D</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Phòng đối ứng đang được đo đạc kích thước thực tế &amp; thẩm định laser.</p>
+</div>
+</div>
+<span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container-lowest text-secondary text-label-sm font-label-sm shrink-0">
+<span class="material-symbols-outlined text-[16px]">pending_actions</span>
+              Đo vẽ CAD chuẩn bị công bố
+            </span>
+</div>
+</div>
+<!-- 4 Key Architectural Tiles -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+<div class="p-4 rounded-2xl bg-surface-container-lowest shadow-sm flex flex-col gap-1">
+<div class="flex items-center gap-1.5 text-on-surface-variant font-label-sm text-label-sm uppercase tracking-wider">
+<span class="material-symbols-outlined text-[16px] text-primary">square_foot</span>
+<span>Diện tích</span>
+</div>
+<span class="font-headline-sm text-headline-sm text-on-surface mt-1">28 m²</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Thông thủy thực tế</span>
+</div>
+<div class="p-4 rounded-2xl bg-surface-container-lowest shadow-sm flex flex-col gap-1">
+<div class="flex items-center gap-1.5 text-on-surface-variant font-label-sm text-label-sm uppercase tracking-wider">
+<span class="material-symbols-outlined text-[16px] text-primary">apartment</span>
+<span>Loại phòng</span>
+</div>
+<span class="font-headline-sm text-headline-sm text-on-surface mt-1">Studio</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Ban công riêng</span>
+</div>
+<div class="p-4 rounded-2xl bg-surface-container-lowest shadow-sm flex flex-col gap-1">
+<div class="flex items-center gap-1.5 text-on-surface-variant font-label-sm text-label-sm uppercase tracking-wider">
+<span class="material-symbols-outlined text-[16px] text-primary">explore</span>
+<span>Hướng phòng</span>
+</div>
+<span class="font-headline-sm text-headline-sm text-on-surface mt-1">Đông Nam</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Đón gió, mát mẻ</span>
+</div>
+<div class="p-4 rounded-2xl bg-surface-container-lowest shadow-sm flex flex-col gap-1">
+<div class="flex items-center gap-1.5 text-on-surface-variant font-label-sm text-label-sm uppercase tracking-wider">
+<span class="material-symbols-outlined text-[16px] text-tertiary">key</span>
+<span>Tình trạng</span>
+</div>
+<span class="font-headline-sm text-headline-sm text-tertiary mt-1">Trống sẵn</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Dọn vào ở ngay</span>
+</div>
+</div>
+<!-- Bảng Thông Tin Minh Bạch (Transparent Information Register) -->
+<div class="p-6 md:p-8 rounded-2xl bg-surface-container-lowest shadow-sm flex flex-col gap-6">
+<div class="flex items-center justify-between">
+<h2 class="font-headline-sm text-headline-sm text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">fact_check</span>
+              Bảng thông tin minh bạch
+            </h2>
+<span class="px-2.5 py-1 rounded-full bg-surface-container-low text-primary font-label-sm text-label-sm">
+              Định danh RB-849204
+            </span>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-8">
+<div class="flex flex-col gap-1 py-2">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Khu vực / Tọa độ</span>
+<span class="font-body-md text-body-md text-on-surface font-medium">KDC Him Lam, Đường số 4, Phường Tân Hưng, Quận 7, TP.HCM</span>
+</div>
+<div class="flex flex-col gap-1 py-2">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Số ngày hoạt động thị trường</span>
+<span class="font-body-md text-body-md text-on-surface font-medium">12 ngày trên RoomBeacon</span>
+</div>
+<div class="flex flex-col gap-1 py-2">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Đăng niêm yết lần đầu</span>
+<span class="font-body-md text-body-md text-on-surface">18/09/2026 (12 ngày trước)</span>
+</div>
+<div class="flex flex-col gap-1 py-2">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Cập nhật giá gần nhất</span>
+<span class="font-body-md text-body-md text-primary font-medium">28/09/2026 (2 ngày trước · Giảm 200.000 đ)</span>
+</div>
+<div class="flex flex-col gap-1 py-2">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Quy định tiền cọc</span>
+<span class="font-body-md text-body-md text-on-surface font-medium">1 tháng tiền phòng (3.000.000 đ)</span>
+</div>
+<div class="flex flex-col gap-1 py-2">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Chi phí định mức minh bạch</span>
+<span class="font-body-md text-body-md text-on-surface">
+                Điện: <strong class="font-semibold">3.800 đ/kWh</strong> · Nước: <strong class="font-semibold">100.000 đ/người</strong>
+</span>
+</div>
+<div class="flex flex-col gap-1 py-2">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Phí dịch vụ &amp; Quản lý</span>
+<span class="font-body-md text-body-md text-tertiary font-medium">Miễn phí (Bao gồm rác, wifi, dọn hành lang)</span>
+</div>
+<div class="flex flex-col gap-1 py-2">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Thời hạn hợp đồng</span>
+<span class="font-body-md text-body-md text-on-surface">Tối thiểu 06 tháng (Linh hoạt gia hạn)</span>
+</div>
+</div>
+</div>
+<!-- Lịch Sử Biến Động Giá (Price History Step-Line Chart) -->
+<div class="p-6 md:p-8 rounded-2xl bg-surface-container-lowest shadow-sm flex flex-col gap-6">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+<div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">timeline</span>
+                Lịch sử biến động giá niêm yết
+              </h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Dữ liệu ghi nhận độc lập qua hệ thống theo dõi giao dịch</p>
+</div>
+<div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-tertiary-fixed/30 text-on-tertiary-fixed font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[16px] text-tertiary">trending_down</span>
+<span>Tổng mức giảm: 500.000 đ (-14.3%)</span>
+</div>
+</div>
+<!-- Inline SVG Step-Line Chart -->
+<div class="w-full bg-surface-container-low p-5 rounded-xl flex flex-col gap-3">
+<div class="h-44 w-full relative">
+<svg class="w-full h-full overflow-visible" preserveaspectratio="none" viewbox="0 0 700 160">
+<!-- Horizontal Guide Lines -->
+<line stroke="#dce2f7" stroke-dasharray="4 4" stroke-width="1" x1="40" x2="680" y1="20" y2="20"></line>
+<line stroke="#dce2f7" stroke-dasharray="4 4" stroke-width="1" x1="40" x2="680" y1="70" y2="70"></line>
+<line stroke="#dce2f7" stroke-dasharray="4 4" stroke-width="1" x1="40" x2="680" y1="120" y2="120"></line>
+<!-- Left Y-Axis Labels -->
+<text fill="#6f7977" font-family="Be Vietnam Pro" font-size="11" x="5" y="24">3,6 tr</text>
+<text fill="#6f7977" font-family="Be Vietnam Pro" font-size="11" x="5" y="74">3,3 tr</text>
+<text fill="#6f7977" font-family="Be Vietnam Pro" font-size="11" x="5" y="124">3,0 tr</text>
+<!-- Step-Line Path -->
+<!-- Point 1 (18/09, 3.5tr): (80, 35) -> (280, 35) -> (280, 85) -> (480, 85) -> (480, 120) -> (660, 120) -->
+<path d="M 80 35 L 280 35 L 280 85 L 480 85 L 480 120 L 660 120" fill="none" stroke="#004640" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"></path>
+<!-- Point 1 Dot -->
+<circle cx="80" cy="35" fill="#FAF8F5" r="5" stroke="#004640" stroke-width="2.5"></circle>
+<text fill="#141b2b" font-family="Be Vietnam Pro" font-size="11" font-weight="600" text-anchor="middle" x="80" y="18">3,5 tr</text>
+<!-- Point 2 Dot -->
+<circle cx="280" cy="85" fill="#FAF8F5" r="5" stroke="#004640" stroke-width="2.5"></circle>
+<text fill="#141b2b" font-family="Be Vietnam Pro" font-size="11" font-weight="600" text-anchor="middle" x="280" y="73">3,2 tr</text>
+<!-- Point 3 Dot (Current) -->
+<circle cx="480" cy="120" fill="#004640" r="6" stroke="#a9f0e6" stroke-width="2.5"></circle>
+<circle cx="660" cy="120" fill="#004640" r="4"></circle>
+<text fill="#004640" font-family="Be Vietnam Pro" font-size="12" font-weight="700" text-anchor="middle" x="480" y="142">3,0 tr (Hiện tại)</text>
+</svg>
+</div>
+<!-- X-Axis Timeline labels -->
+<div class="flex justify-between items-center text-on-surface-variant font-label-sm text-label-sm pt-1 px-4">
+<div class="flex flex-col items-start">
+<span class="font-medium text-on-surface">18/09/2026</span>
+<span class="text-[10px]">Mở tin niêm yết</span>
+</div>
+<div class="flex flex-col items-center">
+<span class="font-medium text-on-surface">23/09/2026</span>
+<span class="text-[10px]">Giảm lần 1 (-300k)</span>
+</div>
+<div class="flex flex-col items-end">
+<span class="font-medium text-primary">28/09/2026</span>
+<span class="text-[10px] text-tertiary font-semibold">Chạm đáy định giá p25</span>
+</div>
+</div>
+</div>
+<div class="p-3.5 rounded-xl bg-surface-container-high/60 flex items-start gap-3">
+<span class="material-symbols-outlined text-primary text-[20px] shrink-0 mt-0.5">insights</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+<strong class="font-semibold text-on-surface">Nhận định biến động:</strong> Chủ căn hộ đã chủ động giảm giá 2 lần liên tiếp trong 10 ngày để tìm khách thuê ổn định dài hạn trước tháng tới. Mức giá hiện tại thấp hơn đáng kể so với mức giá trung bình của các studio cùng phân khúc tại Him Lam.
+            </p>
+</div>
+</div>
+<!-- Tiện Ích Căn Phòng (Amenities & Architectural Features) -->
+<div class="p-6 md:p-8 rounded-2xl bg-surface-container-lowest shadow-sm flex flex-col gap-6">
+<h2 class="font-headline-sm text-headline-sm text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">chair</span>
+            Tiện nghi &amp; Chi tiết thiết kế
+          </h2>
+<div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+<div class="p-3.5 rounded-xl bg-surface-container-low flex items-center gap-3">
+<span class="material-symbols-outlined text-primary text-[22px]">local_laundry_service</span>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface font-medium">Máy giặt riêng</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Cửa trước, 8kg</span>
+</div>
+</div>
+<div class="p-3.5 rounded-xl bg-surface-container-low flex items-center gap-3">
+<span class="material-symbols-outlined text-primary text-[22px]">elevator</span>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface font-medium">Thang máy thẻ từ</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Kiểm soát tầng riêng</span>
+</div>
+</div>
+<div class="p-3.5 rounded-xl bg-surface-container-low flex items-center gap-3">
+<span class="material-symbols-outlined text-primary text-[22px]">fingerprint</span>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface font-medium">Khóa cửa vân tay</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Tự động khóa 2 lớp</span>
+</div>
+</div>
+<div class="p-3.5 rounded-xl bg-surface-container-low flex items-center gap-3">
+<span class="material-symbols-outlined text-primary text-[22px]">mode_fan</span>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface font-medium">Bếp riêng hút mùi</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Hút âm tường khử mùi</span>
+</div>
+</div>
+<div class="p-3.5 rounded-xl bg-surface-container-low flex items-center gap-3">
+<span class="material-symbols-outlined text-primary text-[22px]">pets</span>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface font-medium">Nuôi thú cưng</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Chó/mèo nhỏ dưới 6kg</span>
+</div>
+</div>
+<div class="p-3.5 rounded-xl bg-surface-container-low flex items-center gap-3">
+<span class="material-symbols-outlined text-primary text-[22px]">deck</span>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface font-medium">Ban công đón gió</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Cửa lùa nhôm kính cao</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Mô Tả Chi Tiết Phòng (Descriptive Notes) -->
+<div class="p-6 md:p-8 rounded-2xl bg-surface-container-lowest shadow-sm flex flex-col gap-4">
+<h2 class="font-headline-sm text-headline-sm text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">notes</span>
+            Mô tả chi tiết từ chuyên viên khảo sát
+          </h2>
+<div class="prose max-w-none text-on-surface-variant font-body-md text-body-md space-y-3 leading-relaxed">
+<p>
+              Tọa lạc tại trung tâm khu dân cư cao cấp Him Lam Tân Hưng, studio được bàn giao hoàn thiện với đường nét kiến trúc giao thoa Đông Dương đương đại. Không gian nhấn mạnh vào tính thanh lọc: sàn gạch hoa văn men mờ, hệ tủ gỗ căm xe kết hợp mây đan tự nhiên, và khung vòm thoáng khí tối ưu hóa ánh sáng hướng Đông Nam.
+            </p>
+<p>
+<strong class="font-medium text-on-surface">Khả năng cách âm &amp; yên tĩnh:</strong> Tuyến Đường số 4 là trục nội khu khép kín, mật độ xe cộ rất thấp, không có tiếng ồn từ xe tải hay dịch vụ giải trí về đêm. Hệ cửa kính cách âm 2 lớp đảm bảo mức độ tĩnh lặng trên 85% cho người làm việc sáng tạo hoặc làm từ xa.
+            </p>
+<p>
+<strong class="font-medium text-on-surface">Tiêu chuẩn bàn giao nội thất:</strong> Tủ lạnh Inverter 210L, máy điều hòa tiết kiệm điện Daikin mới vệ sinh, nệm cao su non êm ái, máy nước nóng trung tâm năng lượng mặt trời giúp giảm đáng kể hóa đơn điện sinh hoạt hàng tháng.
+            </p>
+</div>
+</div>
+</div>
+<!-- RIGHT COLUMN (Approx 32% -> lg:col-span-4 Sticky Intelligence & Valuation Panel) -->
+<div class="lg:col-span-4 sticky top-20 flex flex-col gap-5">
+<!-- Main Sticky Pricing & Algorithmic Valuation Card -->
+<div class="p-6 md:p-7 rounded-2xl bg-surface-container-lowest shadow-xl flex flex-col gap-6 relative overflow-hidden">
+<!-- Top subtle accent gradient -->
+<div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-primary via-secondary to-primary-fixed"></div>
+<!-- Price Header -->
+<div class="flex flex-col gap-1 pt-1">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-on-surface-variant">Mức giá niêm yết hiện thời</span>
+<div class="flex items-baseline gap-2">
+<span class="font-display text-headline-lg font-bold text-primary tracking-tight">3.000.000</span>
+<span class="font-label-md text-label-md text-on-surface-variant font-medium">đ / tháng</span>
+</div>
+<div class="flex items-center gap-2 mt-1">
+<span class="font-label-md text-label-md text-on-surface font-semibold">28 m²</span>
+<span class="text-outline-variant text-[12px]">·</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">107.000 đ/m²</span>
+<span class="text-outline-variant text-[12px]">·</span>
+<span class="font-label-sm text-label-sm text-tertiary font-medium">Bao phí quản lý</span>
+</div>
+</div>
+<!-- AI Valuation Box (Thẩm Định Giá Thuật Toán) -->
+<div class="p-4 rounded-xl bg-surface-container-low flex flex-col gap-3">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-on-surface font-semibold flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px] text-primary">auto_awesome</span>
+                Thẩm định mô hình AI
+              </span>
+<span class="px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant text-[10px] uppercase tracking-wider font-semibold">
+                Thử nghiệm
+              </span>
+</div>
+<div class="flex items-baseline justify-between">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Ước tính thuật toán:</span>
+<span class="font-price-card text-price-card font-semibold text-on-surface">4,24 tr/tháng</span>
+</div>
+<div class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-tertiary/10 text-tertiary font-label-md text-label-md font-semibold">
+<span class="material-symbols-outlined text-[18px]">check_circle</span>
+<span>Rẻ hơn ước tính 29%</span>
+</div>
+<p class="font-body-sm text-[12px] text-on-surface-variant leading-relaxed">
+              Mức giá nằm dưới phân vị p25 của khu vực, mang lại lợi thế tài chính cao cho người thuê ký hợp đồng dài hạn.
+            </p>
+</div>
+<!-- Signature Component: Dải Giá Thị Trường Phường Tân Hưng -->
+<div class="flex flex-col gap-3">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-on-surface font-semibold">
+                Dải giá Phường Tân Hưng
+              </span>
+<span class="font-label-sm text-[11px] text-on-surface-variant">Q3/2026</span>
+</div>
+<!-- Quantitative Strip Graphic -->
+<div class="relative pt-6 pb-4">
+<!-- Current Room Marker Flag (Above the track) -->
+<div class="absolute top-0 left-[8%] -translate-x-1/2 flex flex-col items-center">
+<span class="px-2 py-0.5 rounded bg-primary text-on-primary text-[10px] font-semibold whitespace-nowrap shadow-sm">
+                  Phòng này: 3,0 tr
+                </span>
+<div class="w-1.5 h-1.5 bg-primary rotate-45 -mt-0.5"></div>
+</div>
+<!-- Main Horizontal Track -->
+<div class="h-2 w-full bg-surface-container-high rounded-full relative overflow-visible">
+<!-- Interquartile Band (p25 to p75) -->
+<div class="absolute left-[30%] right-[15%] h-full bg-secondary-fixed rounded-full opacity-80"></div>
+<!-- Current Price Indicator Dot -->
+<div class="absolute left-[8%] top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-primary ring-2 ring-surface-container-lowest shadow-sm flex items-center justify-center">
+<div class="w-1.5 h-1.5 rounded-full bg-on-primary"></div>
+</div>
+<!-- p25 Marker -->
+<div class="absolute left-[30%] top-1/2 -translate-y-1/2 -translate-x-1/2 w-2 h-2 rounded-full bg-outline-variant"></div>
+<!-- Median Marker (Champagne Gold Dot) -->
+<div class="absolute left-[52%] top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-secondary ring-2 ring-surface-container-lowest shadow-sm"></div>
+<!-- p75 Marker -->
+<div class="absolute left-[85%] top-1/2 -translate-y-1/2 -translate-x-1/2 w-2 h-2 rounded-full bg-outline-variant"></div>
+</div>
+<!-- Scale Value Labels -->
+<div class="flex justify-between items-center text-[11px] text-on-surface-variant font-body-sm mt-3">
+<div class="flex flex-col items-start pl-1">
+<span class="text-primary font-semibold">3,0 tr</span>
+<span class="text-[10px] text-tertiary">Biên hời</span>
+</div>
+<div class="flex flex-col items-center">
+<span>p25: 4,2 tr</span>
+</div>
+<div class="flex flex-col items-center text-secondary font-medium">
+<span>Trung vị: 5,0 tr</span>
+</div>
+<div class="flex flex-col items-end pr-1">
+<span>p75: 6,5 tr</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Transaction Buttons -->
+<div class="flex flex-col gap-2.5 pt-2">
+<!-- Big Champagne Gold Primary Button -->
+<button class="w-full py-3.5 px-6 rounded-full bg-secondary hover:bg-on-secondary-container text-on-secondary font-label-md text-label-md font-semibold shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 active:scale-[0.99]">
+<span>Xem tin gốc</span>
+<span class="material-symbols-outlined text-[18px]">open_in_new</span>
+</button>
+<!-- Secondary Outline Action -->
+<button class="w-full py-3 px-6 rounded-full bg-surface-container-low hover:bg-surface-container text-primary font-label-md text-label-md font-medium transition-all flex items-center justify-center gap-2" id="copy-btn">
+<span class="material-symbols-outlined text-[18px]">content_copy</span>
+<span>Sao chép liên kết thẩm định</span>
+</button>
+</div>
+<!-- Transparent Trust Note (Strict Constraint: No seller, no phone, no contact, no map) -->
+<div class="pt-3 border-t-0 flex items-start gap-2.5 text-on-surface-variant">
+<span class="material-symbols-outlined text-primary text-[18px] shrink-0 mt-0.5">verified_user</span>
+<p class="font-body-sm text-[12px] leading-relaxed">
+<strong class="font-medium text-on-surface">Minh bạch độc lập:</strong> RoomBeacon là nền tảng chuẩn hóa dữ liệu nhà ở. Chúng tôi không thu phí trung gian, không sở hữu phòng và không can thiệp vào thỏa thuận thuê.
+            </p>
+</div>
+</div>
+<!-- Quick Summary Mini-Card -->
+<div class="p-4 rounded-xl bg-surface-container-low flex items-center justify-between text-on-surface-variant font-body-sm text-body-sm shadow-sm">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[20px]">notifications_active</span>
+<span>Theo dõi biến động phòng này</span>
+</div>
+<button class="text-primary font-label-sm text-label-sm font-semibold hover:underline">
+            Bật thông báo
+          </button>
+</div>
+</div>
+</div>
+</section>
+<!-- BOTTOM SECTION: Tin Tương Tự Trong Khu Vực (Similar Listings in Tan Hung) -->
+<section class="w-full py-12">
+<div class="flex flex-col sm:flex-row sm:items-end justify-between mb-8 gap-3">
+<div>
+<span class="font-label-sm text-label-sm uppercase tracking-widest text-primary font-semibold">Gợi ý tuyển chọn</span>
+<h2 class="font-headline-md text-headline-md text-on-surface mt-1">Phòng tương tự tại Phường Tân Hưng</h2>
+</div>
+<a class="inline-flex items-center gap-1 text-primary font-label-md text-label-md font-medium hover:underline" href="#">
+<span>Xem tất cả 24 phòng Tân Hưng</span>
+<span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</a>
+</div>
+<!-- 3 Property Cards Grid -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+<!-- Similar Card 1 -->
+<div class="rounded-2xl bg-surface-container-lowest shadow-sm hover:shadow-md transition-all overflow-hidden flex flex-col group">
+<div class="relative aspect-[16/10] overflow-hidden bg-surface-container">
+<img alt="Studio Him Lam Đường 6" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="Sunlit minimalist studio in Tan Hung District 7 with bright bay window, pale timber flooring, beige armchair and brass accent lamps." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAlDMSSLMMI1nGz4eJLxuABAVWEvSwoDjQikfdITyvfaa2GCM5q4SWDQMWBQLvEZgv-PYZ8OwbMq1jlLxdJme94TAB0hBDHmvjDzHUUllgfNlp4ERMRBpqwGC3Kk5ZTUS6XWpAzd9UAmlNfdpN-xt6GwnDMwrM84QZ8rkkzZSwa2NqvcI5jPhYeVUWA6lJSFhcxungkIieaoh9bLnpvlrTHKuHZRxunnxGuv2qZ0IK9G0P2DD-uTOiL"/>
+<div class="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-surface-container-lowest/90 backdrop-blur text-primary font-label-sm text-label-sm font-medium flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">check</span> Đã thẩm định
+          </div>
+<div class="absolute bottom-3 right-3 px-2 py-0.5 rounded bg-inverse-surface/80 text-inverse-on-surface font-label-sm text-[11px]">
+            1/12 ảnh
+          </div>
+</div>
+<div class="p-5 flex flex-col gap-3 flex-1 justify-between">
+<div>
+<div class="flex items-baseline justify-between mb-1">
+<span class="font-price-card text-price-card font-bold text-primary">3.200.000 đ</span>
+<span class="font-body-sm text-[12px] text-on-surface-variant">/ tháng</span>
+</div>
+<h3 class="font-label-md text-label-md font-semibold text-on-surface group-hover:text-primary transition-colors line-clamp-1">
+              Studio Cửa sổ thoáng KDC Him Lam
+            </h3>
+<p class="font-body-sm text-[12px] text-on-surface-variant mt-0.5">
+              26 m² · 123.000 đ/m² · Đường số 6, P. Tân Hưng
+            </p>
+</div>
+<!-- Mini Price Strip -->
+<div class="pt-2">
+<div class="h-1.5 w-full bg-surface-container-high rounded-full relative overflow-visible mb-1">
+<div class="absolute left-[30%] right-[15%] h-full bg-secondary-fixed rounded-full"></div>
+<div class="absolute left-[14%] top-1/2 -translate-y-1/2 -translate-x-1/2 w-2.5 h-2.5 rounded-full bg-primary"></div>
+</div>
+<div class="flex justify-between items-center text-[10px] text-tertiary font-semibold">
+<span>Rẻ hơn 23% trung vị</span>
+<span class="text-on-surface-variant font-normal">Khu vực: 5,0 tr</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Similar Card 2 -->
+<div class="rounded-2xl bg-surface-container-lowest shadow-sm hover:shadow-md transition-all overflow-hidden flex flex-col group">
+<div class="relative aspect-[16/10] overflow-hidden bg-surface-container">
+<img alt="Studio Tân Hưng view xanh" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="Quiet modern studio with large balcony looking out to green urban trees, neutral linen curtains, study desk, natural light in District 7 Ho Chi Minh City." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDjS_l4mYEJl1Ve5exh99QG7oEKR_OmSeNCsAxZ7HyvreN3cQIzjW6kSSSLruT54UoRky7vQPHhDk6Vac6NtzEqRZlDwyAy8ASlP3AIVb1gDbv268Z7242kJKFo2cuEvluOs9NWugW1C5bUcUpRWH8wqtyN_-VnoA4wVdlu-SwWGNe95qk7dFntDkX4uABQnoihlh_XpCId9FdQvRBFu_4z_1D_F2nwDaaN4uuxC1fDW2B2h6zQ7aH8"/>
+<div class="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-surface-container-lowest/90 backdrop-blur text-primary font-label-sm text-label-sm font-medium flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">check</span> Đã thẩm định
+          </div>
+<div class="absolute bottom-3 right-3 px-2 py-0.5 rounded bg-inverse-surface/80 text-inverse-on-surface font-label-sm text-[11px]">
+            1/15 ảnh
+          </div>
+</div>
+<div class="p-5 flex flex-col gap-3 flex-1 justify-between">
+<div>
+<div class="flex items-baseline justify-between mb-1">
+<span class="font-price-card text-price-card font-bold text-primary">3.500.000 đ</span>
+<span class="font-body-sm text-[12px] text-on-surface-variant">/ tháng</span>
+</div>
+<h3 class="font-label-md text-label-md font-semibold text-on-surface group-hover:text-primary transition-colors line-clamp-1">
+              Căn hộ 1PN Mini nội thất sồi Scandinavian
+            </h3>
+<p class="font-body-sm text-[12px] text-on-surface-variant mt-0.5">
+              30 m² · 116.000 đ/m² · Đường Nguyễn Thị Thập
+            </p>
+</div>
+<!-- Mini Price Strip -->
+<div class="pt-2">
+<div class="h-1.5 w-full bg-surface-container-high rounded-full relative overflow-visible mb-1">
+<div class="absolute left-[30%] right-[15%] h-full bg-secondary-fixed rounded-full"></div>
+<div class="absolute left-[18%] top-1/2 -translate-y-1/2 -translate-x-1/2 w-2.5 h-2.5 rounded-full bg-primary"></div>
+</div>
+<div class="flex justify-between items-center text-[10px] text-tertiary font-semibold">
+<span>Rẻ hơn 18% trung vị</span>
+<span class="text-on-surface-variant font-normal">Khu vực: 5,0 tr</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Similar Card 3 -->
+<div class="rounded-2xl bg-surface-container-lowest shadow-sm hover:shadow-md transition-all overflow-hidden flex flex-col group">
+<div class="relative aspect-[16/10] overflow-hidden bg-surface-container">
+<img alt="Studio Duplex Him Lam" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="Modern penthouse studio apartment with high vaulted concrete ceiling, warm cove lighting, minimalist kitchen bar counter in Tan Hung District 7." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAuFIOcEQNLUgsgPrPP_NExuexez4iAqIfGfSGVM4AGb0q0CVQDzKk4ApVe1CoATRxbM0r0QClg0LcebWAO8m9WCx1usyBTvAmDNGAwLjbxGqlkX06S_vxuIXvWo5gy6fDkiqa0N3_JwDa6RD-OOJkSTe_H87QbHGACfz16lUTET5_IFqc9DN73esi98E43L_BLKzbtErOILaGfxLvL_Bq-osofC0qFkQ9Dx46YjTONB6QICzW9fWjB"/>
+<div class="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-surface-container-lowest/90 backdrop-blur text-primary font-label-sm text-label-sm font-medium flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">check</span> Đã thẩm định
+          </div>
+<div class="absolute bottom-3 right-3 px-2 py-0.5 rounded bg-inverse-surface/80 text-inverse-on-surface font-label-sm text-[11px]">
+            1/20 ảnh
+          </div>
+</div>
+<div class="p-5 flex flex-col gap-3 flex-1 justify-between">
+<div>
+<div class="flex items-baseline justify-between mb-1">
+<span class="font-price-card text-price-card font-bold text-primary">3.800.000 đ</span>
+<span class="font-body-sm text-[12px] text-on-surface-variant">/ tháng</span>
+</div>
+<h3 class="font-label-md text-label-md font-semibold text-on-surface group-hover:text-primary transition-colors line-clamp-1">
+              Studio Duplex Trần Cao Him Lam Riverside
+            </h3>
+<p class="font-body-sm text-[12px] text-on-surface-variant mt-0.5">
+              32 m² · 118.000 đ/m² · Đường D1, KDC Him Lam
+            </p>
+</div>
+<!-- Mini Price Strip -->
+<div class="pt-2">
+<div class="h-1.5 w-full bg-surface-container-high rounded-full relative overflow-visible mb-1">
+<div class="absolute left-[30%] right-[15%] h-full bg-secondary-fixed rounded-full"></div>
+<div class="absolute left-[24%] top-1/2 -translate-y-1/2 -translate-x-1/2 w-2.5 h-2.5 rounded-full bg-primary"></div>
+</div>
+<div class="flex justify-between items-center text-[10px] text-tertiary font-semibold">
+<span>Sát biên dưới p25</span>
+<span class="text-on-surface-variant font-normal">Khu vực: 5,0 tr</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Gallery Lightbox Modal (Invisible by default, triggered via JS) -->
+<div class="fixed inset-0 z-50 bg-inverse-surface/90 backdrop-blur-md hidden flex-col items-center justify-center p-4" id="gallery-modal">
+<div class="w-full max-w-4xl bg-surface-container-lowest rounded-2xl overflow-hidden shadow-2xl flex flex-col">
+<div class="p-4 flex items-center justify-between border-b-0">
+<span class="font-label-md text-label-md font-semibold text-on-surface">Bộ sưu tập khảo sát thực tế (18 ảnh)</span>
+<button class="w-8 h-8 rounded-full bg-surface-container-low flex items-center justify-center hover:bg-surface-container" onclick="closeFullGalleryModal()">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+</div>
+<div class="aspect-[16/9] w-full bg-black relative flex items-center justify-center">
+<img alt="Phóng to ảnh" class="max-h-full max-w-full object-contain" data-alt="Expansive panoramic angle of the studio room showcasing the interplay of afternoon sunlight on timber cabinetry and the wide leafy balcony in Ho Chi Minh City." id="modal-img" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBKtnxqukjNnygi5g8QWNCCWLXGkAY95Hrj7aZhxkPvOslN-bx9se8Y7UjBEqJHVsTBntO8O0Tl-I6JzCkkNFfNVM7qyZ8EHH4pkX_8G3u2RCDLmaZySQetRgMhVY4HqIPIlGQShQS23jPirC1i4FoOYHh7noGfhkt7nUvWzRdL0pGUPvZ3QUwy9TaYIuEh1PQDGqenLLaRIL8aiZSqsEnvrRmRxkh8oObI9z31WdvYEw9DfuGm9wRt"/>
+</div>
+<div class="p-3 bg-surface-container-low flex items-center justify-between text-on-surface-variant font-label-sm text-label-sm">
+<span>Ảnh chụp chuyên viên RoomBeacon thẩm định ngày 28/09/2026</span>
+<span>Mã hồ sơ: RB-849204</span>
+</div>
+</div>
+</div>
+<!-- Interactive Logic for Gallery and Micro-Interactions -->
+<script>
+    let currentImgIndex = 1;
+    const totalImages = 18;
+
+    function updateCounter() {
+      const el = document.getElementById('counter-display');
+      if (el) el.textContent = currentImgIndex + ' / ' + totalImages;
+    }
+
+    function prevGalleryImage() {
+      currentImgIndex = currentImgIndex > 1 ? currentImgIndex - 1 : totalImages;
+      updateCounter();
+    }
+
+    function nextGalleryImage() {
+      currentImgIndex = currentImgIndex < totalImages ? currentImgIndex + 1 : 1;
+      updateCounter();
+    }
+
+    function selectGalleryThumb(index) {
+      currentImgIndex = index + 1;
+      updateCounter();
+    }
+
+    function openFullGalleryModal() {
+      const modal = document.getElementById('gallery-modal');
+      if (modal) modal.classList.remove('hidden');
+      if (modal) modal.classList.add('flex');
+    }
+
+    function closeFullGalleryModal() {
+      const modal = document.getElementById('gallery-modal');
+      if (modal) modal.classList.add('hidden');
+      if (modal) modal.classList.remove('flex');
+    }
+
+    // Save button micro-interaction
+    const saveBtn = document.getElementById('save-btn');
+    if (saveBtn) {
+      saveBtn.addEventListener('click', function() {
+        const icon = this.querySelector('.material-symbols-outlined');
+        const text = this.querySelector('span:last-child');
+        if (icon.textContent === 'favorite_border') {
+          icon.textContent = 'favorite';
+          icon.style.color = '#ba1a1a';
+          text.textContent = 'Đã lưu';
+        } else {
+          icon.textContent = 'favorite_border';
+          icon.style.color = '';
+          text.textContent = 'Lưu tin';
+        }
+      });
+    }
+
+    // Copy link micro-interaction
+    const copyBtn = document.getElementById('copy-btn');
+    if (copyBtn) {
+      copyBtn.addEventListener('click', function() {
+        const originalText = this.querySelector('span:last-child').textContent;
+        const textSpan = this.querySelector('span:last-child');
+        textSpan.textContent = 'Đã sao chép liên kết!';
+        setTimeout(() => {
+          textSpan.textContent = originalText;
+        }, 2000);
+      });
+    }
+  </script>
+</div></div></main><footer class="w-full bg-surface-container-lowest shadow-[0_-1px_6px_rgba(17,24,39,0.03)] py-space-xl"><div class="max-w-[1280px] mx-auto px-gutter"><div class="grid grid-cols-1 md:grid-cols-12 gap-gutter mb-space-lg"><div class="md:col-span-5 flex flex-col gap-space-sm"><div class="flex items-center gap-space-xs"><img alt="Minimal geometric lighthouse line icon wordmark for RoomBeacon in deep teal and champagne gold. Brand logo. - Primary color: #0f5f58
+- Font: playfairDisplay
+- Mode: light
+- Roundness: rounded-md
+" class="h-6 w-auto object-contain" src="https://lh3.googleusercontent.com/aida/AEtjO1VnlThgi_As3MVl2zOh-oeK0A8brL56pL2K_o4c9Jh4kYc2waXdNTHRilNWtrSo_dzgJDQcFlTCJtibxuzmUWRBRH5W5AhLHl_-xzkBEauNHvvOXtFfvocSvaiLAeD-2oA4R2wYb0FkeWEC7mVx84zodK0aghrBq2Odd4iM56CylisNjrfZIsSSXwlhd2b1HjwxxNabMMchULSSny5GIYfobbLEzNpfCes_7oYKzSY6Kz-pb82fRdRbbOA"/><span class="font-headline-sm text-headline-sm text-primary">RoomBeacon</span></div><p class="font-body-sm text-body-sm text-on-surface-variant max-w-md">Nền tảng khảo sát và tuyển chọn không gian sống chuẩn mực kiến trúc tại TP. Hồ Chí Minh. Minh bạch hóa dữ liệu thị trường căn hộ cao cấp và studio thiết kế.</p></div><div class="md:col-span-3 flex flex-col gap-space-xs"><span class="font-label-md text-label-md text-on-surface">Thị trường TP.HCM</span><span class="font-body-sm text-body-sm text-on-surface-variant">Quận 1 · Quận 3 · Bình Thạnh · Thảo Điền</span><span class="font-body-sm text-body-sm text-on-surface-variant">Cập nhật dữ liệu trung vị: Hằng tuần</span></div><div class="md:col-span-4 flex flex-col gap-space-xs"><span class="font-label-md text-label-md text-on-surface">Khuyến cáo minh bạch</span><p class="font-body-sm text-body-sm text-on-surface-variant">RoomBeacon cung cấp khoảng giá tham chiếu độc lập dựa trên giao dịch thực tế. Thông tin niêm yết được thẩm định trước khi hiển thị nhằm bảo vệ người thuê.</p></div></div><div class="pt-space-md flex flex-col sm:flex-row items-center justify-between gap-space-sm"><span class="font-body-sm text-body-sm text-on-surface-variant">© 2025 RoomBeacon Living Platform. Toàn bộ quyền được bảo lưu.</span><div class="flex items-center gap-space-md"><a class="font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors" href="#">Điều khoản dịch vụ</a><a class="font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors" href="#">Chính sách quyền riêng tư</a><a class="font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors" href="#">Tiêu chuẩn thẩm định</a></div></div></div></footer></body></html>

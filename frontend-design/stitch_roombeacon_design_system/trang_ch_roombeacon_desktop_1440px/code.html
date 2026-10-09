@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+
+<html lang="vi"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_standard" name="shell-type"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&amp;family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{colors:{"surface-container-high":"#e1e8fd","on-secondary":"#ffffff","secondary-fixed":"#ffdeaa","inverse-surface":"#293040","error-container":"#ffdad6","surface-dim":"#d3daef","surface":"#f9f9ff","on-primary":"#ffffff","tertiary-fixed":"#97f5cc","on-secondary-container":"#755100","on-tertiary-container":"#7edbb4","primary-container":"#0f5f58","on-tertiary-fixed":"#002115","on-secondary-fixed-variant":"#5f4100","on-primary-container":"#91d6cd","outline-variant":"#bec9c6","inverse-on-surface":"#edf0ff","on-primary-fixed-variant":"#00504a","tertiary":"#004732","on-secondary-fixed":"#271900","inverse-primary":"#8ed3ca","on-surface":"#141b2b","surface-container-highest":"#dce2f7","surface-variant":"#dce2f7","surface-container-lowest":"#ffffff","surface-container":"#e9edff","on-error-container":"#93000a","tertiary-fixed-dim":"#7bd8b1","surface-bright":"#f9f9ff","on-tertiary-fixed-variant":"#00513a","on-tertiary":"#ffffff","error":"#ba1a1a","surface-container-low":"#f1f3ff","on-error":"#ffffff","on-primary-fixed":"#00201d","on-surface-variant":"#3f4947","on-background":"#141b2b","secondary-fixed-dim":"#f3be5e","primary":"#004640","outline":"#6f7977","tertiary-container":"#006145","secondary":"#7d5700","background":"#f9f9ff","secondary-container":"#fcc665","primary-fixed":"#a9f0e6","surface-tint":"#1f6962","primary-fixed-dim":"#8ed3ca"},borderRadius:{DEFAULT:"0.25rem",lg:"0.5rem",xl:"0.75rem",full:"9999px"},spacing:{"space-xl":"3.5rem",margin:"3rem","space-xs":"0.375rem",gutter:"1.5rem","space-lg":"2rem","gutter-mobile":"1rem","space-md":"1.25rem","margin-mobile":"1.25rem","space-sm":"0.75rem"},fontFamily:{"headline-lg-mobile":["Playfair Display"],"price-card":["Be Vietnam Pro"],"price-hero":["Be Vietnam Pro"],"headline-lg":["Playfair Display"],"label-sm":["Be Vietnam Pro"],"body-sm":["Be Vietnam Pro"],"display-mobile":["Playfair Display"],"headline-md":["Playfair Display"],"body-lg":["Be Vietnam Pro"],"body-md":["Be Vietnam Pro"],display:["Playfair Display"],"label-md":["Be Vietnam Pro"],"headline-sm":["Playfair Display"]},fontSize:{"headline-lg-mobile":["28px",{lineHeight:"36px",letterSpacing:"-0.01em",fontWeight:"500"}],"price-card":["20px",{lineHeight:"28px",letterSpacing:"-0.01em",fontWeight:"600"}],"price-hero":["32px",{lineHeight:"40px",letterSpacing:"-0.02em",fontWeight:"700"}],"headline-lg":["40px",{lineHeight:"50px",letterSpacing:"-0.015em",fontWeight:"500"}],"label-sm":["11px",{lineHeight:"16px",letterSpacing:"0.05em",fontWeight:"600"}],"body-sm":["13px",{lineHeight:"20px",fontWeight:"400"}],"display-mobile":["36px",{lineHeight:"44px",letterSpacing:"-0.01em",fontWeight:"600"}],"headline-md":["28px",{lineHeight:"36px",fontWeight:"500"}],"body-lg":["18px",{lineHeight:"28px",fontWeight:"400"}],"body-md":["15px",{lineHeight:"24px",fontWeight:"400"}],display:["56px",{lineHeight:"68px",letterSpacing:"-0.02em",fontWeight:"600"}],"label-md":["14px",{lineHeight:"20px",letterSpacing:"0.01em",fontWeight:"500"}],"headline-sm":["22px",{lineHeight:"30px",fontWeight:"500"}]}}}};</script></head><body class="bg-surface-container-lowest font-body-md text-on-surface antialiased selection:bg-primary-fixed selection:text-on-primary-fixed"><header class="fixed top-0 left-0 w-full z-50 bg-surface-container-lowest/95 backdrop-blur-md border-b border-[#E7E2DA]"><div class="h-[72px] max-w-[1320px] mx-auto px-10 flex items-center justify-between"><div class="flex items-center gap-4"><a class="flex items-center gap-3 group" data-path="kham-pha" href="#"><img alt="Minimal geometric lighthouse line icon wordmark for RoomBeacon in deep teal and champagne gold. Brand logo. - Primary color: #0f5f58
+- Font: playfairDisplay
+- Mode: light
+- Roundness: rounded-md
+" class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida/AEtjO1VnlThgi_As3MVl2zOh-oeK0A8brL56pL2K_o4c9Jh4kYc2waXdNTHRilNWtrSo_dzgJDQcFlTCJtibxuzmUWRBRH5W5AhLHl_-xzkBEauNHvvOXtFfvocSvaiLAeD-2oA4R2wYb0FkeWEC7mVx84zodK0aghrBq2Odd4iM56CylisNjrfZIsSSXwlhd2b1HjwxxNabMMchULSSny5GIYfobbLEzNpfCes_7oYKzSY6Kz-pb82fRdRbbOA"/><span class="font-headline-sm text-headline-sm text-primary tracking-tight">RoomBeacon</span></a><span class="hidden lg:inline-block w-px h-5 bg-[#E7E2DA] mx-1"></span><span class="hidden lg:inline-block font-label-sm text-label-sm uppercase tracking-widest text-on-surface-variant/70">Sài Gòn Sanctuary</span></div><div class="flex items-center gap-8"><nav class="flex items-center gap-2 sm:gap-4 md:gap-7" data-active-classes="text-primary font-semibold"><a class="font-label-md text-label-md text-on-surface-variant hover:text-primary transition-colors py-2" data-path="tim-phong" href="#">Tìm phòng</a><span class="text-[#E7E2DA] font-light select-none">·</span><a class="font-label-md text-label-md text-on-surface-variant hover:text-primary transition-colors py-2" data-path="khu-vuc" href="#">Khu vực</a><span class="text-[#E7E2DA] font-light select-none">·</span><a class="font-label-md text-label-md text-on-surface-variant hover:text-primary transition-colors py-2" data-path="dinh-gia" href="#">Định giá</a><span class="text-[#E7E2DA] font-light select-none">·</span><a class="font-label-md text-label-md text-on-surface-variant hover:text-primary transition-colors py-2" data-path="bang-gia" href="#">Bảng giá</a></nav><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center shrink-0"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="w-full pt-[72px] bg-surface-container-lowest min-h-screen"><div class="flex flex-col w-full">
+<!-- HERO SECTION -->
+<section class="relative bg-[#FAF8F5] pt-16 pb-24 px-6 md:px-12 text-center overflow-hidden border-b border-[#E7E2DA]">
+<!-- Ambient Map & Geometry Watermark -->
+<div class="absolute inset-0 pointer-events-none opacity-[0.035] flex items-center justify-center">
+<svg class="w-full h-full max-w-[1400px]" fill="none" stroke="currentColor" viewbox="0 0 1000 600">
+<path d="M50,100 Q300,120 450,250 T800,280 T950,500" stroke-width="1.5"></path>
+<path d="M120,40 Q400,220 520,380 T880,440" stroke-width="1.2"></path>
+<path d="M20,300 C250,260 400,450 700,320 C850,260 920,120 990,80" stroke-width="1.5"></path>
+<circle cx="450" cy="250" r="180" stroke-dasharray="4 6" stroke-width="1"></circle>
+<circle cx="520" cy="380" r="260" stroke-dasharray="6 8" stroke-width="0.8"></circle>
+<circle cx="700" cy="320" r="90" stroke-width="1"></circle>
+</svg>
+</div>
+<div class="relative z-10 max-w-5xl mx-auto flex flex-col items-center">
+<!-- Live Indicator -->
+<div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white shadow-sm border border-[#E7E2DA] mb-6">
+<span class="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span>
+<span class="font-label-sm text-label-sm text-on-surface-variant font-medium tracking-wider uppercase">Dữ liệu thị trường thời gian thực</span>
+</div>
+<!-- Main Serif Headline -->
+<h1 class="font-display text-display text-[#111827] max-w-4xl tracking-tight leading-[1.12]">
+        Tìm phòng trọ ở TP.HCM — biết rõ giá trước khi hỏi
+      </h1>
+<p class="font-body-md text-body-md text-[#6B7280] tracking-wide mt-4">
+        76.531 tin đăng đã kiểm định <span class="mx-1.5 opacity-40">·</span> 55 quận/khu vực <span class="mx-1.5 opacity-40">·</span> Cập nhật 16:52 hôm nay
+      </p>
+<!-- Architectural Pill Search Bar -->
+<div class="w-full max-w-[1040px] mt-10 bg-white rounded-full border border-[#E7E2DA] shadow-[0_14px_40px_rgba(17,24,39,0.07)] p-2.5 transition-all hover:shadow-[0_18px_50px_rgba(17,24,39,0.1)]">
+<div class="flex flex-col lg:flex-row items-center divide-y lg:divide-y-0 lg:divide-x divide-[#E7E2DA]/80">
+<!-- Segment 1: Khu vực -->
+<div class="w-full lg:w-[22%] px-5 py-2.5 text-left flex items-center gap-3 cursor-pointer group hover:bg-[#FAF8F5] rounded-full lg:rounded-l-full transition-colors">
+<span class="material-symbols-outlined text-[#0F5F58] text-[22px]">location_on</span>
+<div class="min-w-0 flex-1">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-[#6B7280] block font-medium">Khu vực</span>
+<span class="font-body-md text-body-md font-semibold text-[#111827] truncate block group-hover:text-[#0F5F58] transition-colors">Toàn TP.HCM ▾</span>
+</div>
+</div>
+<!-- Segment 2: Input search query -->
+<div class="w-full lg:w-[38%] px-5 py-2.5 text-left flex items-center gap-3">
+<span class="material-symbols-outlined text-[#6B7280] text-[22px]">search</span>
+<div class="w-full">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-[#6B7280] block font-medium">Tìm kiếm</span>
+<input class="w-full bg-transparent font-body-md text-body-md text-[#111827] placeholder-[#9CA3AF] outline-none font-medium truncate" placeholder="Đường, phường, hoặc tiện ích căn hộ..." type="text"/>
+</div>
+</div>
+<!-- Segment 3: Khoảng giá -->
+<div class="w-full lg:w-[20%] px-5 py-2.5 text-left flex items-center justify-between cursor-pointer group hover:bg-[#FAF8F5] transition-colors">
+<div class="min-w-0">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-[#6B7280] block font-medium">Khoảng giá</span>
+<span class="font-body-md text-body-md font-semibold text-[#111827] truncate block group-hover:text-[#0F5F58] transition-colors">Tất cả mức giá ▾</span>
+</div>
+<span class="material-symbols-outlined text-[#6B7280] text-[18px]">payments</span>
+</div>
+<!-- Segment 4: CTA Button -->
+<div class="w-full lg:w-[20%] pl-3 pr-1 py-1.5 flex justify-end">
+<button class="w-full lg:w-auto flex-1 h-12 px-7 rounded-full bg-[#B8892E] hover:bg-[#a07424] active:scale-[0.98] text-white font-label-md text-label-md font-semibold shadow-sm flex items-center justify-center gap-2 transition-all">
+<span>Tìm phòng</span>
+<span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Quick Filter Chips & Valuation Anchor -->
+<div class="mt-6 flex flex-wrap justify-center items-center gap-2.5 text-xs text-[#4B5563]">
+<span class="font-label-sm text-label-sm text-[#6B7280] uppercase tracking-wider mr-1">Gợi ý nhanh:</span>
+<button class="rounded-full bg-white border border-[#E7E2DA] px-3.5 py-1.5 font-label-sm text-label-sm hover:border-[#0F5F58] hover:text-[#0F5F58] transition cursor-pointer">Dưới 3 triệu</button>
+<button class="rounded-full bg-white border border-[#E7E2DA] px-3.5 py-1.5 font-label-sm text-label-sm hover:border-[#0F5F58] hover:text-[#0F5F58] transition cursor-pointer">3–5 triệu</button>
+<button class="rounded-full bg-white border border-[#E7E2DA] px-3.5 py-1.5 font-label-sm text-label-sm hover:border-[#0F5F58] hover:text-[#0F5F58] transition cursor-pointer">Quận 7</button>
+<button class="rounded-full bg-white border border-[#E7E2DA] px-3.5 py-1.5 font-label-sm text-label-sm hover:border-[#0F5F58] hover:text-[#0F5F58] transition cursor-pointer">Bình Thạnh</button>
+<button class="rounded-full bg-white border border-[#E7E2DA] px-3.5 py-1.5 font-label-sm text-label-sm hover:border-[#0F5F58] hover:text-[#0F5F58] transition cursor-pointer">Gò Vấp</button>
+<a class="inline-flex items-center gap-1.5 font-label-md text-label-md font-medium text-[#0F5F58] hover:text-[#0b4742] ml-3 transition group" href="#quick-valuation">
+<span class="underline underline-offset-4 decoration-[#0F5F58]/40 group-hover:decoration-[#0F5F58]">Định giá phòng của bạn</span>
+<span class="material-symbols-outlined text-[16px] transition-transform group-hover:translate-x-0.5">arrow_forward</span>
+</a>
+</div>
+</div>
+</section>
+<!-- SECTION 2: KHÁM PHÁ THEO KHU VỰC -->
+<section class="bg-white py-20 px-6 md:px-12">
+<div class="max-w-[1320px] mx-auto">
+<div class="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-4">
+<div>
+<span class="font-label-sm text-label-sm text-[#0F5F58] uppercase tracking-widest font-semibold block mb-2">Bản đồ giá thị trường</span>
+<h2 class="font-headline-lg text-headline-lg text-[#111827] tracking-tight">Khám phá theo khu vực</h2>
+<p class="font-body-md text-body-md text-[#6B7280] mt-1.5">Phân tích giá thuê theo quận/huyện dựa trên dữ liệu giao dịch thực tế &amp; chuẩn hóa</p>
+</div>
+<a class="inline-flex items-center gap-2 font-label-md text-label-md font-semibold text-[#0F5F58] hover:text-[#0b4742] pb-1 border-b border-[#0F5F58]/30 hover:border-[#0F5F58] transition group" href="#">
+<span>Xem tất cả 55 khu vực</span>
+<span class="material-symbols-outlined text-[18px] group-hover:translate-x-1 transition-transform">east</span>
+</a>
+</div>
+<!-- 4x2 Grid of District Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+<!-- Card 1: Quận 7 -->
+<div class="group rounded-[20px] bg-white border border-[#E7E2DA] overflow-hidden hover:shadow-[0_14px_30px_rgba(17,24,39,0.06)] hover:border-[#0F5F58]/50 transition-all duration-300 flex flex-col">
+<div class="relative h-44 w-full overflow-hidden bg-[#FAF8F5]">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="Architectural photograph of District 7 Tan Phong modern apartment towers reflected in river water at sunset, minimalist composition, soft natural lighting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDGPJaeiZ2YIH8AViMLDmNCGIfiROU3REA9zwpU2G2aCI5Ug1PxSdJVUrV3znSPmMb4kTKeN_FGAQHAnogmRh7gfplKK1IQa8t4Ox1aOp-3inLBfVYlvhbE2Sn3_lAYoBmfpbUPuw17SeWur2M39RXKVCSXIIWsanwHN79kzd99nMQfyHEwgHVpvnaOD9bnr0gcyXOxwqUo2yfmnNN5gg0ttmE2GCMenryxNdDKiH4F1QdpPekRRP8Q"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>
+<div class="absolute bottom-3 left-4 right-4 flex items-center justify-between text-white">
+<span class="font-headline-sm text-headline-sm text-white font-medium">Quận 7</span>
+<span class="font-label-sm text-label-sm bg-white/20 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-white/20">16.088 tin</span>
+</div>
+</div>
+<div class="p-5 flex-1 flex flex-col justify-between space-y-4">
+<div>
+<div class="flex items-baseline justify-between">
+<span class="font-price-card text-price-card font-bold text-[#111827]">5,0 tr <span class="font-body-sm text-body-sm font-normal text-[#6B7280]">/tháng</span></span>
+<span class="font-label-sm text-label-sm font-medium text-[#6B7280]">155.556 đ/m²</span>
+</div>
+<span class="font-label-sm text-label-sm text-[#6B7280] block mt-0.5">Giá trung vị</span>
+</div>
+<!-- Signature Price Strip -->
+<div class="space-y-1.5 pt-2 border-t border-[#FAF8F5]">
+<div class="flex justify-between font-label-sm text-label-sm text-[#6B7280]">
+<span>Phổ giá p25–p75</span>
+<span class="font-medium text-[#111827]">4,0 – 6,5 tr</span>
+</div>
+<div class="relative w-full h-2 bg-[#FAF8F5] rounded-full overflow-visible flex items-center">
+<div class="absolute left-[20%] right-[30%] h-1.5 bg-[#0F5F58]/20 rounded-full"></div>
+<!-- Median Dot -->
+<div class="absolute left-[45%] -translate-x-1/2 w-3.5 h-3.5 bg-[#B8892E] rounded-full ring-2 ring-white shadow-sm" title="Trung vị thị trường: 5.0 tr"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Card 2: Bình Thạnh -->
+<div class="group rounded-[20px] bg-white border border-[#E7E2DA] overflow-hidden hover:shadow-[0_14px_30px_rgba(17,24,39,0.06)] hover:border-[#0F5F58]/50 transition-all duration-300 flex flex-col">
+<div class="relative h-44 w-full overflow-hidden bg-[#FAF8F5]">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="Binh Thanh residential district Saigon modern apartment buildings overlooking greenery and canal, clean editorial architectural style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAeOvy1YzIM0LFjkL7Mnu2wmZKxGwnmbXkA0cb9-Svnr72nb17R1SChjyV2F6jLYADD7UF-UDJe9RghbSMvAz0ylzPCRnPCwVdQVag0x2cElZ4vllyTsn-qVbNNG3oBgMW1sq5jxHvmUwTc1BmrgcNoTsInDFfH2eczk_AELDoywUCVFPLbyTIUuNXwYcpTS4SB1TZOF0QJuOrFlqfIC3eCBjdwG9Y2xY54YYR8ysFDp-_wbXPByAu1"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>
+<div class="absolute bottom-3 left-4 right-4 flex items-center justify-between text-white">
+<span class="font-headline-sm text-headline-sm text-white font-medium">Bình Thạnh</span>
+<span class="font-label-sm text-label-sm bg-white/20 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-white/20">14.210 tin</span>
+</div>
+</div>
+<div class="p-5 flex-1 flex flex-col justify-between space-y-4">
+<div>
+<div class="flex items-baseline justify-between">
+<span class="font-price-card text-price-card font-bold text-[#111827]">4,8 tr <span class="font-body-sm text-body-sm font-normal text-[#6B7280]">/tháng</span></span>
+<span class="font-label-sm text-label-sm font-medium text-[#6B7280]">162.000 đ/m²</span>
+</div>
+<span class="font-label-sm text-label-sm text-[#6B7280] block mt-0.5">Giá trung vị</span>
+</div>
+<div class="space-y-1.5 pt-2 border-t border-[#FAF8F5]">
+<div class="flex justify-between font-label-sm text-label-sm text-[#6B7280]">
+<span>Phổ giá p25–p75</span>
+<span class="font-medium text-[#111827]">3,8 – 6,2 tr</span>
+</div>
+<div class="relative w-full h-2 bg-[#FAF8F5] rounded-full overflow-visible flex items-center">
+<div class="absolute left-[18%] right-[28%] h-1.5 bg-[#0F5F58]/20 rounded-full"></div>
+<div class="absolute left-[44%] -translate-x-1/2 w-3.5 h-3.5 bg-[#B8892E] rounded-full ring-2 ring-white shadow-sm" title="Trung vị: 4.8 tr"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Card 3: Quận 1 -->
+<div class="group rounded-[20px] bg-white border border-[#E7E2DA] overflow-hidden hover:shadow-[0_14px_30px_rgba(17,24,39,0.06)] hover:border-[#0F5F58]/50 transition-all duration-300 flex flex-col">
+<div class="relative h-44 w-full overflow-hidden bg-[#FAF8F5]">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="District 1 Saigon historic tree-lined boulevards and restored French colonial architecture apartment building bathed in early morning warm sunlight." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDsi9cI8DaxDTVOFqPDgAaty8i34N409L2cUthxPVxZcesQQ-bpBaIuPTWWFmR_vRRTdtSJPnMSY9d4iekRU5zVGgX_22ddc23MEFuLBP8jmPISEAmUKuAL7B7q0Fb3GBIH0nIfKJtq4kOKMQMiy97PBBIIX3Feg7VraF9o6-uUaMKJUophdftwxH6ojCcq6RorvBmWcAYNKdAZ4QEYbFFDq8E9suDduCuOckxcg4sB5aovNgh5xpYw"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>
+<div class="absolute bottom-3 left-4 right-4 flex items-center justify-between text-white">
+<span class="font-headline-sm text-headline-sm text-white font-medium">Quận 1</span>
+<span class="font-label-sm text-label-sm bg-white/20 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-white/20">8.950 tin</span>
+</div>
+</div>
+<div class="p-5 flex-1 flex flex-col justify-between space-y-4">
+<div>
+<div class="flex items-baseline justify-between">
+<span class="font-price-card text-price-card font-bold text-[#111827]">8,5 tr <span class="font-body-sm text-body-sm font-normal text-[#6B7280]">/tháng</span></span>
+<span class="font-label-sm text-label-sm font-medium text-[#6B7280]">280.000 đ/m²</span>
+</div>
+<span class="font-label-sm text-label-sm text-[#6B7280] block mt-0.5">Giá trung vị</span>
+</div>
+<div class="space-y-1.5 pt-2 border-t border-[#FAF8F5]">
+<div class="flex justify-between font-label-sm text-label-sm text-[#6B7280]">
+<span>Phổ giá p25–p75</span>
+<span class="font-medium text-[#111827]">6,5 – 12,0 tr</span>
+</div>
+<div class="relative w-full h-2 bg-[#FAF8F5] rounded-full overflow-visible flex items-center">
+<div class="absolute left-[30%] right-[10%] h-1.5 bg-[#0F5F58]/20 rounded-full"></div>
+<div class="absolute left-[52%] -translate-x-1/2 w-3.5 h-3.5 bg-[#B8892E] rounded-full ring-2 ring-white shadow-sm" title="Trung vị: 8.5 tr"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Card 4: Quận 3 -->
+<div class="group rounded-[20px] bg-white border border-[#E7E2DA] overflow-hidden hover:shadow-[0_14px_30px_rgba(17,24,39,0.06)] hover:border-[#0F5F58]/50 transition-all duration-300 flex flex-col">
+<div class="relative h-44 w-full overflow-hidden bg-[#FAF8F5]">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="District 3 Saigon serene heritage residential lane with boutique townhouse lofts and lush tropical trees, editorial design photography." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCpxlq7pnnXXm8KDnsO1Gi54TTajCORVVViUEfywLrI5GmjLVJDVoWW1GsoXQOg6-LZSZolNe0gWvjgxeS-CnDkONYKx9NMrUp7DyjytK6Ctt7mN9Dbx3fbhG0-rpD_Bn5d87ObU73tFJTQh3ZZ1ryJTXuWeFVZ68xCQCh2t1hpd7CXkpR7S5cDxV3K_3V29l4p1GyBnRGdFNBbTU8qIhBdiTK2yAPexLQZ2hdmtvtNtcF7YUR3_IpQ"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>
+<div class="absolute bottom-3 left-4 right-4 flex items-center justify-between text-white">
+<span class="font-headline-sm text-headline-sm text-white font-medium">Quận 3</span>
+<span class="font-label-sm text-label-sm bg-white/20 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-white/20">7.120 tin</span>
+</div>
+</div>
+<div class="p-5 flex-1 flex flex-col justify-between space-y-4">
+<div>
+<div class="flex items-baseline justify-between">
+<span class="font-price-card text-price-card font-bold text-[#111827]">6,8 tr <span class="font-body-sm text-body-sm font-normal text-[#6B7280]">/tháng</span></span>
+<span class="font-label-sm text-label-sm font-medium text-[#6B7280]">225.000 đ/m²</span>
+</div>
+<span class="font-label-sm text-label-sm text-[#6B7280] block mt-0.5">Giá trung vị</span>
+</div>
+<div class="space-y-1.5 pt-2 border-t border-[#FAF8F5]">
+<div class="flex justify-between font-label-sm text-label-sm text-[#6B7280]">
+<span>Phổ giá p25–p75</span>
+<span class="font-medium text-[#111827]">5,2 – 9,0 tr</span>
+</div>
+<div class="relative w-full h-2 bg-[#FAF8F5] rounded-full overflow-visible flex items-center">
+<div class="absolute left-[26%] right-[16%] h-1.5 bg-[#0F5F58]/20 rounded-full"></div>
+<div class="absolute left-[48%] -translate-x-1/2 w-3.5 h-3.5 bg-[#B8892E] rounded-full ring-2 ring-white shadow-sm" title="Trung vị: 6.8 tr"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Card 5: Quận 10 -->
+<div class="group rounded-[20px] bg-white border border-[#E7E2DA] overflow-hidden hover:shadow-[0_14px_30px_rgba(17,24,39,0.06)] hover:border-[#0F5F58]/50 transition-all duration-300 flex flex-col">
+<div class="relative h-44 w-full overflow-hidden bg-[#FAF8F5]">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="District 10 modern residential neighborhood Saigon, sleek clean high-rise balconies with potted green plants, morning golden light." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCgkMYjHKpbGUynLeUUbzXLbXK8UvZpEL9m6L5WdYnZlhmAOOk-4xrWCy9avCc6pB5YDl8BzVFpj0CmZMJ2h4CZ710wx_KEEu2xYl8xZGlZrmAYf62suH42hBoXwTH5jnXzPHlxUxYvILWG9ml9PjGErkh2hMyhNeOfIelvxB69QNF_5HV_V0wn_D2AV_X2C3zFFUDJxrWiW99Edifac17iJAC56LuWAJXzcRzJ-9BLeZKrpgArFX1b"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>
+<div class="absolute bottom-3 left-4 right-4 flex items-center justify-between text-white">
+<span class="font-headline-sm text-headline-sm text-white font-medium">Quận 10</span>
+<span class="font-label-sm text-label-sm bg-white/20 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-white/20">9.430 tin</span>
+</div>
+</div>
+<div class="p-5 flex-1 flex flex-col justify-between space-y-4">
+<div>
+<div class="flex items-baseline justify-between">
+<span class="font-price-card text-price-card font-bold text-[#111827]">5,2 tr <span class="font-body-sm text-body-sm font-normal text-[#6B7280]">/tháng</span></span>
+<span class="font-label-sm text-label-sm font-medium text-[#6B7280]">170.000 đ/m²</span>
+</div>
+<span class="font-label-sm text-label-sm text-[#6B7280] block mt-0.5">Giá trung vị</span>
+</div>
+<div class="space-y-1.5 pt-2 border-t border-[#FAF8F5]">
+<div class="flex justify-between font-label-sm text-label-sm text-[#6B7280]">
+<span>Phổ giá p25–p75</span>
+<span class="font-medium text-[#111827]">4,0 – 7,0 tr</span>
+</div>
+<div class="relative w-full h-2 bg-[#FAF8F5] rounded-full overflow-visible flex items-center">
+<div class="absolute left-[20%] right-[22%] h-1.5 bg-[#0F5F58]/20 rounded-full"></div>
+<div class="absolute left-[46%] -translate-x-1/2 w-3.5 h-3.5 bg-[#B8892E] rounded-full ring-2 ring-white shadow-sm" title="Trung vị: 5.2 tr"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Card 6: Gò Vấp -->
+<div class="group rounded-[20px] bg-white border border-[#E7E2DA] overflow-hidden hover:shadow-[0_14px_30px_rgba(17,24,39,0.06)] hover:border-[#0F5F58]/50 transition-all duration-300 flex flex-col">
+<div class="relative h-44 w-full overflow-hidden bg-[#FAF8F5]">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="Go Vap district newly designed compact minimalist studio apartments, clean white concrete facades, modern urban sanctuary vibe." src="https://lh3.googleusercontent.com/aida-public/AB6AXuA48g3CLwatw3KpHjSSeGPpvXom7kEwCh0KGSOZm3K-JWG5Pkx_Ig7f5DK2Db2zPr49YDnJlwHe_NxQpiYnkmY6Yg275AlVFBIHhFGNxFEXt-e6aRXg2rem9G43JElR68wyg4gL5ruakN_M-HmQTbRCfbod6uMFN12B_402XnbNsG9Hq4ik4t1iusn25GhN5g1XENWlnOR4h5v-dGIaoOLxgR9VVuueSaWh24QOFazoOuMqNqUnOlD-"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>
+<div class="absolute bottom-3 left-4 right-4 flex items-center justify-between text-white">
+<span class="font-headline-sm text-headline-sm text-white font-medium">Gò Vấp</span>
+<span class="font-label-sm text-label-sm bg-white/20 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-white/20">12.350 tin</span>
+</div>
+</div>
+<div class="p-5 flex-1 flex flex-col justify-between space-y-4">
+<div>
+<div class="flex items-baseline justify-between">
+<span class="font-price-card text-price-card font-bold text-[#111827]">3,8 tr <span class="font-body-sm text-body-sm font-normal text-[#6B7280]">/tháng</span></span>
+<span class="font-label-sm text-label-sm font-medium text-[#6B7280]">128.000 đ/m²</span>
+</div>
+<span class="font-label-sm text-label-sm text-[#6B7280] block mt-0.5">Giá trung vị</span>
+</div>
+<div class="space-y-1.5 pt-2 border-t border-[#FAF8F5]">
+<div class="flex justify-between font-label-sm text-label-sm text-[#6B7280]">
+<span>Phổ giá p25–p75</span>
+<span class="font-medium text-[#111827]">2,8 – 5,0 tr</span>
+</div>
+<div class="relative w-full h-2 bg-[#FAF8F5] rounded-full overflow-visible flex items-center">
+<div class="absolute left-[12%] right-[35%] h-1.5 bg-[#0F5F58]/20 rounded-full"></div>
+<div class="absolute left-[36%] -translate-x-1/2 w-3.5 h-3.5 bg-[#B8892E] rounded-full ring-2 ring-white shadow-sm" title="Trung vị: 3.8 tr"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Card 7: Tân Bình -->
+<div class="group rounded-[20px] bg-white border border-[#E7E2DA] overflow-hidden hover:shadow-[0_14px_30px_rgba(17,24,39,0.06)] hover:border-[#0F5F58]/50 transition-all duration-300 flex flex-col">
+<div class="relative h-44 w-full overflow-hidden bg-[#FAF8F5]">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="Tan Binh residential street with modern serviced studios, calm leafy lane, architectural photography capturing contemporary Vietnamese townhouse." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD3TI_zwB0QLLrYUMxe1Wf-nTsG-GFs9PJby7RmsJajcf4SGv2p5mLssR50FU6_xa5TzSWjIdjo0r-VLJsEeScBMPUJOgLZOcQfkC66yZDCTxLAKr6_oAMoODiaAGMcgeAWeWSDd9sacH3peThHmkqKioQm_eaVbMD9aOQO8zYlpUEN1vq25vmTEo3ivNRGFtWY-gqFv33g71VZamcUdGZ96b_xCB0gJpkXofUigAgEBKUeVxDBT1Y1"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>
+<div class="absolute bottom-3 left-4 right-4 flex items-center justify-between text-white">
+<span class="font-headline-sm text-headline-sm text-white font-medium">Tân Bình</span>
+<span class="font-label-sm text-label-sm bg-white/20 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-white/20">13.080 tin</span>
+</div>
+</div>
+<div class="p-5 flex-1 flex flex-col justify-between space-y-4">
+<div>
+<div class="flex items-baseline justify-between">
+<span class="font-price-card text-price-card font-bold text-[#111827]">4,5 tr <span class="font-body-sm text-body-sm font-normal text-[#6B7280]">/tháng</span></span>
+<span class="font-label-sm text-label-sm font-medium text-[#6B7280]">150.000 đ/m²</span>
+</div>
+<span class="font-label-sm text-label-sm text-[#6B7280] block mt-0.5">Giá trung vị</span>
+</div>
+<div class="space-y-1.5 pt-2 border-t border-[#FAF8F5]">
+<div class="flex justify-between font-label-sm text-label-sm text-[#6B7280]">
+<span>Phổ giá p25–p75</span>
+<span class="font-medium text-[#111827]">3,5 – 5,8 tr</span>
+</div>
+<div class="relative w-full h-2 bg-[#FAF8F5] rounded-full overflow-visible flex items-center">
+<div class="absolute left-[16%] right-[30%] h-1.5 bg-[#0F5F58]/20 rounded-full"></div>
+<div class="absolute left-[42%] -translate-x-1/2 w-3.5 h-3.5 bg-[#B8892E] rounded-full ring-2 ring-white shadow-sm" title="Trung vị: 4.5 tr"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Card 8: TP. Thủ Đức -->
+<div class="group rounded-[20px] bg-white border border-[#E7E2DA] overflow-hidden hover:shadow-[0_14px_30px_rgba(17,24,39,0.06)] hover:border-[#0F5F58]/50 transition-all duration-300 flex flex-col">
+<div class="relative h-44 w-full overflow-hidden bg-[#FAF8F5]">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="Thu Duc Thao Dien contemporary riverside luxury apartments with expansive glass windows and lush greenery, architectural sunset photograph." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCsTwfJunxHWW9K9s90M95XNcZFubHBFWnZRohO_2LwLJ5JJlcZJt5WXvwn3aylO1Q8TxiW4WLLfToMyz_N9zhumau93hklhPquJjGGUuxXvfMqiHOTzzo7lLpZOAizQzWS1OaWV_SBzsEFOULjhT8ssG89o_abCFKXefVbkQOS3QDGGXxEBs4aWf9PxkaNzsYeKea6jkfSez1aJ3EsvpXVJd3jd1jI3Vo88ESas0VwtGi1kWNZoHek"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>
+<div class="absolute bottom-3 left-4 right-4 flex items-center justify-between text-white">
+<span class="font-headline-sm text-headline-sm text-white font-medium">TP. Thủ Đức</span>
+<span class="font-label-sm text-label-sm bg-white/20 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-white/20">15.700 tin</span>
+</div>
+</div>
+<div class="p-5 flex-1 flex flex-col justify-between space-y-4">
+<div>
+<div class="flex items-baseline justify-between">
+<span class="font-price-card text-price-card font-bold text-[#111827]">4,2 tr <span class="font-body-sm text-body-sm font-normal text-[#6B7280]">/tháng</span></span>
+<span class="font-label-sm text-label-sm font-medium text-[#6B7280]">135.000 đ/m²</span>
+</div>
+<span class="font-label-sm text-label-sm text-[#6B7280] block mt-0.5">Giá trung vị</span>
+</div>
+<div class="space-y-1.5 pt-2 border-t border-[#FAF8F5]">
+<div class="flex justify-between font-label-sm text-label-sm text-[#6B7280]">
+<span>Phổ giá p25–p75</span>
+<span class="font-medium text-[#111827]">3,2 – 5,5 tr</span>
+</div>
+<div class="relative w-full h-2 bg-[#FAF8F5] rounded-full overflow-visible flex items-center">
+<div class="absolute left-[15%] right-[32%] h-1.5 bg-[#0F5F58]/20 rounded-full"></div>
+<div class="absolute left-[39%] -translate-x-1/2 w-3.5 h-3.5 bg-[#B8892E] rounded-full ring-2 ring-white shadow-sm" title="Trung vị: 4.2 tr"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- SECTION 3: BẢNG GIÁ THUÊ THEO KHU VỰC -->
+<section class="bg-[#FAF8F5] py-20 px-6 md:px-12 border-y border-[#E7E2DA]">
+<div class="max-w-6xl mx-auto">
+<div class="flex flex-col sm:flex-row sm:items-end justify-between mb-10 gap-4">
+<div>
+<span class="font-label-sm text-label-sm text-[#0F5F58] uppercase tracking-widest font-semibold block mb-2">Chỉ số so sánh liên quận</span>
+<h2 class="font-headline-lg text-headline-lg text-[#111827] tracking-tight">Bảng giá thuê theo khu vực</h2>
+<p class="font-body-md text-body-md text-[#6B7280] mt-1">Chuẩn hóa theo phân vị 25% – 75% giúp loại bỏ các tin đăng giá ảo</p>
+</div>
+<!-- Mode Toggle Switch -->
+<div class="inline-flex p-1 bg-white border border-[#E7E2DA] rounded-full shadow-sm self-start sm:self-auto">
+<button class="px-5 py-2 rounded-full font-label-md text-label-md font-semibold bg-[#0F5F58] text-white shadow-sm transition" id="toggle-monthly">Theo tháng</button>
+<button class="px-5 py-2 rounded-full font-label-md text-label-md font-medium text-[#6B7280] hover:text-[#111827] transition" id="toggle-sqm">Theo m²</button>
+</div>
+</div>
+<!-- Quantitative Comparison Table -->
+<div class="bg-white rounded-[20px] border border-[#E7E2DA] shadow-[0_10px_30px_rgba(17,24,39,0.03)] overflow-hidden">
+<!-- Table Header -->
+<div class="grid grid-cols-12 px-6 py-4 bg-[#FAF8F5]/80 border-b border-[#E7E2DA] text-[#6B7280] font-label-sm text-label-sm uppercase tracking-wider font-semibold">
+<div class="col-span-3">Khu vực / Quy mô</div>
+<div class="col-span-5 text-center">Phổ giá thực tế (p25 – Trung vị – p75)</div>
+<div class="col-span-2 text-right">Giá trung vị</div>
+<div class="col-span-2 text-right">Biến động (30 ngày)</div>
+</div>
+<!-- Table Row 1: Quận 1 -->
+<div class="grid grid-cols-12 px-6 py-5 items-center border-b border-[#E7E2DA]/60 hover:bg-[#FAF8F5]/40 transition group">
+<div class="col-span-3">
+<span class="font-headline-sm text-[17px] font-semibold text-[#111827] block group-hover:text-[#0F5F58] transition-colors">Quận 1 — Trung tâm</span>
+<span class="font-body-sm text-body-sm text-[#6B7280]">8.950 căn đang cho thuê</span>
+</div>
+<div class="col-span-5 px-4">
+<div class="flex items-center justify-between font-label-sm text-label-sm text-[#6B7280] mb-1">
+<span>6,5 tr</span>
+<span class="text-[#B8892E] font-semibold">8,5 tr (Med)</span>
+<span>12,0 tr</span>
+</div>
+<div class="relative w-full h-3 bg-[#FAF8F5] rounded-full flex items-center">
+<div class="absolute left-[15%] right-[15%] h-2 bg-[#0F5F58]/15 rounded-full"></div>
+<div class="absolute left-[45%] -translate-x-1/2 w-3.5 h-3.5 bg-[#B8892E] rounded-full ring-2 ring-white shadow-sm"></div>
+</div>
+</div>
+<div class="col-span-2 text-right">
+<span class="font-price-card text-price-card font-bold text-[#111827]">8.500.000 đ</span>
+<span class="font-label-sm text-label-sm text-[#6B7280] block">280.000 đ/m²</span>
+</div>
+<div class="col-span-2 text-right">
+<span class="inline-flex items-center gap-0.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700">
+<span class="material-symbols-outlined text-[14px]">trending_up</span>
+              +1.4%
+            </span>
+</div>
+</div>
+<!-- Table Row 2: Quận 3 -->
+<div class="grid grid-cols-12 px-6 py-5 items-center border-b border-[#E7E2DA]/60 hover:bg-[#FAF8F5]/40 transition group">
+<div class="col-span-3">
+<span class="font-headline-sm text-[17px] font-semibold text-[#111827] block group-hover:text-[#0F5F58] transition-colors">Quận 3</span>
+<span class="font-body-sm text-body-sm text-[#6B7280]">7.120 căn đang cho thuê</span>
+</div>
+<div class="col-span-5 px-4">
+<div class="flex items-center justify-between font-label-sm text-label-sm text-[#6B7280] mb-1">
+<span>5,2 tr</span>
+<span class="text-[#B8892E] font-semibold">6,8 tr (Med)</span>
+<span>9,0 tr</span>
+</div>
+<div class="relative w-full h-3 bg-[#FAF8F5] rounded-full flex items-center">
+<div class="absolute left-[20%] right-[20%] h-2 bg-[#0F5F58]/15 rounded-full"></div>
+<div class="absolute left-[50%] -translate-x-1/2 w-3.5 h-3.5 bg-[#B8892E] rounded-full ring-2 ring-white shadow-sm"></div>
+</div>
+</div>
+<div class="col-span-2 text-right">
+<span class="font-price-card text-price-card font-bold text-[#111827]">6.800.000 đ</span>
+<span class="font-label-sm text-label-sm text-[#6B7280] block">225.000 đ/m²</span>
+</div>
+<div class="col-span-2 text-right">
+<span class="inline-flex items-center gap-0.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700">
+<span class="material-symbols-outlined text-[14px]">trending_up</span>
+              +0.8%
+            </span>
+</div>
+</div>
+<!-- Table Row 3: Quận 7 -->
+<div class="grid grid-cols-12 px-6 py-5 items-center border-b border-[#E7E2DA]/60 hover:bg-[#FAF8F5]/40 transition group">
+<div class="col-span-3">
+<span class="font-headline-sm text-[17px] font-semibold text-[#111827] block group-hover:text-[#0F5F58] transition-colors">Quận 7</span>
+<span class="font-body-sm text-body-sm text-[#6B7280]">16.088 căn đang cho thuê</span>
+</div>
+<div class="col-span-5 px-4">
+<div class="flex items-center justify-between font-label-sm text-label-sm text-[#6B7280] mb-1">
+<span>4,0 tr</span>
+<span class="text-[#B8892E] font-semibold">5,0 tr (Med)</span>
+<span>6,5 tr</span>
+</div>
+<div class="relative w-full h-3 bg-[#FAF8F5] rounded-full flex items-center">
+<div class="absolute left-[22%] right-[25%] h-2 bg-[#0F5F58]/15 rounded-full"></div>
+<div class="absolute left-[48%] -translate-x-1/2 w-3.5 h-3.5 bg-[#B8892E] rounded-full ring-2 ring-white shadow-sm"></div>
+</div>
+</div>
+<div class="col-span-2 text-right">
+<span class="font-price-card text-price-card font-bold text-[#111827]">5.000.000 đ</span>
+<span class="font-label-sm text-label-sm text-[#6B7280] block">155.556 đ/m²</span>
+</div>
+<div class="col-span-2 text-right">
+<span class="inline-flex items-center gap-0.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-stone-100 text-stone-600">
+<span class="material-symbols-outlined text-[14px]">horizontal_rule</span>
+              0.0%
+            </span>
+</div>
+</div>
+<!-- Table Row 4: Bình Thạnh -->
+<div class="grid grid-cols-12 px-6 py-5 items-center border-b border-[#E7E2DA]/60 hover:bg-[#FAF8F5]/40 transition group">
+<div class="col-span-3">
+<span class="font-headline-sm text-[17px] font-semibold text-[#111827] block group-hover:text-[#0F5F58] transition-colors">Bình Thạnh</span>
+<span class="font-body-sm text-body-sm text-[#6B7280]">14.210 căn đang cho thuê</span>
+</div>
+<div class="col-span-5 px-4">
+<div class="flex items-center justify-between font-label-sm text-label-sm text-[#6B7280] mb-1">
+<span>3,8 tr</span>
+<span class="text-[#B8892E] font-semibold">4,8 tr (Med)</span>
+<span>6,2 tr</span>
+</div>
+<div class="relative w-full h-3 bg-[#FAF8F5] rounded-full flex items-center">
+<div class="absolute left-[18%] right-[26%] h-2 bg-[#0F5F58]/15 rounded-full"></div>
+<div class="absolute left-[46%] -translate-x-1/2 w-3.5 h-3.5 bg-[#B8892E] rounded-full ring-2 ring-white shadow-sm"></div>
+</div>
+</div>
+<div class="col-span-2 text-right">
+<span class="font-price-card text-price-card font-bold text-[#111827]">4.800.000 đ</span>
+<span class="font-label-sm text-label-sm text-[#6B7280] block">162.000 đ/m²</span>
+</div>
+<div class="col-span-2 text-right">
+<span class="inline-flex items-center gap-0.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-50 text-red-700">
+<span class="material-symbols-outlined text-[14px]">trending_down</span>
+              -0.5%
+            </span>
+</div>
+</div>
+<!-- Table Row 5: Gò Vấp -->
+<div class="grid grid-cols-12 px-6 py-5 items-center hover:bg-[#FAF8F5]/40 transition group">
+<div class="col-span-3">
+<span class="font-headline-sm text-[17px] font-semibold text-[#111827] block group-hover:text-[#0F5F58] transition-colors">Gò Vấp</span>
+<span class="font-body-sm text-body-sm text-[#6B7280]">12.350 căn đang cho thuê</span>
+</div>
+<div class="col-span-5 px-4">
+<div class="flex items-center justify-between font-label-sm text-label-sm text-[#6B7280] mb-1">
+<span>2,8 tr</span>
+<span class="text-[#B8892E] font-semibold">3,8 tr (Med)</span>
+<span>5,0 tr</span>
+</div>
+<div class="relative w-full h-3 bg-[#FAF8F5] rounded-full flex items-center">
+<div class="absolute left-[15%] right-[30%] h-2 bg-[#0F5F58]/15 rounded-full"></div>
+<div class="absolute left-[40%] -translate-x-1/2 w-3.5 h-3.5 bg-[#B8892E] rounded-full ring-2 ring-white shadow-sm"></div>
+</div>
+</div>
+<div class="col-span-2 text-right">
+<span class="font-price-card text-price-card font-bold text-[#111827]">3.800.000 đ</span>
+<span class="font-label-sm text-label-sm text-[#6B7280] block">128.000 đ/m²</span>
+</div>
+<div class="col-span-2 text-right">
+<span class="inline-flex items-center gap-0.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700">
+<span class="material-symbols-outlined text-[14px]">trending_up</span>
+              +1.9%
+            </span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- SECTION 4: TIN MỚI CẬP NHẬT -->
+<section class="bg-white py-20 px-6 md:px-12">
+<div class="max-w-[1320px] mx-auto">
+<div class="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-4">
+<div>
+<span class="font-label-sm text-label-sm text-[#0F5F58] uppercase tracking-widest font-semibold block mb-2">Tuyển chọn vừa xác minh</span>
+<h2 class="font-headline-lg text-headline-lg text-[#111827] tracking-tight">Tin mới cập nhật</h2>
+<p class="font-body-md text-body-md text-[#6B7280] mt-1.5">Phòng trọ, căn hộ studio vừa được kiểm duyệt hình ảnh và thuật toán định giá đối soát</p>
+</div>
+<a class="inline-flex items-center gap-2 font-label-md text-label-md font-semibold text-[#0F5F58] hover:text-[#0b4742] pb-1 border-b border-[#0F5F58]/30 hover:border-[#0F5F58] transition group" href="#">
+<span>Xem thêm tin mới</span>
+<span class="material-symbols-outlined text-[18px] group-hover:translate-x-1 transition-transform">east</span>
+</a>
+</div>
+<!-- 4 Listing Cards Responsive Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+<!-- Listing 1 -->
+<div class="group rounded-[20px] bg-white border border-[#E7E2DA] overflow-hidden hover:shadow-[0_14px_36px_rgba(17,24,39,0.08)] hover:-translate-y-0.5 transition-all duration-300 flex flex-col">
+<!-- Image with Carousel Dots & Badges -->
+<div class="relative aspect-[4/3] w-full overflow-hidden bg-[#FAF8F5]">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="Modern Japanese-inspired studio apartment interior in District 7 with blonde oak platform bed, linen curtains, sheer morning light, minimalist architectural detailing." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB2yQ2KR09mn_N2Ib24UKS3HnkVtGjdYQmYXMe3FXfMkbVHzZwdomRfTfFghxbOsu4V3GN8TAWaksCKruoTx70Iuc7N30RJN6bBKcW5HEXADwSANiupuQnbAZNrSYjhiSGMIqNPXkojfZwYlOyNbV9ueb8Lz5lCc2UbEV1cUq7mS7efd3ta8WJzYvScn48bDdVxup_8wQofheh2ooHyZuwIM6Ndb1TzA3ZjI5Q-ZyZ6wqRmOyFxNIil"/>
+<button class="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/80 backdrop-blur-md border border-white/60 flex items-center justify-center text-[#111827] hover:text-red-600 transition shadow-sm">
+<span class="material-symbols-outlined text-[18px]">favorite</span>
+</button>
+<div class="absolute top-3 left-3">
+<span class="font-label-sm text-label-sm bg-emerald-50/95 backdrop-blur-sm text-[#047857] border border-emerald-200/80 px-2.5 py-1 rounded-full font-semibold shadow-xs flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">verified</span>
+                Rẻ hơn ước tính 22%
+              </span>
+</div>
+<!-- Carousel Dots Indicator -->
+<div class="absolute bottom-2.5 left-0 right-0 flex justify-center items-center gap-1.5 pointer-events-none">
+<span class="w-1.5 h-1.5 rounded-full bg-white shadow-xs"></span>
+<span class="w-1.5 h-1.5 rounded-full bg-white/50"></span>
+<span class="w-1.5 h-1.5 rounded-full bg-white/50"></span>
+<span class="w-1.5 h-1.5 rounded-full bg-white/50"></span>
+</div>
+</div>
+<!-- Listing Details -->
+<div class="p-5 flex-1 flex flex-col justify-between space-y-4">
+<div>
+<div class="flex items-baseline justify-between mb-1">
+<span class="font-price-card text-price-card font-bold text-[#111827]">4,5 triệu <span class="font-body-sm text-body-sm font-normal text-[#6B7280]">/tháng</span></span>
+<span class="font-label-sm text-label-sm text-[#6B7280]">3 ngày trước</span>
+</div>
+<div class="flex items-center gap-2 font-body-sm text-body-sm text-[#4B5563]">
+<span>25 m²</span>
+<span class="text-[#E7E2DA]">·</span>
+<span>180.000 đ/m²</span>
+</div>
+<div class="font-body-sm text-body-sm text-[#111827] font-medium mt-1.5 truncate">
+                Phường Tân Hưng, Quận 7
+              </div>
+</div>
+<!-- Context Strip for Sub-district -->
+<div class="pt-3 border-t border-[#FAF8F5] space-y-1">
+<div class="flex justify-between font-label-sm text-label-sm text-[#6B7280]">
+<span>Vị trí giá: P. Tân Hưng</span>
+<span class="text-[#047857] font-semibold">Ưu đãi cao</span>
+</div>
+<div class="relative w-full h-1.5 bg-[#FAF8F5] rounded-full overflow-visible flex items-center">
+<div class="absolute left-[15%] right-[20%] h-1 bg-[#0F5F58]/20 rounded-full"></div>
+<div class="absolute left-[55%] -translate-x-1/2 w-2.5 h-2.5 bg-[#B8892E] rounded-full" title="Median: 5.5 tr"></div>
+<!-- Current Price Pin -->
+<div class="absolute left-[30%] -translate-x-1/2 w-3.5 h-3.5 bg-[#0F5F58] ring-2 ring-white rounded-full shadow-sm" title="Tin này: 4.5 tr"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Listing 2 -->
+<div class="group rounded-[20px] bg-white border border-[#E7E2DA] overflow-hidden hover:shadow-[0_14px_36px_rgba(17,24,39,0.08)] hover:-translate-y-0.5 transition-all duration-300 flex flex-col">
+<div class="relative aspect-[4/3] w-full overflow-hidden bg-[#FAF8F5]">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="Duplex loft studio with clean metal spiral staircase, polished concrete floor, mezzanine sleeping area, double-height ceiling in Binh Thanh Saigon." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAk6Yfz89MzekM8MUSTjjKh-xa7puRrlH9auWxf7nundBcQpwD-j3EAQIfdAEj9mOUk5jkNK-jow6UXgK8jGz_K99j4YCbImRhPnAiCO9_C0weouLvXdic88u7QuFP44t48he8lW8oDHGqMXH9bdeAKhDlqNSzy2BdWh9oeUte4CDTz1B7RSwci5g-2lhDl5iHISjEwyqCaPHfXk1ymdkIyPKo46zR0SUlddhgbPbCIz07dfJaVcRKZ"/>
+<button class="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/80 backdrop-blur-md border border-white/60 flex items-center justify-center text-[#111827] hover:text-red-600 transition shadow-sm">
+<span class="material-symbols-outlined text-[18px]">favorite</span>
+</button>
+<div class="absolute top-3 left-3">
+<span class="font-label-sm text-label-sm bg-emerald-50/95 backdrop-blur-sm text-[#047857] border border-emerald-200/80 px-2.5 py-1 rounded-full font-semibold shadow-xs flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">verified</span>
+                Rẻ hơn ước tính 15%
+              </span>
+</div>
+<div class="absolute bottom-2.5 left-0 right-0 flex justify-center items-center gap-1.5 pointer-events-none">
+<span class="w-1.5 h-1.5 rounded-full bg-white shadow-xs"></span>
+<span class="w-1.5 h-1.5 rounded-full bg-white/50"></span>
+<span class="w-1.5 h-1.5 rounded-full bg-white/50"></span>
+</div>
+</div>
+<div class="p-5 flex-1 flex flex-col justify-between space-y-4">
+<div>
+<div class="flex items-baseline justify-between mb-1">
+<span class="font-price-card text-price-card font-bold text-[#111827]">5,2 triệu <span class="font-body-sm text-body-sm font-normal text-[#6B7280]">/tháng</span></span>
+<span class="font-label-sm text-label-sm text-emerald-600 font-medium">Vừa xong</span>
+</div>
+<div class="flex items-center gap-2 font-body-sm text-body-sm text-[#4B5563]">
+<span>30 m²</span>
+<span class="text-[#E7E2DA]">·</span>
+<span>173.333 đ/m²</span>
+</div>
+<div class="font-body-sm text-body-sm text-[#111827] font-medium mt-1.5 truncate">
+                Phường 25, Bình Thạnh
+              </div>
+</div>
+<div class="pt-3 border-t border-[#FAF8F5] space-y-1">
+<div class="flex justify-between font-label-sm text-label-sm text-[#6B7280]">
+<span>Vị trí giá: P. 25</span>
+<span class="text-[#047857] font-semibold">Hợp lý</span>
+</div>
+<div class="relative w-full h-1.5 bg-[#FAF8F5] rounded-full overflow-visible flex items-center">
+<div class="absolute left-[18%] right-[22%] h-1 bg-[#0F5F58]/20 rounded-full"></div>
+<div class="absolute left-[52%] -translate-x-1/2 w-2.5 h-2.5 bg-[#B8892E] rounded-full"></div>
+<div class="absolute left-[38%] -translate-x-1/2 w-3.5 h-3.5 bg-[#0F5F58] ring-2 ring-white rounded-full shadow-sm"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Listing 3 -->
+<div class="group rounded-[20px] bg-white border border-[#E7E2DA] overflow-hidden hover:shadow-[0_14px_36px_rgba(17,24,39,0.08)] hover:-translate-y-0.5 transition-all duration-300 flex flex-col">
+<div class="relative aspect-[4/3] w-full overflow-hidden bg-[#FAF8F5]">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="Compact airy bedroom in Go Vap with built-in wooden closet, large glass casement window, natural sunlight, minimalist interior." src="https://lh3.googleusercontent.com/aida-public/AB6AXuA8uvh_XslkKAF_5NGiYkkrmsjWWGGk1_pZn6NXgU5DveA2wy5HRn4CrtoAINc_Ww1Blp93leznoyhrnTqCWx8nDO5ShaaLhQOwCv2m4Kg8YgXCg5Z24EARYMwbyNiiNbceBnH2ylOdepVyAcV310eK9UHaApLvbpD_ttB2G8c1b5bRDqrswOMwBcoUi0DJE9duYuNWyZCp277yhcKfXni-rgApQipkk-tsIjUDT1JBK7TokHxC3_04"/>
+<button class="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/80 backdrop-blur-md border border-white/60 flex items-center justify-center text-[#111827] hover:text-red-600 transition shadow-sm">
+<span class="material-symbols-outlined text-[18px]">favorite</span>
+</button>
+<div class="absolute top-3 left-3">
+<span class="font-label-sm text-label-sm bg-stone-100 text-[#4B5563] border border-stone-200 px-2.5 py-1 rounded-full font-medium shadow-xs">
+                Đúng giá thị trường
+              </span>
+</div>
+<div class="absolute bottom-2.5 left-0 right-0 flex justify-center items-center gap-1.5 pointer-events-none">
+<span class="w-1.5 h-1.5 rounded-full bg-white shadow-xs"></span>
+<span class="w-1.5 h-1.5 rounded-full bg-white/50"></span>
+</div>
+</div>
+<div class="p-5 flex-1 flex flex-col justify-between space-y-4">
+<div>
+<div class="flex items-baseline justify-between mb-1">
+<span class="font-price-card text-price-card font-bold text-[#111827]">3,8 triệu <span class="font-body-sm text-body-sm font-normal text-[#6B7280]">/tháng</span></span>
+<span class="font-label-sm text-label-sm text-[#6B7280]">5 giờ trước</span>
+</div>
+<div class="flex items-center gap-2 font-body-sm text-body-sm text-[#4B5563]">
+<span>22 m²</span>
+<span class="text-[#E7E2DA]">·</span>
+<span>172.727 đ/m²</span>
+</div>
+<div class="font-body-sm text-body-sm text-[#111827] font-medium mt-1.5 truncate">
+                Phường 11, Gò Vấp
+              </div>
+</div>
+<div class="pt-3 border-t border-[#FAF8F5] space-y-1">
+<div class="flex justify-between font-label-sm text-label-sm text-[#6B7280]">
+<span>Vị trí giá: P. 11</span>
+<span class="text-[#6B7280]">Cân bằng</span>
+</div>
+<div class="relative w-full h-1.5 bg-[#FAF8F5] rounded-full overflow-visible flex items-center">
+<div class="absolute left-[15%] right-[25%] h-1 bg-[#0F5F58]/20 rounded-full"></div>
+<div class="absolute left-[48%] -translate-x-1/2 w-2.5 h-2.5 bg-[#B8892E] rounded-full"></div>
+<div class="absolute left-[49%] -translate-x-1/2 w-3.5 h-3.5 bg-[#0F5F58] ring-2 ring-white rounded-full shadow-sm"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Listing 4 -->
+<div class="group rounded-[20px] bg-white border border-[#E7E2DA] overflow-hidden hover:shadow-[0_14px_36px_rgba(17,24,39,0.08)] hover:-translate-y-0.5 transition-all duration-300 flex flex-col">
+<div class="relative aspect-[4/3] w-full overflow-hidden bg-[#FAF8F5]">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="Refined boutique studio apartment in District 1 Ben Nghe, walnut wood furnishings, vintage mid-century reading chair, terrace with downtown Saigon skyline." src="https://lh3.googleusercontent.com/aida-public/AB6AXuArSShjrL34yXFmW4qmqhEGVgstWjmAZuYeevGymwxTfqccUHRYJP6in-e5sXt-FLuEQclCqA-ecONPIK3hnEUucyNGIBNb9PvSujxEF7sMgq1-rCKQ6PJOJypVZL8rKpi7lcC27jFARJaLE0Rez63uoy1KZSIYjDyYyHa04FCcCi4tdVgQw-SB1Lo86lSvu1cEbGU4ZfKF4vCG555Eq3F6wmL_-yOBDTG3LvpgZ8FeMQqeSs6bdZRl"/>
+<button class="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/80 backdrop-blur-md border border-white/60 flex items-center justify-center text-[#111827] hover:text-red-600 transition shadow-sm">
+<span class="material-symbols-outlined text-[18px]">favorite</span>
+</button>
+<div class="absolute top-3 left-3">
+<span class="font-label-sm text-label-sm bg-emerald-50/95 backdrop-blur-sm text-[#047857] border border-emerald-200/80 px-2.5 py-1 rounded-full font-semibold shadow-xs flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">verified</span>
+                Rẻ hơn ước tính 8%
+              </span>
+</div>
+<div class="absolute bottom-2.5 left-0 right-0 flex justify-center items-center gap-1.5 pointer-events-none">
+<span class="w-1.5 h-1.5 rounded-full bg-white shadow-xs"></span>
+<span class="w-1.5 h-1.5 rounded-full bg-white/50"></span>
+<span class="w-1.5 h-1.5 rounded-full bg-white/50"></span>
+</div>
+</div>
+<div class="p-5 flex-1 flex flex-col justify-between space-y-4">
+<div>
+<div class="flex items-baseline justify-between mb-1">
+<span class="font-price-card text-price-card font-bold text-[#111827]">7,0 triệu <span class="font-body-sm text-body-sm font-normal text-[#6B7280]">/tháng</span></span>
+<span class="font-label-sm text-label-sm text-[#6B7280]">Hôm qua</span>
+</div>
+<div class="flex items-center gap-2 font-body-sm text-body-sm text-[#4B5563]">
+<span>35 m²</span>
+<span class="text-[#E7E2DA]">·</span>
+<span>200.000 đ/m²</span>
+</div>
+<div class="font-body-sm text-body-sm text-[#111827] font-medium mt-1.5 truncate">
+                Phường Bến Nghé, Quận 1
+              </div>
+</div>
+<div class="pt-3 border-t border-[#FAF8F5] space-y-1">
+<div class="flex justify-between font-label-sm text-label-sm text-[#6B7280]">
+<span>Vị trí giá: P. Bến Nghé</span>
+<span class="text-[#047857] font-semibold">Tốt</span>
+</div>
+<div class="relative w-full h-1.5 bg-[#FAF8F5] rounded-full overflow-visible flex items-center">
+<div class="absolute left-[20%] right-[15%] h-1 bg-[#0F5F58]/20 rounded-full"></div>
+<div class="absolute left-[54%] -translate-x-1/2 w-2.5 h-2.5 bg-[#B8892E] rounded-full"></div>
+<div class="absolute left-[46%] -translate-x-1/2 w-3.5 h-3.5 bg-[#0F5F58] ring-2 ring-white rounded-full shadow-sm"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- SECTION 5: BAND ĐỊNH GIÁ TRONG 10 GIÂY -->
+<section class="px-6 md:px-12 my-12" id="quick-valuation">
+<div class="max-w-6xl mx-auto bg-[#0F5F58] rounded-[24px] text-white p-8 md:p-14 relative overflow-hidden shadow-xl">
+<!-- Ambient Glow Behind CTA -->
+<div class="absolute -right-20 -bottom-20 w-96 h-96 bg-[#B8892E]/20 rounded-full blur-3xl pointer-events-none"></div>
+<div class="absolute -left-20 -top-20 w-80 h-80 bg-white/5 rounded-full blur-2xl pointer-events-none"></div>
+<div class="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+<!-- Text Column -->
+<div class="lg:col-span-5 space-y-3">
+<span class="font-label-sm text-label-sm uppercase tracking-widest text-[#B8892E] font-semibold block">Công cụ phân tích AI</span>
+<h2 class="font-headline-lg text-headline-lg text-white tracking-tight">Định giá phòng trong 10 giây</h2>
+<p class="font-body-md text-body-md text-white/80 leading-relaxed">
+            Nhập vị trí và diện tích để mô hình đối soát giá trực tiếp với 76.500+ tin đăng đã kiểm chứng tại TP.HCM.
+          </p>
+</div>
+<!-- Interactive Form Column -->
+<div class="lg:col-span-7 bg-white/10 backdrop-blur-md p-4 sm:p-5 rounded-2xl border border-white/20">
+<form class="flex flex-col sm:flex-row items-center gap-3" onsubmit="event.preventDefault();">
+<!-- District Select -->
+<div class="w-full sm:flex-1 relative">
+<label class="font-label-sm text-[10px] uppercase tracking-wider text-white/70 block mb-1">Vị trí căn phòng</label>
+<select class="w-full h-12 bg-white text-[#111827] rounded-xl px-3.5 font-body-md text-body-md font-medium outline-none border border-transparent focus:border-[#B8892E] transition">
+<option value="">Chọn Phường, Quận...</option>
+<option value="q1">Quận 1 — Bến Nghé, Đa Kao</option>
+<option value="q3">Quận 3 — Võ Thị Sáu, P. 4</option>
+<option value="q7">Quận 7 — Tân Hưng, Tân Phong</option>
+<option value="bt">Bình Thạnh — P. 19, P. 25</option>
+<option value="gv">Gò Vấp — P. 5, P. 11</option>
+</select>
+</div>
+<!-- Area Input -->
+<div class="w-full sm:w-36 relative">
+<label class="font-label-sm text-[10px] uppercase tracking-wider text-white/70 block mb-1">Diện tích (m²)</label>
+<input class="w-full h-12 bg-white text-[#111827] rounded-xl px-3.5 font-body-md text-body-md font-medium outline-none border border-transparent focus:border-[#B8892E] placeholder-[#9CA3AF] transition" placeholder="25 m²" type="number"/>
+</div>
+<!-- Submit Button -->
+<div class="w-full sm:w-auto self-end">
+<button class="w-full sm:w-auto h-12 px-7 rounded-xl bg-[#B8892E] hover:bg-[#a07424] active:scale-[0.98] text-white font-label-md text-label-md font-semibold transition-all shadow-md flex items-center justify-center gap-2 whitespace-nowrap" type="submit">
+<span>Định giá ngay</span>
+<span class="material-symbols-outlined text-[18px]">speed</span>
+</button>
+</div>
+</form>
+<div class="mt-3 flex items-center justify-between text-xs text-white/60 px-1">
+<span>Độ tin cậy thuật toán: 98.6%</span>
+<span>Miễn phí 100% không cần đăng ký</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- FOOTER NOTE & METADATA -->
+<section class="bg-[#FAF8F5] py-8 px-6 md:px-12 border-t border-[#E7E2DA]">
+<div class="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between text-xs text-[#6B7280] gap-4">
+<div class="flex items-center gap-2 font-mono text-[11px]">
+<span class="w-1.5 h-1.5 rounded-full bg-[#0F5F58]"></span>
+<span>Snapshot db804eae · Cập nhật 16:52 09/10/2026 · HCMC Real Estate Intelligence</span>
+</div>
+<div class="flex items-center gap-6 font-label-sm text-label-sm">
+<a class="hover:text-[#0F5F58] transition" href="#">Về RoomBeacon</a>
+<a class="hover:text-[#0F5F58] transition" href="#">Phương pháp định giá</a>
+<a class="hover:text-[#0F5F58] transition" href="#">Điều khoản sử dụng</a>
+<a class="hover:text-[#0F5F58] transition" href="#">Liên hệ chuyên gia</a>
+</div>
+</div>
+</section>
+</div>
+<script>
+  // Simple interactive mode switch for table view
+  const btnMonthly = document.getElementById('toggle-monthly');
+  const btnSqm = document.getElementById('toggle-sqm');
+
+  if (btnMonthly && btnSqm) {
+    btnMonthly.addEventListener('click', () => {
+      btnMonthly.className = 'px-5 py-2 rounded-full font-label-md text-label-md font-semibold bg-[#0F5F58] text-white shadow-sm transition';
+      btnSqm.className = 'px-5 py-2 rounded-full font-label-md text-label-md font-medium text-[#6B7280] hover:text-[#111827] transition';
+    });
+
+    btnSqm.addEventListener('click', () => {
+      btnSqm.className = 'px-5 py-2 rounded-full font-label-md text-label-md font-semibold bg-[#0F5F58] text-white shadow-sm transition';
+      btnMonthly.className = 'px-5 py-2 rounded-full font-label-md text-label-md font-medium text-[#6B7280] hover:text-[#111827] transition';
+    });
+  }
+</script></main><footer class="w-full bg-[#FAF8F5] border-t border-[#E7E2DA] py-14"><div class="max-w-[1320px] mx-auto px-10 flex flex-col md:flex-row items-baseline justify-between gap-8"><div class="max-w-md space-y-2"><div class="flex items-center gap-2"><span class="font-headline-sm text-headline-sm text-primary tracking-tight">RoomBeacon</span><span class="font-label-sm text-label-sm text-secondary font-semibold uppercase tracking-wider">Ho Chi Minh City</span></div><p class="font-body-sm text-body-sm text-on-surface-variant">Ấn phẩm kiến trúc &amp; dữ liệu thị trường cho thuê căn hộ hạng sang, phòng suite và không gian sống tuyển chọn tại các khu vực trọng điểm TP. Hồ Chí Minh.</p></div><div class="flex flex-col items-start md:items-end space-y-2"><div class="font-label-sm text-label-sm text-on-surface-variant/80 tracking-wide uppercase">Dữ liệu thị trường thời gian thực</div><p class="font-body-sm text-body-sm text-on-surface-variant">Cập nhật 24h qua: Quận 1, Quận 3, Bình Thạnh, Thảo Điền. Sai số chỉ số trung vị ±1.4%.</p><div class="pt-2 font-label-sm text-label-sm text-outline">© 2025 RoomBeacon S.A. Mọi quyền được bảo lưu.</div></div></div></footer></body></html>

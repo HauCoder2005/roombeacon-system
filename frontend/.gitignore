@@ -7,3 +7,7 @@ dist/
 *.log
 next-env.d.ts
 *.tsbuildinfo
+
+# Unignore frontend/lib which was ignored by root python gitignore
+!lib/
+!lib/**
