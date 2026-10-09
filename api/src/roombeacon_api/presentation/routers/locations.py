@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import unicodedata
+
 from fastapi import APIRouter, Depends, Path, Query, Request
 from fastapi.responses import JSONResponse, Response
 
@@ -23,6 +25,11 @@ def get_service(request: Request) -> LocationService:
     return request.app.state.location_service
 
 
+def _text(value: str) -> str:
+    """NFC + trim: warehouse names are NFC, but some Vietnamese keyboards send NFD."""
+    return unicodedata.normalize("NFC", value).strip()
+
+
 def _filters(**values: str | None) -> dict[str, str]:
     return {k: v for k, v in values.items() if v}
 
@@ -42,7 +49,7 @@ def list_districts(
     per_page: int = Query(20, ge=1, le=100),
 ) -> Response:
     spec = SortSpec.parse(sort, SORT_FIELDS)
-    result = service.list_districts(q.strip(), spec, PageRequest(page, per_page))
+    result = service.list_districts(_text(q), spec, PageRequest(page, per_page))
     return ok_response(
         request,
         message="District cards retrieved",
@@ -51,7 +58,7 @@ def list_districts(
         snapshot=service.snapshot(),
         page=result,
         sort=spec,
-        filters=_filters(q=q.strip()),
+        filters=_filters(q=_text(q)),
     )
 
 
@@ -93,7 +100,7 @@ def list_wards(
     per_page: int = Query(20, ge=1, le=100),
 ) -> Response:
     spec = SortSpec.parse(sort, SORT_FIELDS)
-    result = service.list_wards(district_id, q.strip(), spec, PageRequest(page, per_page))
+    result = service.list_wards(district_id, _text(q), spec, PageRequest(page, per_page))
     return ok_response(
         request,
         message="Ward cards retrieved",
@@ -102,7 +109,7 @@ def list_wards(
         snapshot=service.snapshot(),
         page=result,
         sort=spec,
-        filters=_filters(q=q.strip()),
+        filters=_filters(q=_text(q)),
     )
 
 
@@ -119,7 +126,7 @@ def resolve_ward(
     district_id: str | None = Query(None, pattern=LOCATION_ID, description="Narrow to one district"),
 ) -> Response:
     try:
-        card = service.resolve_ward(ward.strip(), district_id)
+        card = service.resolve_ward(_text(ward), district_id)
     except AmbiguousLocationError as exc:
         body = envelope(
             request,
@@ -127,7 +134,7 @@ def resolve_ward(
             message="The ward name matches several places; pick one",
             data={"choices": [ward_out(choice) for choice in exc.choices]},
             resource="ward",
-            filters=_filters(ward=ward.strip(), district_id=district_id),
+            filters=_filters(ward=_text(ward), district_id=district_id),
         )
         return JSONResponse(body, status_code=300, headers={"Cache-Control": "no-store"})
     return ok_response(
@@ -136,5 +143,5 @@ def resolve_ward(
         data=ward_out(card),
         resource="ward",
         snapshot=service.snapshot(),
-        filters=_filters(ward=ward.strip(), district_id=district_id),
+        filters=_filters(ward=_text(ward), district_id=district_id),
     )

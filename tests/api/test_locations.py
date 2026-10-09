@@ -147,3 +147,19 @@ def test_unknown_route_uses_the_envelope(client):
 
     assert response.status_code == 404
     assert set(response.json()) == ENVELOPE_KEYS
+
+
+def test_decomposed_vietnamese_input_is_normalized_to_nfc(client):
+    import unicodedata
+
+    decomposed_ward = unicodedata.normalize("NFD", "Phường 25")
+    decomposed_query = unicodedata.normalize("NFD", "bình")
+    assert decomposed_ward != "Phường 25"
+
+    resolved = client.get("/api/v1/locations/resolve", params={"ward": decomposed_ward})
+    searched = client.get("/api/v1/locations/districts", params={"q": decomposed_query}).json()
+
+    assert resolved.status_code == 200
+    assert resolved.json()["data"]["name"] == "Phường 25"
+    assert [d["name"] for d in searched["data"]] == ["Quận Bình Thạnh"]
+    assert searched["meta"]["filters"] == {"q": "bình"}
