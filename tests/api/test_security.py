@@ -129,3 +129,13 @@ def test_settings_from_env_require_keys_and_hide_secrets():
         ApiSettings.from_env({**env, "WAREHOUSE_READER_PASSWORD": ""})
     with pytest.raises(ApiConfigError):
         ApiSettings.from_env({**env, "API_RATE_LIMIT_PER_MINUTE": "0"})
+
+
+def test_docs_when_enabled_offer_an_api_key_authorize_button(repository):
+    with _client(make_settings(docs_enabled=True), repository) as anonymous:
+        docs = anonymous.get("/docs")
+        schema = anonymous.get("/openapi.json").json()
+
+    assert docs.status_code == 200
+    assert schema["components"]["securitySchemes"]["ApiKeyAuth"] == {"type": "apiKey", "in": "header", "name": "X-API-Key"}
+    assert {"ApiKeyAuth": []} in schema["paths"]["/api/v1/locations/districts"]["get"]["security"]

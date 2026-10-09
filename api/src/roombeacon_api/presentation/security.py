@@ -5,11 +5,14 @@ from __future__ import annotations
 import hashlib
 import hmac
 
-from fastapi import Request
+from fastapi import Request, Security
+from fastapi.security import APIKeyHeader
 
 
 API_KEY_HEADER = "X-API-Key"
 MAX_KEY_LENGTH = 256
+# Declares the scheme in OpenAPI so /docs shows an "Authorize" button.
+api_key_scheme = APIKeyHeader(name=API_KEY_HEADER, scheme_name="ApiKeyAuth", auto_error=False)
 
 
 class UnauthorizedError(Exception):
@@ -30,8 +33,8 @@ class ApiKeyVerifier:
         return matched
 
 
-def require_api_key(request: Request) -> None:
+def require_api_key(request: Request, presented: str | None = Security(api_key_scheme)) -> None:
     if not request.app.state.settings.auth_enabled:
         return
-    if not request.app.state.api_key_verifier.verify(request.headers.get(API_KEY_HEADER)):
+    if not request.app.state.api_key_verifier.verify(presented):
         raise UnauthorizedError()
