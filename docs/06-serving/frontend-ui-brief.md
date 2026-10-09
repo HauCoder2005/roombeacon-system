@@ -357,6 +357,9 @@ frontend/
   src/lib/format.ts          định dạng mục 8
 ```
 
+- Tạo `frontend/.gitignore` gồm `node_modules/`, `dist/`, `.env.local` (repo gốc chưa ignore `node_modules/`).
+- Ghim phiên bản dependency chính xác trong `package.json` (không dùng `^`/`~`) và commit `package-lock.json`.
+
 ## 10. Những điều KHÔNG được làm
 
 - Không đặt API key trong code, bundle, `localStorage` hay biến `VITE_*`.
