@@ -103,3 +103,18 @@ def test_model_outage_does_not_break_search(client, price_model):
 
     assert response.status_code == 200
     assert response.json()["data"][0]["valuation"] is None
+
+
+def test_only_http_source_urls_are_returned(client, listings, monkeypatch):
+    from dataclasses import replace
+
+    original_get = listings.get
+
+    def with_url(url):
+        monkeypatch.setattr(listings, "get", lambda listing_id: replace(original_get(listing_id), source_url=url))
+        return client.get("/api/v1/listings/102").json()["data"]["source_url"]
+
+    assert with_url("javascript:alert(1)") is None
+    assert with_url("data:text/html,hi") is None
+    assert with_url("//evil.example/x") is None
+    assert with_url("https://example.test/ok.html") == "https://example.test/ok.html"
