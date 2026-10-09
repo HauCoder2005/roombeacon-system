@@ -1383,8 +1383,9 @@ services:
 # READ-ONLY REST API (FastAPI) - profile: api
 # ============================================================
 # Disabled by default: docker compose --profile warehouse --profile api up -d api
-# Reads ClickHouse with the read-only WAREHOUSE_READER_* account; needs
-# API_KEY_SHA256 in .env.local. Never reads MySQL.
+# Reads ClickHouse with the read-only WAREHOUSE_READER_* account, Silver
+# Parquet and the locked price model read-only; needs API_KEY_SHA256 in
+# .env.local. Never reads MySQL.
   api:
     build:
       context: .
@@ -1399,13 +1400,19 @@ services:
         required: false
     environment:
       API_CLICKHOUSE_HOST: "clickhouse"
+      API_SILVER_PATH: "/data/silver/rental_listings.parquet"
+      API_MODEL_DIR: "/models/price"
+    volumes:
+      - "./data/silver:/data/silver:ro"
+      - "./data/modeling/roombeacon_price_benchmark_v3:/models/price:ro"
     user: "10001:10001"
     read_only: true
     tmpfs:
       - "/tmp:size=16m"
-    mem_limit: "384m"
-    mem_reservation: "128m"
-    memswap_limit: "384m"
+    # LightGBM + pandas + the in-memory Silver listing table.
+    mem_limit: "1024m"
+    mem_reservation: "256m"
+    memswap_limit: "1024m"
     cpus: 1.0
     security_opt:
       - "no-new-privileges:true"

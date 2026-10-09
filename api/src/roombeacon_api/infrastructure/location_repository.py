@@ -113,6 +113,10 @@ GROUP BY w.district, w.ward"""
         )
         return _district(rows[0]) if rows else None
 
+    def get_ward(self, ward_id: str) -> WardCard | None:
+        rows = self._rows(f"SELECT * FROM ({self._wards}) WHERE id = {{ward_id:String}}", {"ward_id": ward_id})
+        return _ward(rows[0]) if rows else None
+
     def list_wards(self, district_id: str, query: str, sort: SortSpec, page: PageRequest) -> Page[WardCard]:
         order = _order_by(sort)
         where = f"district_id = {{district_id:String}} AND {NAME_FILTER}"

@@ -5,6 +5,11 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
+# libgomp1: OpenMP runtime required by LightGBM.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN groupadd --system --gid 10001 roombeacon \
     && useradd --system --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin roombeacon
 

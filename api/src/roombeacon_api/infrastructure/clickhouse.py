@@ -41,3 +41,14 @@ class LazyClickHouseClient:
                     settings={"max_execution_time": s.query_timeout_seconds},
                 )
             return self._client
+
+
+def query_rows(client: Any, sql: str, parameters: Mapping[str, Any], logger: Any) -> Any:
+    """Run a bound query; driver, network and server errors become a dependency outage."""
+    from ..domain.errors import DependencyUnavailableError
+
+    try:
+        return client.query(sql, parameters=parameters).result_rows
+    except Exception as exc:
+        logger.warning("warehouse query failed: %s", type(exc).__name__)
+        raise DependencyUnavailableError("warehouse") from exc

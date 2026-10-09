@@ -49,6 +49,10 @@ def request_id(request: Request) -> str:
     return rid
 
 
+def iso(moment: datetime | None) -> str | None:
+    return None if moment is None else _iso(moment)
+
+
 def _iso(moment: datetime) -> str:
     return moment.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
@@ -139,9 +143,10 @@ def ok_response(
     sort: SortSpec | None = None,
     filters: Mapping[str, Any] | None = None,
     links: Mapping[str, Any] | None = None,
+    cacheable: bool = True,
 ) -> Response:
     """200 with ETag; 304 when the client already holds this snapshot's version."""
-    etag = compute_etag(request, snapshot) if snapshot else None
+    etag = compute_etag(request, snapshot) if snapshot and cacheable else None
     cache_headers = {"Cache-Control": f"private, max-age={CACHE_SECONDS}"}
     if etag:
         cache_headers["ETag"] = etag

@@ -13,6 +13,14 @@ dependencies = [
     "pydantic==2.13.5",
     "uvicorn==0.53.0",
     "clickhouse-connect==0.8.18",
+    # Listing search over Silver Parquet.
+    "duckdb==1.5.5",
+    # Champion inference: same versions the model was trained and serialized with.
+    "lightgbm==4.7.0",
+    "scikit-learn==1.9.1",
+    "joblib==1.6.0",
+    "pandas==3.0.6",
+    "numpy==2.5.3",
 ]
 
 [project.optional-dependencies]

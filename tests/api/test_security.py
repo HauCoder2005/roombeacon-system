@@ -7,12 +7,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 from roombeacon_api.config import ApiConfigError, ApiSettings, Secret
-from roombeacon_api.main import create_app
-from tests.api.conftest import API_KEY, make_settings
+from tests.api.conftest import API_KEY, build_app, make_settings
 
 
 def _client(settings, repository, **headers) -> TestClient:
-    return TestClient(create_app(settings, repository=repository), headers=headers, raise_server_exceptions=False)
+    return TestClient(build_app(settings, repository), headers=headers, raise_server_exceptions=False)
 
 
 def test_missing_or_wrong_api_key_is_401_without_hinting_which(settings, repository):
@@ -68,7 +67,7 @@ def test_rate_limit_also_throttles_anonymous_key_guessing(repository):
 
 
 def test_untrusted_host_is_rejected(settings, repository):
-    with TestClient(create_app(settings, repository=repository), base_url="http://evil.example") as other:
+    with TestClient(build_app(settings, repository), base_url="http://evil.example") as other:
         assert other.get("/health").status_code == 400
 
 

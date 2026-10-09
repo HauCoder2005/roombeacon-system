@@ -67,6 +67,8 @@ class ApiSettings:
     allowed_hosts: tuple[str, ...]
     docs_enabled: bool
     clickhouse: ClickHouseSettings
+    silver_path: str = "data/silver/rental_listings.parquet"
+    model_dir: str = "data/modeling/roombeacon_price_benchmark_v3"
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None) -> "ApiSettings":
@@ -103,6 +105,8 @@ class ApiSettings:
                 connect_timeout_seconds=_int(env, "API_CLICKHOUSE_CONNECT_TIMEOUT_SECONDS", 5, 1, 60),
                 query_timeout_seconds=_int(env, "API_QUERY_TIMEOUT_SECONDS", 10, 1, 120),
             ),
+            silver_path=env.get("API_SILVER_PATH") or cls.silver_path,
+            model_dir=env.get("API_MODEL_DIR") or cls.model_dir,
         )
 
 

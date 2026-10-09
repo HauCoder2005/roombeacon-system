@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import unicodedata
-
 from fastapi import APIRouter, Depends, Path, Query, Request
 from fastapi.responses import JSONResponse, Response
 
@@ -14,24 +12,15 @@ from ...domain.errors import AmbiguousLocationError
 from ..cards import district_out, ward_out
 from ..envelope import envelope, ok_response
 from ..schemas import ERROR_RESPONSES, ChoicesOut, DistrictCardOut, Envelope, WardCardOut
+from ..params import LOCATION_ID, filters_of as _filters, normalize_text as _text
 from ..security import require_api_key
 
 
-LOCATION_ID = r"^[0-9a-f]{16}$"
 router = APIRouter(prefix="/api/v1/locations", tags=["locations"], dependencies=[Depends(require_api_key)])
 
 
 def get_service(request: Request) -> LocationService:
     return request.app.state.location_service
-
-
-def _text(value: str) -> str:
-    """NFC + trim: warehouse names are NFC, but some Vietnamese keyboards send NFD."""
-    return unicodedata.normalize("NFC", value).strip()
-
-
-def _filters(**values: str | None) -> dict[str, str]:
-    return {k: v for k, v in values.items() if v}
 
 
 @router.get(

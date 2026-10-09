@@ -10,7 +10,7 @@ nền tảng tìm phòng trọ / nhà thuê tại **TP.HCM** dựa trên dữ li
 ## 0. Đọc trước khi làm
 
 1. Đọc kỹ **`docs/06-serving/frontend-ui-brief.md`**. Đây là **nguồn sự thật** về API (endpoint, kiểu dữ liệu,
-   ví dụ response thật, mã lỗi, phần nào có thật / phần nào phải mock). Nếu prompt này và brief mâu thuẫn
+   ví dụ response thật, mã lỗi, cách hiển thị định giá có trách nhiệm). **Mọi dữ liệu đều là API thật — không tạo dữ liệu giả.** Nếu prompt này và brief mâu thuẫn
    về API, **brief thắng**.
 2. Backend đang chạy ở máy local: `http://127.0.0.1:8000` (Swagger: `http://127.0.0.1:8000/docs`).
    Biến môi trường nằm trong `frontend/.env.local` (mẫu: `frontend/.env.example`):
@@ -77,6 +77,7 @@ Từ trên xuống:
      - Phím tắt: `/` để focus ô tìm, `Enter` để tìm, `Esc` đóng dropdown.
      - **Mobile:** thu thành 1 ô "Tìm phòng ở…"; chạm vào mở **bottom sheet toàn màn hình** có đủ các trường, nút
        "Tìm phòng" dính đáy.
+   - Nút phụ cạnh thanh (hoặc ngay dưới): **"Định giá phòng của bạn →"** dẫn tới `/dinh-gia`.
    - Hàng **chip gợi ý** dưới thanh: "Dưới 3 triệu", "3–5 triệu", "Quận 7", "Bình Thạnh", "Gò Vấp" (chip quận lấy
      3 quận nhiều tin nhất từ API thật; bấm chip = điền sẵn bộ lọc).
 3. **"Khám phá theo khu vực"** — lưới 8 **thẻ quận** (API thật, `sort=-listing_count`): tên quận, "16.088 tin",
@@ -84,10 +85,11 @@ Từ trên xuống:
    `priced_listing_count < 30`. Hover nổi nhẹ. Nút "Xem tất cả khu vực →".
 4. **"Bảng giá thuê theo khu vực"** — danh sách xếp theo giá trung vị (`sort=-median_price`), mỗi dòng một
    PriceRangeStrip dài; công tắc **"Theo tháng / Theo m²"**; ô tìm quận nhỏ.
-5. **"Tin mới đăng"** — lưới thẻ tin từ **mock** (ghi rõ trong code là mock), 8 tin, nút "Xem thêm".
-6. **"Vì sao RoomBeacon"** — 3 cột ngắn: Giá minh bạch theo khu vực · Dữ liệu cập nhật hằng ngày · Không hiển
+5. **"Tin mới cập nhật"** — 8 thẻ tin thật (`GET /listings?per_page=8`) kèm nhãn định giá, nút "Xem thêm".
+6. **Khối "Định giá phòng trong 10 giây"** — mini form (khu vực + m²) gửi sang `/dinh-gia`.
+7. **"Vì sao RoomBeacon"** — 3 cột ngắn: Giá minh bạch theo khu vực · Dữ liệu cập nhật hằng ngày · Không hiển
    thị thông tin cá nhân người đăng.
-7. **Footer** — "Dữ liệu cập nhật: {loaded_at theo giờ VN} · Snapshot {8 ký tự đầu}", link Swagger cho dev.
+8. **Footer** — "Dữ liệu cập nhật: {loaded_at theo giờ VN} · Snapshot {8 ký tự đầu}", link Swagger cho dev.
 
 ## 3. Trang kết quả `/tim-phong`
 
@@ -96,10 +98,10 @@ Từ trên xuống:
   Mobile: nút "Bộ lọc (n)" mở bottom sheet; thẻ thị trường nằm trên đầu danh sách.
 - **Thẻ thị trường** (API thật): thẻ quận hoặc phường đang chọn — "Giá trung vị khu này **5 tr** (4,2–6,5 tr)",
   PriceRangeStrip, số tin.
-- **Thẻ tin** (mock): ảnh placeholder 4:3 (gradient + icon, không dùng ảnh người khác), giá to "4,5 triệu/tháng",
+- **Thẻ tin** (API thật `GET /listings`): ảnh placeholder 4:3 (gradient + icon, không dùng ảnh người khác), giá to "4,5 triệu/tháng",
   "25 m² · 180.000 đ/m²", dòng vị trí "Phường Tân Hưng, Quận 7", thời gian "3 ngày trước", nhãn nguồn nhỏ,
-  và **nhãn so sánh** tính từ median khu vực: `TrendingDown` "Rẻ hơn mặt bằng 12%" (xanh) / `TrendingUp`
-  "Đắt hơn mặt bằng 8%" (đỏ) / "Ngang mặt bằng" (±5%).
+  và **nhãn định giá** từ `valuation` (brief mục 6): `TrendingDown` "Rẻ hơn ước tính 22%" (xanh) / `TrendingUp`
+  "Cao hơn ước tính 8%" (đỏ) / "Sát ước tính"; `valuation = null` thì không hiện nhãn.
 - Phân trang dưới cùng dựa trên `meta.pagination` (Trước · 1 2 3 … · Sau) + "Hiển thị 1–20 trên 5.873".
 
 ## 4. Location Picker (dùng chung cho mọi nơi)
@@ -119,6 +121,14 @@ Từ trên xuống:
 - Hero nhỏ: tên quận, 4 ô số liệu (Số tin · Giá trung vị · Giá/m² · Diện tích trung vị), PriceRangeStrip lớn.
 - Lưới **thẻ phường** có sắp xếp (Nhiều tin / Giá cao / Giá thấp / Tên) và ô tìm.
 - Nút "Tìm phòng ở Quận 7" → `/tim-phong?district_id=…`. Trang `/khu-vuc` (không id) = danh sách toàn bộ quận.
+
+## 5b. Trang chi tiết tin `/phong/[id]` và trang định giá `/dinh-gia`
+
+Làm đúng brief mục 7.3 và 7.4. Điểm nhấn thiết kế:
+- **Định giá là tính năng "chữ ký"**: thẻ kết quả lớn, nền `--brand-soft`, con số chính là **khoảng giá**
+  ("3,3 – 4,8 triệu/tháng"), bên dưới PriceRangeStrip so với thị trường thật của phường/quận, huy hiệu "Thử nghiệm"
+  màu `--beacon` viền mảnh, cảnh báo dạng callout vàng nhạt, disclaimer chữ nhỏ `--muted`.
+- Chi tiết tin: biểu đồ lịch sử giá dạng bậc thang (SVG tự vẽ), nút "Xem tin gốc" chỉ khi có `source_url`.
 
 ## 6. Trạng thái & chất lượng
 
@@ -140,7 +150,7 @@ Từ trên xuống:
   LocationPicker, bộ lọc, phân trang tương tác là Client Components (`"use client"`).
 - **BFF proxy** `app/api/rb/[...path]/route.ts` đúng như brief mục 3 (chỉ GET, whitelist `/locations/*`, timeout 10s,
   chuyển tiếp `Retry-After`/`ETag`/`X-Request-ID`). Client gọi `/api/rb/...` qua `lib/api/client.ts`, đọc envelope cho
-  **mọi** mã HTTP (kể cả 300/4xx/5xx). Hook: `useDistricts`, `useWards`, `useResolveWard`, `useListings` (mock).
+  **mọi** mã HTTP (kể cả 300/4xx/5xx). Hook: `useDistricts`, `useWards`, `useResolveWard`, `useListings`, `useListing`, `usePriceHistory`, `useEstimate` (mutation), `useMarketDaily`.
 - **SEO:** `generateMetadata` cho `/khu-vuc/[districtId]` ("Giá thuê phòng trọ Quận 7 — RoomBeacon", mô tả có giá
   trung vị); `app/sitemap.ts` liệt kê các trang khu vực; `robots.ts`.
 - `loading.tsx` (skeleton) và `error.tsx` cho từng route; `not-found.tsx` thân thiện.
@@ -155,7 +165,7 @@ Từ trên xuống:
 2. `lib/types/api.ts`, `lib/api/server.ts`, route handler `/api/rb/[...path]`, `lib/api/client.ts` + hook; gọi thử
    `/api/rb/locations/districts` từ trình duyệt và từ Server Component.
 3. SearchBar + LocationPicker (kể cả xử lý `300`) → trang chủ đầy đủ.
-4. Trang `/tim-phong` (mock tin + thẻ thị trường thật) → trang `/khu-vuc/:id`.
+4. Trang `/tim-phong` (tin thật + thẻ thị trường) → `/phong/[id]` (chi tiết + lịch sử giá) → `/dinh-gia` → `/khu-vuc/[id]` (xu hướng).
 5. Trạng thái loading/empty/lỗi, dark mode, mobile bottom sheet, bàn phím/ARIA.
 6. Kiểm tra cuối:
    - `npm run build` và `npx tsc --noEmit` không lỗi.
@@ -164,4 +174,5 @@ Từ trên xuống:
    - Không thấy chuỗi key trong bundle: `grep -r "$ROOMBEACON_API_KEY" .next/static` rỗng.
    - Xem nguồn trang `/khu-vuc/e2ed9f251d8cc334` thấy sẵn "Quận 7" và giá (render phía server).
    - Đi qua từng mục trong phần **11. Tiêu chí hoàn thành** của brief và đánh dấu.
-7. Báo cáo: ảnh chụp trang chủ (desktop + mobile), Location Picker, trang kết quả; danh sách những gì đang là mock.
+7. Báo cáo: ảnh chụp trang chủ (desktop + mobile), Location Picker, trang kết quả, chi tiết tin, trang định giá
+   (một kết quả có cảnh báo, vd 12 m² Quận 7) và trang khu vực.

@@ -44,7 +44,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             request,
             404,
             f"{exc.resource.capitalize()} not found",
-            errors=[error_item(f"{exc.resource}_id" if exc.resource == "district" else exc.resource, "not_found", f"No {exc.resource} matches the request")],
+            errors=[error_item(f"{exc.resource}_id" if exc.resource in {"district", "listing"} else exc.resource, "not_found", f"No {exc.resource} matches the request")],
             resource=exc.resource,
         )
 

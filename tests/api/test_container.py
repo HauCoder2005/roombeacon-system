@@ -45,3 +45,23 @@ def test_api_dependencies_are_pinned():
 
     for line in re.findall(r'"([^"]+)"', dependencies):
         assert "==" in line, line
+
+
+def test_api_mounts_silver_and_the_champion_read_only():
+    block = _service_block("api")
+
+    assert '"./data/silver:/data/silver:ro"' in block
+    assert '"./data/modeling/roombeacon_price_benchmark_v3:/models/price:ro"' in block
+    assert 'API_SILVER_PATH: "/data/silver/rental_listings.parquet"' in block
+    assert 'API_MODEL_DIR: "/models/price"' in block
+    mem = int(re.search(r'mem_limit: "(\d+)m"', block).group(1))
+    assert mem >= 1024
+
+
+def test_api_image_can_run_lightgbm_with_the_training_versions():
+    dockerfile = DOCKERFILE.read_text(encoding="utf-8")
+    text = PYPROJECT.read_text(encoding="utf-8")
+
+    assert "libgomp1" in dockerfile
+    for pin in ("lightgbm==4.7.0", "scikit-learn==1.9.1", "joblib==1.6.0", "pandas==3.0.6", "numpy==2.5.3", "duckdb==1.5.5"):
+        assert f'"{pin}"' in text, pin
