@@ -165,8 +165,11 @@ export type DistrictCard = {
   name: string;                 // "Quận 7"
   stats: { listing_count: number; priced_listing_count: number; ward_count: number };
   price: Price;
+  cover_image: CoverImage | null;   // ảnh đại diện; null = khu vực chưa có tin có ảnh / tính năng ảnh tắt
   links: { self: string; wards: string };
 };
+
+export type CoverImage = { url: string; listing_id: string };   // url dạng /api/v1/listings/{id}/images/{n}
 
 export type WardCard = {
   id: string;
@@ -175,6 +178,7 @@ export type WardCard = {
   district: { id: string; name: string };
   stats: { listing_count: number; priced_listing_count: number };
   price: Price;
+  cover_image: CoverImage | null;
   links: { district: string; district_wards: string };
 };
 ```
@@ -199,7 +203,7 @@ export type ListingCard = {
   active_days: number | null;
   quality: { price_suitability: string | null; duplicate_status: string | null };
   valuation: { estimate: number; delta_pct: number; label: "BELOW_ESTIMATE" | "NEAR_ESTIMATE" | "ABOVE_ESTIMATE" } | null;
-  images: { count: number; cover: string | null } | null;   // null = tính năng ảnh đang tắt hoặc kho ảnh lỗi
+  images: { count: number; cover: string | null; preview: string[] } | null;   // preview ≤ 4 URL; null = ảnh tắt / kho ảnh lỗi
   links: { self: string; price_history: string };
 };
 
@@ -380,6 +384,11 @@ Nhãn: < −10% `BELOW_ESTIMATE` ("Rẻ hơn ước tính"), > +10% `ABOVE_ESTIM
   `<img src="/api/rb/listings/105419/images/1">`). Dùng `<img loading="lazy" decoding="async">` hoặc `next/image`
   với `unoptimized` — **không** để Next tối ưu ảnh qua máy chủ khác.
 - `images.count === 0` hoặc `images === null` → placeholder gradient (đa số tin chưa có ảnh).
+- Thẻ tin: `images.preview` (≤ 4 URL) cho carousel nhỏ trên thẻ (chấm chỉ vị trí, vuốt trên mobile, mũi tên khi hover
+  desktop); chỉ tải ảnh thứ 2 trở đi khi người dùng tương tác.
+- **Thẻ quận/phường**: `cover_image.url` là ảnh tin mới nhất có ảnh trong khu vực (hiện ~23/55 quận có). Hiển thị
+  làm nền trên của thẻ (tỉ lệ 16:9, phủ gradient tối nhẹ để chữ đọc được); `null` → nền gradient thương hiệu kèm
+  hoạ tiết. Bấm ảnh → mở trang khu vực, **không** mở tin nguồn.
 
 ### 5.7 `GET /api/v1/listings/{id}/price-history` — lịch sử giá
 
@@ -628,7 +637,8 @@ frontend/
 - [ ] `/tim-phong` hiển thị tin thật từ `GET /listings`, lọc theo khu vực/giá/diện tích, sắp xếp, phân trang.
 - [ ] Thẻ tin có nhãn định giá; `valuation = null` thì ẩn nhãn; `source_url = null` thì ẩn nút "Xem tin gốc".
 - [ ] `/phong/[id]` có so sánh thị trường + biểu đồ lịch sử giá + gallery ảnh (hoặc placeholder).
-- [ ] Thẻ tin hiển thị ảnh bìa khi `images.cover` có giá trị; ảnh đi qua `/api/rb/listings/{id}/images/{n}`.
+- [ ] Thẻ tin hiển thị ảnh bìa khi `images.cover` có giá trị (carousel từ `images.preview`); ảnh đi qua `/api/rb/listings/{id}/images/{n}`.
+- [ ] Thẻ quận/phường hiển thị `cover_image` (hoặc nền gradient khi `null`).
 - [ ] `/dinh-gia` gọi `POST /price-estimates`, hiển thị **khoảng giá**, cảnh báo tiếng Việt, disclaimer, huy hiệu "Thử nghiệm".
 - [ ] `/khu-vuc/[id]` có số liệu `market/summary` + biểu đồ `market/daily` bắt đầu 23/09.
 - [ ] Thẻ quận/phường hiển thị số tin, giá trung vị, dải p25–p75, đ/m² theo đúng định dạng mục 8.

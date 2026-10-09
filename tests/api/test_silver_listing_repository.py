@@ -105,6 +105,15 @@ def test_unsupported_sort_field_never_reaches_sql(silver):
         _search(SilverListingRepository(silver), sort=SortSpec("1; DROP", False))
 
 
+def test_latest_listing_with_images_per_location(silver):
+    repo = SilverListingRepository(silver)
+    pairs = frozenset({("phongtro123", "src1"), ("phongtro123", "src3"), ("mogi", "src2")})
+
+    assert repo.latest_with_images(pairs, "district", [DISTRICT_7, "ffffffffffffffff"]) == {DISTRICT_7: "1"}
+    assert repo.latest_with_images(pairs, "ward", [WARD_TAN_HUNG]) == {WARD_TAN_HUNG: "1"}
+    assert repo.latest_with_images(frozenset(), "district", [DISTRICT_7]) == {}
+
+
 def test_reloads_when_silver_is_republished(silver):
     repo = SilverListingRepository(silver)
     assert _search(repo).total == 2

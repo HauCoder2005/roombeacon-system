@@ -23,6 +23,11 @@ def get_service(request: Request) -> LocationService:
     return request.app.state.location_service
 
 
+def _covers(request: Request, level: str, ids: list[str]) -> dict:
+    service = request.app.state.cover_service
+    return service.covers(level, ids) if service is not None else {}
+
+
 @router.get(
     "/districts",
     summary="List district cards",
@@ -39,10 +44,11 @@ def list_districts(
 ) -> Response:
     spec = SortSpec.parse(sort, SORT_FIELDS)
     result = service.list_districts(_text(q), spec, PageRequest(page, per_page))
+    covers = _covers(request, "district", [card.id for card in result.items])
     return ok_response(
         request,
         message="District cards retrieved",
-        data=[district_out(card) for card in result.items],
+        data=[district_out(card, covers.get(card.id)) for card in result.items],
         resource="district",
         snapshot=service.snapshot(),
         page=result,
@@ -66,7 +72,7 @@ def get_district(
     return ok_response(
         request,
         message="District card retrieved",
-        data=district_out(card),
+        data=district_out(card, _covers(request, "district", [card.id]).get(card.id)),
         resource="district",
         snapshot=service.snapshot(),
         links={"self": request.url.path, "wards": f"{request.url.path}/wards"},
@@ -90,10 +96,11 @@ def list_wards(
 ) -> Response:
     spec = SortSpec.parse(sort, SORT_FIELDS)
     result = service.list_wards(district_id, _text(q), spec, PageRequest(page, per_page))
+    covers = _covers(request, "ward", [card.id for card in result.items])
     return ok_response(
         request,
         message="Ward cards retrieved",
-        data=[ward_out(card) for card in result.items],
+        data=[ward_out(card, covers.get(card.id)) for card in result.items],
         resource="ward",
         snapshot=service.snapshot(),
         page=result,
@@ -129,7 +136,7 @@ def resolve_ward(
     return ok_response(
         request,
         message="Ward resolved",
-        data=ward_out(card),
+        data=ward_out(card, _covers(request, "ward", [card.id]).get(card.id)),
         resource="ward",
         snapshot=service.snapshot(),
         filters=_filters(ward=_text(ward), district_id=district_id),

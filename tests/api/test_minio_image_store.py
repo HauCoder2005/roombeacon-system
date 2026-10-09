@@ -20,7 +20,11 @@ class FakeS3:
         if self.error:
             raise self.error
         self.list_calls.append(kwargs)
-        keys = [k for k in self.keys if k.startswith(kwargs["Prefix"])]
+        prefix = kwargs.get("Prefix", "")
+        keys = [k for k in self.keys if k.startswith(prefix)]
+        if kwargs.get("Delimiter") == "/":
+            common = sorted({prefix + k[len(prefix):].split("/", 1)[0] + "/" for k in keys if "/" in k[len(prefix):]})
+            return {"CommonPrefixes": [{"Prefix": p} for p in common], "IsTruncated": False}
         return {"Contents": [{"Key": k, "Size": 10} for k in keys], "IsTruncated": False}
 
     def get_object(self, Bucket, Key):
@@ -92,3 +96,18 @@ def test_storage_errors_become_dependency_outages():
     with pytest.raises(DependencyUnavailableError) as raised:
         store(s3).list_images("s", "1")
     assert "secret" not in str(raised.value)
+
+
+def test_index_of_listings_with_images_is_built_from_prefixes_and_cached():
+    s3 = FakeS3(keys=[
+        "phongtro123/pr7/img_1_aaaaaaaa.jpg",
+        "phongtro123/pr8/img_1_bbbbbbbb.jpg",
+        "mogi/55/img_2_cccccccc.webp",
+        "../evil/img_1_dddddddd.jpg",
+    ])
+    images = store(s3)
+
+    assert images.listings_with_images() == frozenset({("phongtro123", "pr7"), ("phongtro123", "pr8"), ("mogi", "55")})
+    calls = len(s3.list_calls)
+    images.listings_with_images()
+    assert len(s3.list_calls) == calls

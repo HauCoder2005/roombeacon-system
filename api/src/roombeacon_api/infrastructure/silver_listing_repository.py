@@ -124,6 +124,40 @@ class SilverListingRepository:
             cursor.close()
         return _card(row) if row else None
 
+    def latest_with_images(self, pairs: frozenset[tuple[str, str]], level: str, location_ids: list[str]) -> dict[str, str]:
+        if level not in {"district", "ward"}:
+            raise ValueError(f"unsupported level: {level!r}")
+        if not pairs or not location_ids:
+            return {}
+        column = f"{level}_id"
+        cursor = self._cursor()
+        try:
+            self._sync_image_pairs(cursor, pairs)
+            rows = cursor.execute(
+                f"""
+                SELECT l.{column}, arg_max(l.id, (l.last_observed_at, l.id))
+                FROM listings AS l
+                INNER JOIN image_pairs AS p ON p.source = l.source AND p.sid = l.source_listing_id
+                WHERE list_contains($ids, l.{column})
+                  AND l.in_market AND l.price_suitability = 'SUPPORTED' AND l.price_vnd IS NOT NULL
+                  AND coalesce(l.duplicate_status, '') <> 'POSSIBLE_DUPLICATE'
+                GROUP BY l.{column}
+                """,
+                {"ids": list(location_ids)},
+            ).fetchall()
+        finally:
+            cursor.close()
+        return {location: listing for location, listing in rows}
+
+    def _sync_image_pairs(self, cursor: duckdb.DuckDBPyConnection, pairs: frozenset[tuple[str, str]]) -> None:
+        """Refresh the shared image_pairs table only when the index changed."""
+        with self._lock:
+            if getattr(self, "_pairs_signature", None) == (self._signature, hash(pairs)):
+                return
+            cursor.execute("CREATE OR REPLACE TABLE image_pairs (source VARCHAR, sid VARCHAR)")
+            cursor.executemany("INSERT INTO image_pairs VALUES (?, ?)", sorted(pairs))
+            self._pairs_signature = (self._signature, hash(pairs))
+
     # -- loading ---------------------------------------------------------------
 
     def _cursor(self) -> duckdb.DuckDBPyConnection:

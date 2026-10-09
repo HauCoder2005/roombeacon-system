@@ -62,10 +62,14 @@ class MarketComparison:
     position: str | None
 
 
+PREVIEW_IMAGES = 4
+
+
 @dataclass(frozen=True)
 class ImageSummary:
     count: int
     cover_position: int | None
+    preview_positions: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -102,7 +106,11 @@ class ListingService:
             out = {}
             for card in cards:
                 refs = self._refs(card)
-                out[card.id] = ImageSummary(len(refs), refs[0].position if refs else None)
+                out[card.id] = ImageSummary(
+                    len(refs),
+                    refs[0].position if refs else None,
+                    tuple(r.position for r in refs[:PREVIEW_IMAGES]),
+                )
             return out
         except DependencyUnavailableError:
             logger.warning("image storage unavailable; listings served without images")

@@ -38,7 +38,13 @@ def price_out(price: PriceStats) -> dict[str, Any]:
     }
 
 
-def district_out(card: DistrictCard) -> dict[str, Any]:
+def cover_out(cover: Any) -> dict[str, Any] | None:
+    if cover is None:
+        return None
+    return {"url": f"/api/v1/listings/{cover.listing_id}/images/{cover.position}", "listing_id": cover.listing_id}
+
+
+def district_out(card: DistrictCard, cover: Any = None) -> dict[str, Any]:
     return {
         "id": card.id,
         "type": "district",
@@ -49,11 +55,12 @@ def district_out(card: DistrictCard) -> dict[str, Any]:
             "ward_count": card.ward_count,
         },
         "price": price_out(card.price),
+        "cover_image": cover_out(cover),
         "links": {"self": f"{DISTRICTS_PATH}/{card.id}", "wards": f"{DISTRICTS_PATH}/{card.id}/wards"},
     }
 
 
-def ward_out(card: WardCard) -> dict[str, Any]:
+def ward_out(card: WardCard, cover: Any = None) -> dict[str, Any]:
     return {
         "id": card.id,
         "type": "ward",
@@ -61,6 +68,7 @@ def ward_out(card: WardCard) -> dict[str, Any]:
         "district": {"id": card.district_id, "name": card.district_name},
         "stats": {"listing_count": card.listing_count, "priced_listing_count": card.priced_listing_count},
         "price": price_out(card.price),
+        "cover_image": cover_out(cover),
         "links": {
             "district": f"{DISTRICTS_PATH}/{card.district_id}",
             "district_wards": f"{DISTRICTS_PATH}/{card.district_id}/wards",
@@ -111,6 +119,7 @@ def listing_out(card: ListingCard, valuation: Valuation | None, images: ImageSum
         "images": None if images is None else {
             "count": images.count,
             "cover": f"{LISTINGS_PATH}/{card.id}/images/{images.cover_position}" if images.cover_position is not None else None,
+            "preview": [f"{LISTINGS_PATH}/{card.id}/images/{p}" for p in images.preview_positions],
         },
         "links": {"self": f"{LISTINGS_PATH}/{card.id}", "price_history": f"{LISTINGS_PATH}/{card.id}/price-history"},
     }

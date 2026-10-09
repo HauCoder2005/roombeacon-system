@@ -10,6 +10,7 @@ from starlette.middleware.cors import CORSMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from . import __version__
+from .application.cover_service import CoverService
 from .application.listing_service import ListingService
 from .application.location_service import LocationService
 from .application.market_service import MarketService
@@ -65,6 +66,7 @@ def create_app(
     app.state.settings = settings
     app.state.location_service = LocationService(repository)
     app.state.listing_service = ListingService(listing_repository, history_repository, repository, price_model, image_store)
+    app.state.cover_service = CoverService(listing_repository, image_store) if image_store is not None else None
     app.state.estimate_service = PriceEstimateService(repository, price_model)
     app.state.market_service = MarketService(market_repository, repository)
     app.state.api_key_verifier = ApiKeyVerifier(settings.api_key_sha256)

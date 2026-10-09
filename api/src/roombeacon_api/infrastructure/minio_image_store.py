@@ -30,6 +30,11 @@ CACHE_ENTRIES = 5_000
 MISSING_CODES = frozenset({"NoSuchKey", "404", "NotFound"})
 
 
+def _safe(name: str | None) -> bool:
+    """A single path segment: allowed characters, never '.', '..' or any '..' run."""
+    return bool(name) and SAFE_ID.fullmatch(name) is not None and ".." not in name and name != "."
+
+
 class MinioImageStore:
     def __init__(
         self,
@@ -45,9 +50,10 @@ class MinioImageStore:
         self._clock = clock
         self._lock = threading.Lock()
         self._cache: OrderedDict[str, tuple[float, list[ImageRef]]] = OrderedDict()
+        self._index: tuple[float, frozenset[tuple[str, str]]] | None = None
 
     def list_images(self, source: str, source_listing_id: str) -> list[ImageRef]:
-        if not (SAFE_ID.fullmatch(source or "") and SAFE_ID.fullmatch(source_listing_id or "")) or ".." in source_listing_id:
+        if not (_safe(source) and _safe(source_listing_id)):
             return []
         prefix = f"{source}/{source_listing_id}/"
         now = self._clock()
@@ -74,6 +80,40 @@ class MinioImageStore:
             while len(self._cache) > CACHE_ENTRIES:
                 self._cache.popitem(last=False)
         return result
+
+    def listings_with_images(self) -> frozenset[tuple[str, str]]:
+        """Index of <source>/<listing>/ prefixes, rebuilt at most every CACHE_TTL_SECONDS."""
+        now = self._clock()
+        with self._lock:
+            if self._index and now - self._index[0] < CACHE_TTL_SECONDS:
+                return self._index[1]
+        try:
+            pairs = set()
+            for source in self._common_prefixes(""):
+                if not _safe(source):
+                    continue
+                for listing in self._common_prefixes(f"{source}/"):
+                    if _safe(listing):
+                        pairs.add((source, listing))
+        except Exception as exc:
+            logger.warning("image index failed: %s", type(exc).__name__)
+            raise DependencyUnavailableError("images") from exc
+        index = frozenset(pairs)
+        with self._lock:
+            self._index = (now, index)
+        return index
+
+    def _common_prefixes(self, prefix: str) -> list[str]:
+        names, token = [], None
+        while True:
+            kwargs = {"Bucket": self._bucket, "Prefix": prefix, "Delimiter": "/", "MaxKeys": 1000}
+            if token:
+                kwargs["ContinuationToken"] = token
+            response = self._s3().list_objects_v2(**kwargs)
+            names.extend(p["Prefix"][len(prefix):].rstrip("/") for p in response.get("CommonPrefixes", []))
+            if not response.get("IsTruncated"):
+                return names
+            token = response.get("NextContinuationToken")
 
     def get_image(self, key: str) -> ImageObject | None:
         try:

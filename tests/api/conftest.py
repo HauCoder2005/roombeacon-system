@@ -192,6 +192,15 @@ class FakeListingRepository(_Guarded):
         self._guard("get")
         return next((c for c in LISTINGS if c.id == listing_id), None)
 
+    def latest_with_images(self, pairs, level: str, location_ids: list[str]) -> dict[str, str]:
+        self._guard("latest_with_images")
+        out = {}
+        for card in sorted(LISTINGS, key=lambda c: (c.last_observed_at, c.id)):
+            location = card.district_id if level == "district" else card.ward_id
+            if location in location_ids and (card.source, card.source_listing_id) in pairs:
+                out[location] = card.id
+        return out
+
 
 class FakeHistoryRepository(_Guarded):
     def price_history(self, listing_id: str, page: PageRequest) -> Page[PricePoint]:
@@ -239,6 +248,11 @@ class FakeImageStore:
         if self.unavailable:
             raise DependencyUnavailableError("images")
         return self.objects.get(key)
+
+    def listings_with_images(self) -> frozenset[tuple[str, str]]:
+        if self.unavailable:
+            raise DependencyUnavailableError("images")
+        return frozenset({("phongtro123", "pr101")})
 
 
 class FakePriceModel:

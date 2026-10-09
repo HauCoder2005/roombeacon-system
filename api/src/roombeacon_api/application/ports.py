@@ -54,6 +54,12 @@ class ListingRepository(Protocol):
 
     def get(self, listing_id: str) -> ListingCard | None: ...
 
+    def latest_with_images(
+        self, pairs: frozenset[tuple[str, str]], level: str, location_ids: list[str]
+    ) -> dict[str, str]:
+        """location id -> id of its most recently observed searchable listing that has images."""
+        ...
+
 
 class HistoryRepository(Protocol):
     def price_history(self, listing_id: str, page: PageRequest) -> Page[PricePoint]: ...
@@ -79,3 +85,7 @@ class ImageStore(Protocol):
     def list_images(self, source: str, source_listing_id: str) -> list[ImageRef]: ...
 
     def get_image(self, key: str) -> ImageObject | None: ...
+
+    def listings_with_images(self) -> frozenset[tuple[str, str]]:
+        """(source, source_listing_id) pairs that have at least one stored image."""
+        ...

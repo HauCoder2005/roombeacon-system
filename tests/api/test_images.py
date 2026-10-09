@@ -8,8 +8,12 @@ from tests.api.conftest import API_KEY, JPEG, build_app, make_settings
 def test_cards_carry_an_image_summary(client):
     cards = {c["id"]: c for c in client.get("/api/v1/listings", params={"per_page": 100}).json()["data"]}
 
-    assert cards["101"]["images"] == {"count": 2, "cover": "/api/v1/listings/101/images/1"}
-    assert cards["103"]["images"] == {"count": 0, "cover": None}
+    assert cards["101"]["images"] == {
+        "count": 2,
+        "cover": "/api/v1/listings/101/images/1",
+        "preview": ["/api/v1/listings/101/images/1", "/api/v1/listings/101/images/2"],
+    }
+    assert cards["103"]["images"] == {"count": 0, "cover": None, "preview": []}
 
 
 def test_image_list_and_bytes(client):
