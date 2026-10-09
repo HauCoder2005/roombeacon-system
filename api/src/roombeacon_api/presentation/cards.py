@@ -89,6 +89,14 @@ def _area(value: float | None) -> float | None:
     return None if value is None else round(float(value), 1)
 
 
+def _public_url(url: str | None) -> str | None:
+    """Only absolute http(s) URLs without an embedded phone number leave the API."""
+    if not url or contains_contact_number(url):
+        return None
+    lowered = url.strip().lower()
+    return url.strip() if lowered.startswith(("https://", "http://")) else None
+
+
 def listing_out(card: ListingCard, valuation: Valuation | None, images: ImageSummary | None = None) -> dict[str, Any]:
     """Contact numbers are masked in titles; URLs that embed one are dropped entirely."""
     level = "WARD" if card.ward_id else "DISTRICT" if card.district_id else "UNKNOWN"
@@ -98,7 +106,7 @@ def listing_out(card: ListingCard, valuation: Valuation | None, images: ImageSum
         "type": "listing",
         "title": mask_contact_numbers(card.title) or "",
         "source": card.source,
-        "source_url": None if contains_contact_number(card.source_url) else card.source_url,
+        "source_url": _public_url(card.source_url),
         "price": None if card.price_vnd is None else {"currency": "VND", "amount": _money(card.price_vnd), "period": "month"},
         "area_m2": _area(card.area_m2),
         "price_per_m2": _money(per_m2),
