@@ -11,6 +11,8 @@ from typing import TYPE_CHECKING, Protocol
 from ..domain.models import (
     DataSnapshot,
     DistrictCard,
+    ImageObject,
+    ImageRef,
     ListingCard,
     MarketDay,
     MarketSummary,
@@ -69,3 +71,11 @@ class PriceModel(Protocol):
     def info(self) -> ModelInfo: ...
 
     def predict(self, inputs: list[ModelInput]) -> list[PricePrediction]: ...
+
+
+class ImageStore(Protocol):
+    """Listing images in object storage (read-only)."""
+
+    def list_images(self, source: str, source_listing_id: str) -> list[ImageRef]: ...
+
+    def get_image(self, key: str) -> ImageObject | None: ...

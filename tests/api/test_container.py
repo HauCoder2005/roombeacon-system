@@ -65,3 +65,18 @@ def test_api_image_can_run_lightgbm_with_the_training_versions():
     assert "libgomp1" in dockerfile
     for pin in ("lightgbm==4.7.0", "scikit-learn==1.9.1", "joblib==1.6.0", "pandas==3.0.6", "numpy==2.5.3", "duckdb==1.5.5"):
         assert f'"{pin}"' in text, pin
+
+
+def test_api_reads_images_with_a_read_only_minio_account():
+    import json
+
+    block = _service_block("api")
+    policy = json.loads((ROOT / "infrastructure/minio/policies/roombeacon-assets-reader.json").read_text(encoding="utf-8"))
+    actions = {a for statement in policy["Statement"] for a in statement["Action"]}
+    resources = {r for statement in policy["Statement"] for r in statement["Resource"]}
+
+    assert 'API_MINIO_ENDPOINT: "minio:9000"' in block
+    assert actions == {"s3:GetObject", "s3:ListBucket"}
+    assert resources == {"arn:aws:s3:::roombeacon-assets", "arn:aws:s3:::roombeacon-assets/*"}
+    assert (ROOT / "infrastructure/minio/create_api_reader.sh").is_file()
+    assert '"boto3==1.43.102"' in PYPROJECT.read_text(encoding="utf-8")

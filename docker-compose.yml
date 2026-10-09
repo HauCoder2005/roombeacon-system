@@ -1402,6 +1402,8 @@ services:
       API_CLICKHOUSE_HOST: "clickhouse"
       API_SILVER_PATH: "/data/silver/rental_listings.parquet"
       API_MODEL_DIR: "/models/price"
+      # Listing images (only used when API_IMAGES_ENABLED=true in .env.local).
+      API_MINIO_ENDPOINT: "minio:9000"
     volumes:
       - "./data/silver:/data/silver:ro"
       - "./data/modeling/roombeacon_price_benchmark_v3:/models/price:ro"

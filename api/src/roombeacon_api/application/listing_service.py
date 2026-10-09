@@ -6,9 +6,9 @@ from dataclasses import dataclass
 import logging
 
 from ..domain.errors import DependencyUnavailableError, InvalidParameterError, NotFoundError
-from ..domain.models import ListingCard, ModelInput, PricePoint
+from ..domain.models import IMAGE_CONTENT_TYPES, ImageObject, ImageRef, ListingCard, ModelInput, PricePoint
 from .pagination import Page, PageRequest
-from .ports import HistoryRepository, ListingRepository, LocationRepository, PriceModel
+from .ports import HistoryRepository, ImageStore, ListingRepository, LocationRepository, PriceModel
 from .sorting import SortSpec
 
 
@@ -63,6 +63,12 @@ class MarketComparison:
 
 
 @dataclass(frozen=True)
+class ImageSummary:
+    count: int
+    cover_position: int | None
+
+
+@dataclass(frozen=True)
 class ListingDetail:
     listing: ListingCard
     valuation: Valuation | None
@@ -76,11 +82,52 @@ class ListingService:
         history: HistoryRepository,
         locations: LocationRepository,
         price_model: PriceModel,
+        images: ImageStore | None = None,
     ) -> None:
         self._listings = listings
         self._history = history
         self._locations = locations
         self._model = price_model
+        self._images = images
+
+    @property
+    def images_enabled(self) -> bool:
+        return self._images is not None
+
+    def image_summaries(self, cards: list[ListingCard]) -> dict[str, ImageSummary] | None:
+        """Image count and cover per card; None when images are off or storage is down."""
+        if self._images is None:
+            return None
+        try:
+            out = {}
+            for card in cards:
+                refs = self._refs(card)
+                out[card.id] = ImageSummary(len(refs), refs[0].position if refs else None)
+            return out
+        except DependencyUnavailableError:
+            logger.warning("image storage unavailable; listings served without images")
+            return None
+
+    def images(self, listing_id: str) -> list[ImageRef]:
+        self._require_images()
+        return self._refs(self._require(listing_id))
+
+    def image(self, listing_id: str, position: int) -> ImageObject:
+        self._require_images()
+        ref = next((r for r in self._refs(self._require(listing_id)) if r.position == position), None)
+        image = self._images.get_image(ref.key) if ref else None
+        if image is None or image.content_type not in IMAGE_CONTENT_TYPES:
+            raise NotFoundError("image", str(position))
+        return image
+
+    def _require_images(self) -> None:
+        if self._images is None:
+            raise NotFoundError("image", "disabled")
+
+    def _refs(self, card: ListingCard) -> list[ImageRef]:
+        if not card.source or not card.source_listing_id:
+            return []
+        return self._images.list_images(card.source, card.source_listing_id)
 
     def search(self, filters: ListingFilters, sort: SortSpec, page: PageRequest) -> tuple[Page[ListingCard], dict[str, Valuation]]:
         result = self._listings.search(filters, sort, page)

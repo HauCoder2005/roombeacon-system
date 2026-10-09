@@ -22,8 +22,9 @@ của các trang rao vặt bất động sản quen thuộc), nhưng **thương 
 | **Tin đăng** | `GET /listings`, `/listings/{id}`, `/listings/{id}/price-history` | Tin TP.HCM có giá hợp lệ, đã bỏ tin trùng; kèm **định giá model** cho từng tin |
 | **Định giá (model)** | `POST /price-estimates`, `GET /price-estimates/model` | Model LightGBM champion — **thử nghiệm**, luôn hiển thị khoảng giá + cảnh báo |
 | **Thị trường** | `GET /market/summary`, `GET /market/daily` | Số liệu toàn TP hoặc 1 quận; chuỗi theo ngày |
+| **Ảnh tin** | `GET /listings/{id}/images`, `GET /listings/{id}/images/{position}` | Ảnh từ MinIO; **chỉ ~4,5% tin có ảnh**; tắt/bật bằng `API_IMAGES_ENABLED` |
 
-Tất cả có tiền tố `/api/v1`. **Không có** ảnh tin đăng và **không** vẽ bản đồ/ghim toạ độ (toạ độ tin cậy < 2%).
+Tất cả có tiền tố `/api/v1`. **Không** vẽ bản đồ/ghim toạ độ (toạ độ tin cậy < 2%).
 Code gọi dữ liệu đi qua **một lớp adapter** (`lib/api/`), component không gọi `fetch` trực tiếp.
 
 ## 3. Kết nối & bảo mật (Next.js App Router)
@@ -44,11 +45,13 @@ Code gọi dữ liệu đi qua **một lớp adapter** (`lib/api/`), component k
 import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 
-const ALLOWED = /^(locations\/(districts(\/[0-9a-f]{16}(\/wards)?)?|resolve)|listings(\/[0-9]{1,19}(\/price-history)?)?|market\/(summary|daily)|price-estimates\/model)$/;
+const ALLOWED = /^(locations\/(districts(\/[0-9a-f]{16}(\/wards)?)?|resolve)|listings(\/[0-9]{1,19}(\/(price-history|images))?)?|market\/(summary|daily)|price-estimates\/model)$/;
+const IMAGE = /^listings\/[0-9]{1,19}\/images\/[0-9]{1,4}$/;   // nhị phân, xử lý riêng bên dưới
 const PASS_HEADERS = ["Retry-After", "ETag", "X-Request-ID", "X-RateLimit-Limit", "X-RateLimit-Remaining"];
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   const path = (await params).path.join("/");
+  if (IMAGE.test(path)) return proxyImage(path);
   if (!ALLOWED.test(path)) {
     return NextResponse.json({ success: false, code: 404, status: "NOT_FOUND" }, { status: 404 });
   }
@@ -66,6 +69,22 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ path
     if (value) out.set(name, value);
   }
   return new NextResponse(upstream.status === 304 ? null : await upstream.text(), { status: upstream.status, headers: out });
+}
+
+// Ảnh: chuyển nguyên byte; chỉ chấp nhận image/*; cache trình duyệt 1 ngày.
+const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+async function proxyImage(path: string) {
+  const upstream = await fetch(`${process.env.ROOMBEACON_API_URL}/api/v1/${path}`, {
+    headers: { "X-API-Key": process.env.ROOMBEACON_API_KEY ?? "" },
+    cache: "no-store",
+    signal: AbortSignal.timeout(10_000),
+  });
+  const type = (upstream.headers.get("content-type") ?? "").split(";")[0];
+  if (!upstream.ok || !IMAGE_TYPES.has(type)) return new NextResponse(null, { status: upstream.ok ? 404 : upstream.status });
+  return new NextResponse(upstream.body, {
+    status: 200,
+    headers: { "Content-Type": type, "Cache-Control": "public, max-age=86400", "X-Content-Type-Options": "nosniff" },
+  });
 }
 
 // Chỉ một endpoint ghi: định giá. Thân request tối đa 2 KB, chuyển nguyên JSON.
@@ -180,8 +199,11 @@ export type ListingCard = {
   active_days: number | null;
   quality: { price_suitability: string | null; duplicate_status: string | null };
   valuation: { estimate: number; delta_pct: number; label: "BELOW_ESTIMATE" | "NEAR_ESTIMATE" | "ABOVE_ESTIMATE" } | null;
+  images: { count: number; cover: string | null } | null;   // null = tính năng ảnh đang tắt hoặc kho ảnh lỗi
   links: { self: string; price_history: string };
 };
+
+export type ListingImage = { position: number; url: string };   // url dạng /api/v1/listings/{id}/images/{position}
 
 export type MarketPosition = {
   scope: "ward" | "district"; name: string;
@@ -349,6 +371,16 @@ Nhãn: < −10% `BELOW_ESTIMATE` ("Rẻ hơn ước tính"), > +10% `ABOVE_ESTIM
  "valuation": {"estimate": 4238966, "delta_pct": -29.2, "label": "BELOW_ESTIMATE"}, "...": "các trường như ListingCard"}
 ```
 
+### 5.6b Ảnh tin
+
+- `GET /api/v1/listings/{id}/images` → `data: ListingImage[]` (theo thứ tự gallery của nguồn). Tính năng tắt → 404.
+- `GET /api/v1/listings/{id}/images/{position}` → **byte ảnh** (`image/jpeg|png|webp|gif`, ≤ 8 MB),
+  `Cache-Control: private, max-age=86400`, `ETag`. Không có → 404. Ảnh có hạn mức tần suất riêng (gấp 10 lần API).
+- Trên trình duyệt **đổi tiền tố** `/api/v1/` → `/api/rb/` (vd `cover` = `/api/v1/listings/105419/images/1` →
+  `<img src="/api/rb/listings/105419/images/1">`). Dùng `<img loading="lazy" decoding="async">` hoặc `next/image`
+  với `unoptimized` — **không** để Next tối ưu ảnh qua máy chủ khác.
+- `images.count === 0` hoặc `images === null` → placeholder gradient (đa số tin chưa có ảnh).
+
 ### 5.7 `GET /api/v1/listings/{id}/price-history` — lịch sử giá
 
 Phân trang (`per_page` mặc định 50). `data` = `PricePoint[]` theo thời gian tăng dần, ví dụ:
@@ -498,7 +530,8 @@ Ngôn ngữ UI: **tiếng Việt**. Responsive (mobile trước, ≥ 360 px). S�
   `price_max`, `area_min`, `area_max`, `sort`, `page`) → gọi **`GET /listings`** thật.
 - Desktop 3 cột: bộ lọc trái · lưới **ListingCard** giữa · **thẻ thị trường** phải (`/market/summary?district_id=`
   hoặc thẻ phường). Mobile: nút "Bộ lọc (n)" mở bottom sheet.
-- ListingCard: placeholder ảnh 4:3 (gradient + icon — API không có ảnh), giá to "4,5 triệu/tháng",
+- ListingCard: **ảnh bìa** `images.cover` (qua `/api/rb/...`, tỉ lệ 4:3, `object-fit: cover`, lazy) kèm huy hiệu
+  "📷 {count}"; không có ảnh → placeholder gradient + icon. Giá to "4,5 triệu/tháng",
   "25 m² · 180.000 đ/m²", "Phường Tân Hưng, Quận 7", "3 ngày trước", nhãn nguồn, **nhãn định giá** (mục 6).
 - Sắp xếp: Mới nhất · Giá thấp → cao · Giá cao → thấp · Diện tích. Phân trang theo `meta.pagination`.
 - "Hiển thị 1–20 trên 3.860 tin".
@@ -506,6 +539,8 @@ Ngôn ngữ UI: **tiếng Việt**. Responsive (mobile trước, ≥ 360 px). S�
 ### 7.3 Trang chi tiết tin `/phong/[id]`
 
 - Server Component gọi `GET /listings/{id}` + `generateMetadata` (title = tiêu đề tin).
+- **Gallery ảnh** đầu trang (từ `/listings/{id}/images`): ảnh lớn + dải thumbnail, vuốt trên mobile, phím ←/→,
+  bấm mở lightbox; không có ảnh → placeholder. `alt` = tiêu đề tin + "ảnh {n}".
 - Khối giá: giá đăng to · "Ước tính model: 4,24 tr (Rẻ hơn ước tính 29%)" · **PriceRangeStrip** của `market`
   với vạch vị trí giá tin.
 - Thông tin: diện tích, đ/m², khu vực (link sang `/khu-vuc/[districtId]`), đăng lần đầu / cập nhật, số ngày hoạt động.
@@ -592,7 +627,8 @@ frontend/
 - [ ] Gõ "Phường Tân Hưng" → hiện lựa chọn theo quận (xử lý đúng `300`).
 - [ ] `/tim-phong` hiển thị tin thật từ `GET /listings`, lọc theo khu vực/giá/diện tích, sắp xếp, phân trang.
 - [ ] Thẻ tin có nhãn định giá; `valuation = null` thì ẩn nhãn; `source_url = null` thì ẩn nút "Xem tin gốc".
-- [ ] `/phong/[id]` có so sánh thị trường + biểu đồ lịch sử giá.
+- [ ] `/phong/[id]` có so sánh thị trường + biểu đồ lịch sử giá + gallery ảnh (hoặc placeholder).
+- [ ] Thẻ tin hiển thị ảnh bìa khi `images.cover` có giá trị; ảnh đi qua `/api/rb/listings/{id}/images/{n}`.
 - [ ] `/dinh-gia` gọi `POST /price-estimates`, hiển thị **khoảng giá**, cảnh báo tiếng Việt, disclaimer, huy hiệu "Thử nghiệm".
 - [ ] `/khu-vuc/[id]` có số liệu `market/summary` + biểu đồ `market/daily` bắt đầu 23/09.
 - [ ] Thẻ quận/phường hiển thị số tin, giá trung vị, dải p25–p75, đ/m² theo đúng định dạng mục 8.

@@ -21,6 +21,8 @@ from roombeacon_api.domain.models import (
     MarketDay,
     MarketSummary,
     ModelInfo,
+    ImageObject,
+    ImageRef,
     ModelInput,
     PricePoint,
     PricePrediction,
@@ -74,7 +76,7 @@ def listing(
     last_seen: datetime = T1,
 ) -> ListingCard:
     return ListingCard(
-        id=listing_id, title=title, source=source,
+        id=listing_id, title=title, source=source, source_listing_id=f"pr{listing_id}",
         source_url=url or f"https://example.test/{listing_id}.html",
         price_vnd=price_vnd, area_m2=area,
         district_id=district[0] if district else None, district=district[1] if district else None,
@@ -212,6 +214,33 @@ class FakeMarketRepository(_Guarded):
         return [d for d in days if (date_from is None or d.day >= date_from) and (date_to is None or d.day <= date_to)]
 
 
+JPEG = b"\xff\xd8\xff\xe0" + b"0" * 64
+
+
+class FakeImageStore:
+    """Two images for listing 101 (source phongtro123, source id pr101), one non-image object."""
+
+    def __init__(self) -> None:
+        self.unavailable = False
+        self.objects = {
+            "phongtro123/pr101/img_1_aaaaaaaa.jpg": ImageObject(JPEG, "image/jpeg", '"etag1"', len(JPEG)),
+            "phongtro123/pr101/img_2_bbbbbbbb.jpg": ImageObject(JPEG, "image/jpeg", '"etag2"', len(JPEG)),
+            "phongtro123/pr102/img_1_cccccccc.jpg": ImageObject(b"<html>", "text/html", '"etag3"', 6),
+        }
+
+    def list_images(self, source: str, source_listing_id: str) -> list[ImageRef]:
+        if self.unavailable:
+            raise DependencyUnavailableError("images")
+        prefix = f"{source}/{source_listing_id}/"
+        keys = sorted(k for k in self.objects if k.startswith(prefix))
+        return [ImageRef(int(k.split("img_")[1].split("_")[0]), k) for k in keys]
+
+    def get_image(self, key: str) -> ImageObject | None:
+        if self.unavailable:
+            raise DependencyUnavailableError("images")
+        return self.objects.get(key)
+
+
 class FakePriceModel:
     """Deterministic stand-in: 160k VND per m², +10% when the source is known."""
 
@@ -253,6 +282,7 @@ def make_settings(**overrides) -> ApiSettings:
         cors_origins=(),
         allowed_hosts=("testserver",),
         docs_enabled=False,
+        images_enabled=True,
         clickhouse=ClickHouseSettings(
             host="127.0.0.1", port=8123, database="roombeacon_dw", user="reader",
             password=Secret("unused"), secure=False, connect_timeout_seconds=5, query_timeout_seconds=10,
@@ -291,7 +321,12 @@ def settings() -> ApiSettings:
     return make_settings()
 
 
-def build_app(settings, repository, listings=None, history=None, market=None, price_model=None):
+@pytest.fixture
+def images() -> FakeImageStore:
+    return FakeImageStore()
+
+
+def build_app(settings, repository, listings=None, history=None, market=None, price_model=None, images=None):
     return create_app(
         settings,
         repository=repository,
@@ -299,11 +334,12 @@ def build_app(settings, repository, listings=None, history=None, market=None, pr
         history_repository=history or FakeHistoryRepository(),
         market_repository=market or FakeMarketRepository(),
         price_model=price_model or FakePriceModel(),
+        image_store=images or FakeImageStore(),
     )
 
 
 @pytest.fixture
-def client(settings, repository, listings, history, market, price_model) -> TestClient:
-    app = build_app(settings, repository, listings, history, market, price_model)
+def client(settings, repository, listings, history, market, price_model, images) -> TestClient:
+    app = build_app(settings, repository, listings, history, market, price_model, images)
     with TestClient(app, headers={"X-API-Key": API_KEY}, raise_server_exceptions=False) as test_client:
         yield test_client

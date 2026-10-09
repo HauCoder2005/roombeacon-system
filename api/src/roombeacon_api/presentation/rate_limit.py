@@ -11,6 +11,7 @@ from collections import OrderedDict, deque
 from dataclasses import dataclass
 import hashlib
 import math
+import re
 import threading
 import time
 from typing import Callable
@@ -59,15 +60,22 @@ class SlidingWindowRateLimiter:
             return RateDecision(allowed, self.limit, max(0, self.limit - len(hits)), retry_after)
 
 
+# Image bytes are many small requests per page view; they get their own, larger budget.
+IMAGE_PATH = re.compile(r"^/api/v1/listings/\d+/images/\d+$")
+IMAGE_LIMIT_MULTIPLIER = 10
+
+
 class RateLimitMiddleware(BaseHTTPMiddleware):
-    def __init__(self, app, limiter: SlidingWindowRateLimiter) -> None:
+    def __init__(self, app, limiter: SlidingWindowRateLimiter, image_limiter: SlidingWindowRateLimiter | None = None) -> None:
         super().__init__(app)
         self._limiter = limiter
+        self._image_limiter = image_limiter or SlidingWindowRateLimiter(limiter.limit * IMAGE_LIMIT_MULTIPLIER)
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         if not request.url.path.startswith("/api/") or request.method == "OPTIONS":
             return await call_next(request)
-        decision = self._limiter.hit(self._bucket(request))
+        limiter = self._image_limiter if IMAGE_PATH.match(request.url.path) else self._limiter
+        decision = limiter.hit(self._bucket(request))
         headers = {"X-RateLimit-Limit": str(decision.limit), "X-RateLimit-Remaining": str(decision.remaining)}
         if not decision.allowed:
             return error_response(

@@ -52,10 +52,11 @@ def search_listings(
         area_min=area_min, area_max=area_max, intent=intent.strip().upper(), exclude_duplicates=not include_duplicates,
     )
     result, valuations = service.search(filters, spec, PageRequest(page, per_page))
+    images = service.image_summaries(result.items) or {}
     return ok_response(
         request,
         message="Listings retrieved",
-        data=[listing_out(card, valuations.get(card.id)) for card in result.items],
+        data=[listing_out(card, valuations.get(card.id), images.get(card.id)) for card in result.items],
         resource="listing",
         snapshot=_snapshot(request),
         page=result,
@@ -75,10 +76,11 @@ def get_listing(
     service: ListingService = Depends(get_service),
 ) -> Response:
     detail = service.get(listing_id)
+    images = (service.image_summaries([detail.listing]) or {}).get(detail.listing.id)
     return ok_response(
         request,
         message="Listing retrieved",
-        data=listing_detail_out(detail),
+        data=listing_detail_out(detail, images),
         resource="listing",
         snapshot=_snapshot(request),
         links={"self": request.url.path, "price_history": f"{request.url.path}/price-history"},
@@ -102,3 +104,37 @@ def get_price_history(
         snapshot=_snapshot(request),
         page=result,
     )
+
+
+@router.get("/{listing_id}/images", summary="Image list of one listing", response_model=Envelope[list[dict[str, Any]]], responses=ERROR_RESPONSES)
+def list_images(
+    request: Request,
+    listing_id: str = Path(pattern=LISTING_ID),
+    service: ListingService = Depends(get_service),
+) -> Response:
+    refs = service.images(listing_id)
+    return ok_response(
+        request,
+        message="Images retrieved",
+        data=[{"position": r.position, "url": f"{request.url.path}/{r.position}"} for r in refs],
+        resource="image",
+        snapshot=_snapshot(request),
+    )
+
+
+@router.get(
+    "/{listing_id}/images/{position}",
+    summary="Image bytes (JPEG/PNG/WebP/GIF, at most 8 MB)",
+    response_class=Response,
+    responses={200: {"content": {"image/jpeg": {}, "image/png": {}, "image/webp": {}}}, **ERROR_RESPONSES},
+)
+def get_image(
+    listing_id: str = Path(pattern=LISTING_ID),
+    position: int = Path(ge=0, le=9999),
+    service: ListingService = Depends(get_service),
+) -> Response:
+    image = service.image(listing_id, position)
+    headers = {"Cache-Control": "private, max-age=86400", "Content-Disposition": "inline"}
+    if image.etag:
+        headers["ETag"] = image.etag
+    return Response(content=image.content, media_type=image.content_type, headers=headers)

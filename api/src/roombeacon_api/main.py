@@ -13,12 +13,13 @@ from . import __version__
 from .application.listing_service import ListingService
 from .application.location_service import LocationService
 from .application.market_service import MarketService
-from .application.ports import HistoryRepository, ListingRepository, LocationRepository, MarketRepository, PriceModel
+from .application.ports import HistoryRepository, ImageStore, ListingRepository, LocationRepository, MarketRepository, PriceModel
 from .application.price_estimate_service import PriceEstimateService
 from .config import ApiSettings
 from .infrastructure.clickhouse import LazyClickHouseClient
 from .infrastructure.location_repository import ClickHouseLocationRepository
 from .infrastructure.market_repository import ClickHouseHistoryRepository, ClickHouseMarketRepository
+from .infrastructure.minio_image_store import MinioImageStore
 from .infrastructure.price_model import ChampionPriceModel
 from .infrastructure.silver_listing_repository import SilverListingRepository
 from .infrastructure.logging import configure_logging
@@ -37,6 +38,7 @@ def create_app(
     history_repository: HistoryRepository | None = None,
     market_repository: MarketRepository | None = None,
     price_model: PriceModel | None = None,
+    image_store: ImageStore | None = None,
 ) -> FastAPI:
     """Adapters are lazy: nothing connects or loads until the first request needs it."""
     settings = settings or ApiSettings.from_env()
@@ -47,6 +49,10 @@ def create_app(
     history_repository = history_repository or ClickHouseHistoryRepository(client, database)
     market_repository = market_repository or ClickHouseMarketRepository(client, database)
     price_model = price_model or ChampionPriceModel(settings.model_dir)
+    if not settings.images_enabled:
+        image_store = None
+    elif image_store is None:
+        image_store = MinioImageStore(settings.minio)
 
     app = FastAPI(
         title="RoomBeacon API",
@@ -58,7 +64,7 @@ def create_app(
     )
     app.state.settings = settings
     app.state.location_service = LocationService(repository)
-    app.state.listing_service = ListingService(listing_repository, history_repository, repository, price_model)
+    app.state.listing_service = ListingService(listing_repository, history_repository, repository, price_model, image_store)
     app.state.estimate_service = PriceEstimateService(repository, price_model)
     app.state.market_service = MarketService(market_repository, repository)
     app.state.api_key_verifier = ApiKeyVerifier(settings.api_key_sha256)

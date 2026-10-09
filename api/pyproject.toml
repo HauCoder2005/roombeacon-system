@@ -21,6 +21,9 @@ dependencies = [
     "joblib==1.6.0",
     "pandas==3.0.6",
     "numpy==2.5.3",
+    # Listing images from MinIO (read-only account).
+    "boto3==1.43.102",
+    "botocore==1.43.102",
 ]
 
 [project.optional-dependencies]

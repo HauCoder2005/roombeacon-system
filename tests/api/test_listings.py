@@ -16,7 +16,7 @@ def test_search_returns_listing_cards_with_pagination_and_valuation(client):
     assert set(card) == {
         "id", "type", "title", "source", "source_url", "price", "area_m2", "price_per_m2",
         "location", "intent", "scope", "first_observed_at", "last_observed_at", "active_days",
-        "quality", "valuation", "links",
+        "quality", "valuation", "images", "links",
     }
     assert card["type"] == "listing" and isinstance(card["id"], str)
     assert card["links"]["self"] == f"/api/v1/listings/{card['id']}"

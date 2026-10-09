@@ -15,25 +15,25 @@ from roombeacon_api.infrastructure.silver_listing_repository import SilverListin
 
 
 COLUMNS = (
-    "rental_post_id BIGINT, source_code VARCHAR, title_clean VARCHAR, title_raw VARCHAR, url VARCHAR, "
+    "rental_post_id BIGINT, source_code VARCHAR, source_listing_id VARCHAR, title_clean VARCHAR, title_raw VARCHAR, url VARCHAR, "
     "price_amount_clean DOUBLE, area_value_clean DOUBLE, district_text_extracted VARCHAR, ward_current VARCHAR, "
     "province_text_extracted VARCHAR, listing_intent VARCHAR, rental_scope VARCHAR, first_observed_at TIMESTAMP, "
     "last_observed_at TIMESTAMP, active_days BIGINT, duplicate_candidate_status VARCHAR, price_model_suitability VARCHAR"
 )
 ROWS = [
-    (1, "phongtro123", "Phòng gần Lotte Quận 7", None, "https://x/1", 5e6, 30.0, "Quận 7", "Phường Tân Hưng", "Hồ Chí Minh", "RENT", "SINGLE_OR_ORDINARY_UNIT", "2026-09-21 03:00:00", "2026-10-02 08:00:00", 11, "UNIQUE_FINGERPRINT", "SUPPORTED"),
-    (2, "mogi", None, "Căn hộ mini", "https://x/2", 4e6, 25.0, "Quận 7", None, None, "RENT", "SINGLE_OR_ORDINARY_UNIT", "2026-09-22 03:00:00", "2026-10-01 08:00:00", 9, "UNIQUE_FINGERPRINT", "SUPPORTED"),
-    (3, "phongtro123", "Phòng trùng", None, "https://x/3", 4.5e6, 25.0, "Quận 7", "Phường Tân Hưng", None, "RENT", "SINGLE_OR_ORDINARY_UNIT", "2026-09-22 03:00:00", "2026-10-01 08:00:00", 9, "POSSIBLE_DUPLICATE", "SUPPORTED"),
-    (4, "phongtro123", "Phòng Cầu Giấy", None, "https://x/4", 3e6, 20.0, None, None, "Hà Nội", "RENT", "SINGLE_OR_ORDINARY_UNIT", "2026-09-22 03:00:00", "2026-10-01 08:00:00", 9, "UNIQUE_FINGERPRINT", "SUPPORTED"),
-    (5, "nhatot", "Sang nhượng phòng", None, "https://x/5", 2e6, 20.0, "Quận 3", None, "TP.HCM", "TRANSFER", "SINGLE_OR_ORDINARY_UNIT", "2026-09-22 03:00:00", "2026-10-01 08:00:00", 9, "UNIQUE_FINGERPRINT", "SUPPORTED"),
-    (6, "phongtro123", "Giá lỗi", None, "https://x/6", 9e9, 20.0, "Quận 3", None, None, "RENT", "SINGLE_OR_ORDINARY_UNIT", "2026-09-22 03:00:00", "2026-10-01 08:00:00", 9, "UNIQUE_FINGERPRINT", "EXCLUDED"),
+    (1, "phongtro123", "src1", "Phòng gần Lotte Quận 7", None, "https://x/1", 5e6, 30.0, "Quận 7", "Phường Tân Hưng", "Hồ Chí Minh", "RENT", "SINGLE_OR_ORDINARY_UNIT", "2026-09-21 03:00:00", "2026-10-02 08:00:00", 11, "UNIQUE_FINGERPRINT", "SUPPORTED"),
+    (2, "mogi", "src2", None, "Căn hộ mini", "https://x/2", 4e6, 25.0, "Quận 7", None, None, "RENT", "SINGLE_OR_ORDINARY_UNIT", "2026-09-22 03:00:00", "2026-10-01 08:00:00", 9, "UNIQUE_FINGERPRINT", "SUPPORTED"),
+    (3, "phongtro123", "src3", "Phòng trùng", None, "https://x/3", 4.5e6, 25.0, "Quận 7", "Phường Tân Hưng", None, "RENT", "SINGLE_OR_ORDINARY_UNIT", "2026-09-22 03:00:00", "2026-10-01 08:00:00", 9, "POSSIBLE_DUPLICATE", "SUPPORTED"),
+    (4, "phongtro123", "src4", "Phòng Cầu Giấy", None, "https://x/4", 3e6, 20.0, None, None, "Hà Nội", "RENT", "SINGLE_OR_ORDINARY_UNIT", "2026-09-22 03:00:00", "2026-10-01 08:00:00", 9, "UNIQUE_FINGERPRINT", "SUPPORTED"),
+    (5, "nhatot", "src5", "Sang nhượng phòng", None, "https://x/5", 2e6, 20.0, "Quận 3", None, "TP.HCM", "TRANSFER", "SINGLE_OR_ORDINARY_UNIT", "2026-09-22 03:00:00", "2026-10-01 08:00:00", 9, "UNIQUE_FINGERPRINT", "SUPPORTED"),
+    (6, "phongtro123", "src6", "Giá lỗi", None, "https://x/6", 9e9, 20.0, "Quận 3", None, None, "RENT", "SINGLE_OR_ORDINARY_UNIT", "2026-09-22 03:00:00", "2026-10-01 08:00:00", 9, "UNIQUE_FINGERPRINT", "EXCLUDED"),
 ]
 
 
 def _write(path, rows):
     connection = duckdb.connect()
     connection.execute(f"CREATE TABLE t ({COLUMNS})")
-    connection.executemany(f"INSERT INTO t VALUES ({', '.join('?' * 17)})", rows)
+    connection.executemany(f"INSERT INTO t VALUES ({', '.join('?' * 18)})", rows)
     connection.execute(f"COPY t TO '{path}' (FORMAT PARQUET)")
     connection.close()
 
@@ -62,6 +62,7 @@ def test_ids_match_the_warehouse_location_hashes(silver):
 
     assert card.district_id == DISTRICT_7 and card.ward_id == WARD_TAN_HUNG
     assert card.title == "Phòng gần Lotte Quận 7"
+    assert card.source_listing_id == "src1"
     assert card.first_observed_at == datetime(2026, 9, 21, 3, 0) or card.first_observed_at.year == 2026
 
 

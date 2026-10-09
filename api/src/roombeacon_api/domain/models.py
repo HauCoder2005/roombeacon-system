@@ -57,6 +57,7 @@ class ListingCard:
     id: str
     title: str
     source: str
+    source_listing_id: str | None
     source_url: str | None
     price_vnd: float | None
     area_m2: float | None
@@ -136,3 +137,22 @@ class ModelInfo:
     interval_coverage: float
     typical_area_range: tuple[float, float]
     reliable_price_range: tuple[float, float]
+
+
+@dataclass(frozen=True)
+class ImageRef:
+    """One stored listing image; position is the source gallery order (public id)."""
+
+    position: int
+    key: str
+
+
+IMAGE_CONTENT_TYPES = frozenset({"image/jpeg", "image/png", "image/webp", "image/gif"})
+
+
+@dataclass(frozen=True)
+class ImageObject:
+    content: bytes
+    content_type: str
+    etag: str | None
+    size: int

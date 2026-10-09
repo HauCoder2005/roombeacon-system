@@ -29,7 +29,7 @@ from ..domain.models import ListingCard
 
 SORT_COLUMNS = {"last_observed_at": "last_observed_at", "price": "price_vnd", "area": "area_m2"}
 CARD_COLUMNS = (
-    "id, title, source, source_url, price_vnd, area_m2, district_id, district, ward_id, ward, intent, scope, "
+    "id, title, source, source_listing_id, source_url, price_vnd, area_m2, district_id, district, ward_id, ward, intent, scope, "
     "first_observed_at, last_observed_at, active_days, duplicate_status, price_suitability"
 )
 HCM_PROVINCE = r"(ho chi minh|hcm|sai gon|saigon)"
@@ -39,6 +39,7 @@ SELECT
     CAST(rental_post_id AS VARCHAR) AS id,
     coalesce(nullif(trim(title_clean), ''), nullif(trim(title_raw), ''), '') AS title,
     source_code AS source,
+    CAST(source_listing_id AS VARCHAR) AS source_listing_id,
     url AS source_url,
     price_amount_clean AS price_vnd,
     area_value_clean AS area_m2,
@@ -151,8 +152,8 @@ def _utc(value: Any) -> Any:
 
 def _card(row: Any) -> ListingCard:
     return ListingCard(
-        id=row[0], title=row[1], source=row[2], source_url=row[3],
-        price_vnd=row[4], area_m2=row[5], district_id=row[6], district=row[7], ward_id=row[8], ward=row[9],
-        intent=row[10], scope=row[11], first_observed_at=_utc(row[12]), last_observed_at=_utc(row[13]),
-        active_days=row[14], duplicate_status=row[15], price_suitability=row[16],
+        id=row[0], title=row[1], source=row[2], source_listing_id=row[3], source_url=row[4],
+        price_vnd=row[5], area_m2=row[6], district_id=row[7], district=row[8], ward_id=row[9], ward=row[10],
+        intent=row[11], scope=row[12], first_observed_at=_utc(row[13]), last_observed_at=_utc(row[14]),
+        active_days=row[15], duplicate_status=row[16], price_suitability=row[17],
     )

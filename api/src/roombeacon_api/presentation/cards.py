@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..application.listing_service import ListingDetail, MarketComparison, Valuation
+from ..application.listing_service import ImageSummary, ListingDetail, MarketComparison, Valuation
 from ..application.price_estimate_service import EstimateResult
 from ..domain.models import (
     DistrictCard,
@@ -81,7 +81,7 @@ def _area(value: float | None) -> float | None:
     return None if value is None else round(float(value), 1)
 
 
-def listing_out(card: ListingCard, valuation: Valuation | None) -> dict[str, Any]:
+def listing_out(card: ListingCard, valuation: Valuation | None, images: ImageSummary | None = None) -> dict[str, Any]:
     """Contact numbers are masked in titles; URLs that embed one are dropped entirely."""
     level = "WARD" if card.ward_id else "DISTRICT" if card.district_id else "UNKNOWN"
     per_m2 = card.price_vnd / card.area_m2 if card.price_vnd and card.area_m2 else None
@@ -108,6 +108,10 @@ def listing_out(card: ListingCard, valuation: Valuation | None) -> dict[str, Any
         "valuation": None if valuation is None else {
             "estimate": _money(valuation.estimate), "delta_pct": valuation.delta_pct, "label": valuation.label,
         },
+        "images": None if images is None else {
+            "count": images.count,
+            "cover": f"{LISTINGS_PATH}/{card.id}/images/{images.cover_position}" if images.cover_position is not None else None,
+        },
         "links": {"self": f"{LISTINGS_PATH}/{card.id}", "price_history": f"{LISTINGS_PATH}/{card.id}/price-history"},
     }
 
@@ -121,8 +125,8 @@ def market_out(market: MarketComparison | None) -> dict[str, Any] | None:
     }
 
 
-def listing_detail_out(detail: ListingDetail) -> dict[str, Any]:
-    return {**listing_out(detail.listing, detail.valuation), "market": market_out(detail.market)}
+def listing_detail_out(detail: ListingDetail, images: ImageSummary | None = None) -> dict[str, Any]:
+    return {**listing_out(detail.listing, detail.valuation, images), "market": market_out(detail.market)}
 
 
 def price_point_out(point: PricePoint) -> dict[str, Any]:

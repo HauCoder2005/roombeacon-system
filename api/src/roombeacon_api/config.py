@@ -59,6 +59,15 @@ class ClickHouseSettings:
 
 
 @dataclass(frozen=True)
+class MinioSettings:
+    endpoint: str
+    access_key: str
+    secret_key: Secret = field(repr=False)
+    bucket: str
+    secure: bool
+
+
+@dataclass(frozen=True)
 class ApiSettings:
     api_key_sha256: tuple[str, ...] = field(repr=False)
     auth_enabled: bool
@@ -69,6 +78,9 @@ class ApiSettings:
     clickhouse: ClickHouseSettings
     silver_path: str = "data/silver/rental_listings.parquet"
     model_dir: str = "data/modeling/roombeacon_price_benchmark_v3"
+    # Off by default: scraped photos can show phone numbers or watermarks the API cannot mask.
+    images_enabled: bool = False
+    minio: MinioSettings | None = None
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None) -> "ApiSettings":
@@ -85,6 +97,7 @@ class ApiSettings:
         hosts = _list(env, "API_ALLOWED_HOSTS", "localhost,127.0.0.1")
         if not hosts or any(not HOSTNAME.fullmatch(h) for h in hosts):
             raise ApiConfigError("API_ALLOWED_HOSTS must list hostnames")
+        images_enabled = _bool(env, "API_IMAGES_ENABLED", False)
         password = env.get("WAREHOUSE_READER_PASSWORD", "")
         if not password:
             raise ApiConfigError("WAREHOUSE_READER_PASSWORD must be set")
@@ -107,7 +120,27 @@ class ApiSettings:
             ),
             silver_path=env.get("API_SILVER_PATH") or cls.silver_path,
             model_dir=env.get("API_MODEL_DIR") or cls.model_dir,
+            images_enabled=images_enabled,
+            minio=_minio(env) if images_enabled else None,
         )
+
+
+ENDPOINT = re.compile(r"^[A-Za-z0-9.-]{1,253}(:\d{1,5})?$")
+BUCKET = re.compile(r"^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$")
+
+
+def _minio(env: Mapping[str, str]) -> MinioSettings:
+    access_key = (env.get("MINIO_API_READER_ACCESS_KEY") or "").strip()
+    secret_key = env.get("MINIO_API_READER_SECRET_KEY") or ""
+    if not access_key or not secret_key:
+        raise ApiConfigError("MINIO_API_READER_ACCESS_KEY and MINIO_API_READER_SECRET_KEY must be set when API_IMAGES_ENABLED is true")
+    endpoint = (env.get("API_MINIO_ENDPOINT") or "127.0.0.1:9000").strip()
+    bucket = (env.get("MINIO_BUCKET_ASSETS") or "roombeacon-assets").strip()
+    if not ENDPOINT.fullmatch(endpoint):
+        raise ApiConfigError("API_MINIO_ENDPOINT must be host[:port]")
+    if not BUCKET.fullmatch(bucket):
+        raise ApiConfigError("MINIO_BUCKET_ASSETS must be a valid bucket name")
+    return MinioSettings(endpoint, access_key, Secret(secret_key), bucket, _bool(env, "MINIO_SECURE", False))
 
 
 def _bool(env: Mapping[str, str], key: str, default: bool) -> bool:
