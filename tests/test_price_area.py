@@ -3,7 +3,7 @@ import sys
 from decimal import Decimal
 sys.path.append('.')
 from notebooks.utils.price_area_validation import (
-    parse_price, parse_area, validate_price, validate_area,
+    parse_price, parse_area, parse_area_evidence, validate_price, validate_area,
     canonicalize_decimal
 )
 
@@ -36,6 +36,41 @@ def test_parse_price(raw, expected):
 def test_parse_area(raw, expected):
     assert parse_area(raw) == expected
 
+
+@pytest.mark.parametrize("raw", [
+    "gác cao 2m",
+    "trần cao 3m",
+    "ngang 4m",
+    "rộng 4m",
+    "dài 10m",
+])
+def test_single_linear_measurement_is_not_area(raw):
+    assert parse_area(raw) is None
+    assert parse_area_evidence(raw).status == "INSUFFICIENT_LINEAR_MEASUREMENT"
+
+
+@pytest.mark.parametrize("raw, expected", [
+    ("4m x 7m", Decimal("28")),
+    ("4 x 7m", Decimal("28")),
+    ("ngang 4m dài 7m", Decimal("28")),
+    ("1,3mx2m", Decimal("2.6")),
+])
+def test_two_dimensional_geometry_derives_area(raw, expected):
+    evidence = parse_area_evidence(raw)
+    assert evidence.value == expected
+    assert evidence.status == "DERIVED_FROM_DIMENSIONS"
+
+
+@pytest.mark.parametrize("raw, expected", [
+    ("diện tích 20m2", Decimal("20")),
+    ("20 m²", Decimal("20")),
+    ("30 m 2", Decimal("30")),
+])
+def test_explicit_square_metres_are_area(raw, expected):
+    evidence = parse_area_evidence(raw)
+    assert evidence.value == expected
+    assert evidence.status == "EXPLICIT_AREA"
+
 def test_validation():
     assert validate_price(Decimal("4")) == "SUSPICIOUS"
     assert validate_price(Decimal("0")) == "DOMAIN_INVALID"
@@ -47,4 +82,3 @@ def test_validation():
 def test_canonicalization():
     assert canonicalize_decimal("18.999", 2) == Decimal("19.00")
     assert canonicalize_decimal(19.0, 2) == Decimal("19.00")
-

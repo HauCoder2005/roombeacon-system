@@ -4,6 +4,21 @@ import os
 import sys
 from pathlib import Path
 
+# Các package theo src-layout mà analytics và các shim trong notebooks/utils dùng.
+SRC_LAYOUT_DIRS = (
+    Path("crawler") / "src",
+    Path("processing") / "src",
+    Path("warehouse") / "src",
+)
+
+
+def add_src_layout_paths(project_root: Path) -> None:
+    """Cho phép import ``roombeacon_crawler``, ``roombeacon_processing`` và warehouse."""
+    for relative_dir in SRC_LAYOUT_DIRS:
+        import_path_text = str(project_root / relative_dir)
+        if import_path_text not in sys.path:
+            sys.path.insert(0, import_path_text)
+
 
 def setup_project_path() -> Path:
     """Tìm thư mục gốc RoomBeacon và cho phép import các package của dự án."""
@@ -16,17 +31,12 @@ def setup_project_path() -> Path:
             # module này không phải tự đoán lại vị trí project trong notebook.
             os.environ["ROOMBEACON_PROJECT_ROOT"] = str(candidate)
 
-            # Thư mục gốc cung cấp ``analytics``; crawler/src cung cấp package
-            # ``roombeacon_crawler`` theo src-layout mà các module analytics sử dụng.
-            import_paths = (
-                candidate,
-                candidate / "crawler" / "src",
-                candidate / "notebooks",
-            )
-            for import_path in import_paths:
+            # Thư mục gốc cung cấp ``analytics`` và ``notebooks``.
+            for import_path in (candidate, candidate / "notebooks"):
                 import_path_text = str(import_path)
                 if import_path_text not in sys.path:
                     sys.path.insert(0, import_path_text)
+            add_src_layout_paths(candidate)
 
             print(f"Đã phát hiện thư mục gốc của dự án RoomBeacon: {candidate}")
             return candidate
@@ -36,4 +46,3 @@ def setup_project_path() -> Path:
         f"{start_directory}. Thư mục gốc phải chứa analytics/, crawler/ và "
         "docker-compose.yml."
     )
-

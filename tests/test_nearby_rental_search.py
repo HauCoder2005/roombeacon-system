@@ -140,7 +140,7 @@ def test_reference_location_contract():
 
     # Coords + Ward/District -> USER_SUPPLIED_UNVERIFIED
     ref1 = create_reference_location_contract(
-        "Bách Khoa", 10.7725, 106.6578, ward="Phường Tân Bình", district="Quận 10"
+        "Bách Khoa", 10.7725, 106.6578, ward="Phường Diên Hồng", district="Quận 10"
     )
     assert ref1["reference_admin_verification_status"] == "USER_SUPPLIED_UNVERIFIED"
     assert ref1["is_exact_distance_capable"] is True
@@ -510,3 +510,20 @@ def test_evaluate_product_readiness():
     ])
     res_high = evaluate_product_readiness(audit_high)
     assert res_high["verdict"] == "EXACT_RADIUS_READY"
+
+
+@pytest.mark.parametrize(
+    ("ward", "district", "expected"),
+    [
+        # Phường Tân Bình was formed from wards 13–15 of Quận Tân Bình, not Quận 10.
+        ("Phường Tân Bình", "Quận 10", "WARD_NOT_IN_DISTRICT"),
+        ("Phường Diên Hồng", "Quận 10", "CONSISTENT"),
+        ("Phường Bến Thành", "Quận 1", "CONSISTENT"),
+        ("Phường Không Tồn Tại", "Quận 10", "UNKNOWN_WARD"),
+        (None, "Quận 10", "NOT_APPLICABLE"),
+    ],
+)
+def test_reference_contract_checks_ward_belongs_to_district(ward, district, expected):
+    contract = create_reference_location_contract("Ref", 10.7725, 106.6578, ward=ward, district=district)
+
+    assert contract["reference_admin_consistency"] == expected

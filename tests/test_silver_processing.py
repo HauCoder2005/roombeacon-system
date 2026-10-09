@@ -116,6 +116,10 @@ def test_build_silver_dataset_preserves_raw_grain_and_adds_quality_evidence():
         "price_quality_status",
         "area_value_clean",
         "area_quality_status",
+        "area_semantic_status",
+        "area_model_suitability",
+        "price_semantic_status",
+        "price_model_suitability",
         "coordinate_quality_status",
         "duplicate_candidate_status",
         "temporal_quality_status",
@@ -124,6 +128,62 @@ def test_build_silver_dataset_preserves_raw_grain_and_adds_quality_evidence():
     assert silver.loc[0, "title_clean"] == "Phòng trọ Quận 1"
     assert silver.loc[1, "coordinate_quality_status"] == "INVALID"
     assert silver.loc[1, "temporal_quality_status"] == "REQUIRES_REVIEW"
+
+
+def test_build_compacts_repeated_derived_strings_without_changing_raw_dtypes():
+    bronze, evidence = _expanded(100)
+
+    silver = build_silver_dataset(bronze, evidence)
+
+    assert silver["title_raw"].dtype == bronze["title_raw"].dtype
+    assert isinstance(silver["row_quality_status"].dtype, pd.CategoricalDtype)
+    assert silver["row_quality_status"].astype("string").tolist() == [
+        "READY_WITH_FLAGS"
+    ] * 100
+
+
+def test_height_contamination_is_retained_but_not_area_model_supported():
+    bronze = _bronze_rows().iloc[[0]].reset_index(drop=True)
+    evidence = _evidence(_bronze_rows()).iloc[[0]].reset_index(drop=True)
+    bronze.loc[0, "title_raw"] = "Cho thuê phòng gác cao 2m giá 3.5 triệu/tháng"
+    bronze.loc[0, "area_value"] = Decimal("2")
+    evidence.loc[0, "area_raw"] = "2"
+
+    silver = build_silver_dataset(bronze, evidence)
+
+    assert silver.loc[0, "area_value"] == Decimal("2")
+    assert silver.loc[0, "area_value_clean"] == 2
+    assert silver.loc[0, "area_semantic_status"] == "LINEAR_MEASUREMENT_CONTRADICTION"
+    assert silver.loc[0, "area_model_suitability"] == "REVIEW"
+
+
+def test_explicit_small_and_large_area_are_not_rejected_by_magnitude_alone():
+    bronze, evidence = _expanded(2)
+    bronze.loc[0, "area_value"] = Decimal("3")
+    evidence.loc[0, "area_raw"] = "3 m2"
+    bronze.loc[0, "title_raw"] = "Cho thuê chỗ ngủ riêng diện tích 3m2"
+    bronze.loc[1, "area_value"] = Decimal("1500")
+    evidence.loc[1, "area_raw"] = "1500 m2"
+    bronze.loc[1, "title_raw"] = "Cho thuê kho diện tích 1500m2 theo tháng"
+
+    silver = build_silver_dataset(bronze, evidence)
+
+    assert silver.area_model_suitability.tolist() == ["SUPPORTED", "SUPPORTED"]
+
+
+def test_currency_shaped_reparsed_area_is_reviewed_without_deleting_row():
+    bronze = _bronze_rows().iloc[[0]].reset_index(drop=True)
+    evidence = _evidence(_bronze_rows()).iloc[[0]].reset_index(drop=True)
+    bronze.loc[0, "area_value"] = None
+    evidence.loc[0, "area_raw"] = "6500000 m 2"
+    bronze.loc[0, "title_raw"] = "Cho thuê studio full nội thất"
+
+    silver = build_silver_dataset(bronze, evidence)
+
+    assert len(silver) == 1
+    assert silver.loc[0, "area_value_clean"] == 6_500_000
+    assert silver.loc[0, "area_semantic_status"] == "CURRENCY_SHAPED_AREA_EVIDENCE"
+    assert silver.loc[0, "area_model_suitability"] == "REVIEW"
 
 
 def test_quality_gate_passes_valid_preserving_transformation():

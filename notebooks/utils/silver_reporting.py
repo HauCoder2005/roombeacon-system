@@ -188,8 +188,40 @@ def duplicate_group_summary(silver: pd.DataFrame) -> tuple[pd.DataFrame, pd.Data
         Sources=("source_code", "nunique"),
         Candidate_Scope=("duplicate_scope", "first"),
     ).reset_index().rename(columns={"duplicate_candidate_group": "Group ID"})
-    groups["Candidate Scope"] = groups.pop("Candidate_Scope").replace(
+    groups["Candidate Scope"] = groups.pop("Candidate_Scope").astype("string").replace(
         {"CROSS_SOURCE": "Cross-source", "SAME_SOURCE": "Same-source"}
     )
     distribution = groups.Listings.value_counts().sort_index().rename_axis("Group Size").reset_index(name="Candidate Groups")
     return groups.sort_values(["Listings", "Group ID"], ascending=[False, True]), distribution
+
+
+# Chart tier for each Silver status value (see notebook_style.status_chart).
+# "Missing / no evidence" values stay untiered (neutral): absence of evidence is
+# not a cleaning defect. Only a failed invariant is critical.
+STATUS_TIERS = {
+    **dict.fromkeys(
+        [
+            "USABLE", "PARSED", "MAPPED", "UNCHANGED", "VALIDATED_EXISTING", "REPARSE_ACCEPTED_CLEAN",
+            "MATCH", "NOT_OUTLIER", "TRUSTED_UNIQUE_POINT", "TRUSTED_SHARED_ADDRESS", "AVAILABLE",
+            "CHECKED_NO_FLAG", "UNIQUE_FINGERPRINT", "VALID", "READY", "CONSISTENT", "PASS",
+        ],
+        "good",
+    ),
+    **dict.fromkeys(
+        [
+            "TOO_SHORT", "PARTIALLY_PARSED", "AMBIGUOUS", "UNMAPPED", "DISAGREEMENT", "REPARSED_ONLY",
+            "PRICE_OUTLIER", "AREA_OUTLIER", "PRICE_OUTLIER_REVIEW", "AREA_OUTLIER_REVIEW",
+            "POSSIBLE_DUPLICATE", "READY_WITH_FLAGS", "UNVERIFIABLE", "SHARED_POINT_CONFLICTING_ADDRESSES",
+            "MISSING_PRICE", "MISSING_AREA",
+        ],
+        "warning",
+    ),
+    **dict.fromkeys(
+        [
+            "PRICE_AND_AREA_OUTLIER", "BOTH_OUTLIERS_REVIEW", "EXTREME_PRICE_PER_AREA_REVIEW",
+            "REQUIRES_REVIEW", "UNRECOGNIZED_FORMAT", "UNKNOWN_LINEAGE",
+        ],
+        "serious",
+    ),
+    "FAIL": "critical",
+}

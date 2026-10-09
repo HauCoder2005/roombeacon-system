@@ -49,36 +49,41 @@ Thông tin phòng trọ hiện tại bị phân tán trên nhiều website, dữ
 
 ## <img src="https://img.icons8.com/fluency/48/flow-chart.png" width="24" height="24" style="vertical-align: middle;" alt="Architecture"> System Architecture
 
-<p align="center">
-  <img
-    src="architecture/overall-architecture.png"
-    alt="RoomBeacon Overall System Architecture"
-    width="100%"
-  />
-</p>
+> 📄 **Bản vẽ kiến trúc chuẩn:** Xem sơ đồ thiết kế chi tiết tại [architecture/overall-architecture.pdf](architecture/overall-architecture.pdf) và phân tích kiến trúc mục tiêu tại [docs/00-overview/TARGET_ARCHITECTURE.md](docs/00-overview/TARGET_ARCHITECTURE.md).
 
-Hệ thống được thiết kế theo kiến trúc **Clean Architecture** và chia làm các Plane (mặt phẳng) trách nhiệm rõ ràng:
+Hệ thống được thiết kế theo kiến trúc phân tách các Mặt phẳng Chức năng (Planes) theo bản vẽ chuẩn hóa:
 
-1. **Control Plane (Airflow):** Lên lịch, lập kế hoạch crawl, retry và quản lý task.
-2. **Execution Plane (Crawler):** Thu thập dữ liệu, phân tích HTML (parsing) và trích xuất.
-3. **Persistence Plane (MySQL / Artifacts):** Lưu trữ gốc (Bronze) với độ tin cậy cao.
-4. **Analytics Plane (DuckDB / Parquet):** Truy vấn phân tích, flatten dữ liệu và tạo tập dữ liệu sạch (Silver/Gold).
-5. **Asset Plane (MinIO):** Quản lý độc lập vòng đời của các file đa phương tiện (hình ảnh).
+1. **Orchestration Plane (Airflow):** Lên lịch, điều phối tiến trình và giám sát hệ thống.
+2. **Crawler Execution Plane (FROZEN):** Động cơ thu thập đa nguồn độc lập, bóc tách chuẩn hóa và commit dữ liệu thô.
+3. **Raw and Bronze Storage Plane:** MySQL Bronze SCD2 (`roombeacon_bronze`) và MinIO Object Storage (`roombeacon-assets`).
+4. **Data Processing and Silver Plane:** DuckDB In-Memory OLAP, chuẩn hóa địa chỉ, Canonical Silver Parquet 80 cột và Historical Curated Observations (PLANNED).
+5. **Analytics and Data Warehouse Plane (ClickHouse OLAP — FUTURE):** Fact tables, Dimensions và Gold Data Marts (`agg_market_daily`).
+6. **Machine Learning Plane:** Hợp đồng đặc trưng an toàn (F1–F5), Champion Model Artifact (LightGBM F4 RAW), Shadow Validation và Benchmark hiệu năng.
+7. **Search and Discovery Plane:** Tìm kiếm phòng thuê không gian (Spatial / Haversine) đọc trực tiếp từ Canonical Silver Parquet, fallback 3 cấp.
+8. **Application Serving Plane (FUTURE):** Backend API Gateway, Model Serving Runtime, MySQL Application OLTP (Users, Favorites) và Web/Mobile App.
 
 ```mermaid
 flowchart LR
-    S[Source Websites] -->|Crawl| C[Crawler Engine]
+    S[12 Source Websites] -->|Crawl & Extract| CEP[Crawler Execution Plane]
     
-    A[Apache Airflow] -.->|Orchestrate| C
+    AF[Orchestration Plane: Airflow] -.->|Trigger| CEP
     
-    C -->|Raw Artifacts| B[(Bronze)]
-    C -->|Relational Data| M[(MySQL)]
+    CEP -->|Structured SCD2| MB[(Raw & Bronze Storage: MySQL)]
+    CEP -->|Images & Artifacts| MO[(Raw & Bronze Storage: MinIO)]
     
-    M -->|Transform| D[DuckDB Analytics]
-    D -->|Clean & Flat| P[(Silver/Gold Parquet)]
+    MB -->|Snapshot| DK[Data Processing: DuckDB]
+    DK -->|Canonical 80 cols| SP[(Silver Parquet)]
+    DK -.->|Curated Versions - PLANNED| CP[(Historical Curated Parquet)]
     
-    M -->|Extract URLs| AS[Asset Sync]
-    AS -->|Download| O[(MinIO Assets)]
+    SP -->|Direct Spatial Search| SRCH[Search & Discovery Engine]
+    SP -->|Leakage-Safe Features| ML[Machine Learning Pipeline]
+    CP -.->|Batch Load - FUTURE| CH[(Analytics DW: ClickHouse OLAP)]
+    
+    CH -.->|Gold Data Marts| API[Backend API Gateway]
+    SRCH -.->|Nearby Listings| API
+    ML -.->|Champion Model Predict| API
+    MY_APP[(MySQL Application OLTP<br/>Users, Favorites)] <-.->|Auth & Bookmarks| API
+    API <-.-> CLIENT[Web / Mobile Application]
 ```
 
 ### 🕸️ Crawler Internal Flow
@@ -159,18 +164,19 @@ roombeacon/
 
 ## <img src="https://img.icons8.com/fluency/48/books.png" width="24" height="24" alt="Docs" style="vertical-align: middle;"> Documentation
 
-Hệ thống tài liệu kỹ thuật chuyên sâu được phân loại rõ ràng trong thư mục **`docs/`**:
+Hệ thống tài liệu kỹ thuật được tái cấu trúc toàn diện theo miền kiến trúc chuẩn tại **[`docs/`](docs/README.md)**:
 
-- <img src="https://img.icons8.com/fluency/48/book.png" width="24" height="24" style="vertical-align: middle;" alt="Index"> **[Documentation Index](docs/README.md)** (Trang chủ tài liệu)
-- <img src="https://img.icons8.com/fluency/48/flow-chart.png" width="24" height="24" style="vertical-align: middle;" alt="Architecture"> **[Architecture](docs/architecture/)**: Kiến trúc tổng thể, luồng thu thập (Crawl & Storage Flow), luồng dữ liệu (Data Pipeline), quản lý file tĩnh (Asset Pipeline)
-- <img src="https://img.icons8.com/fluency/48/spider.png" width="24" height="24" style="vertical-align: middle;" alt="Crawler"> **[Crawler](docs/crawler/)**: Logic thu thập đa nguồn, chiến lược xử lý phân trang, bóc tách dữ liệu
-- <img src="https://img.icons8.com/fluency/48/settings.png" width="24" height="24" style="vertical-align: middle;" alt="Airflow"> **[Airflow](docs/airflow/)**: Thiết kế DAGs điều phối (Orchestration) và tự động hóa
-- <img src="https://img.icons8.com/fluency/48/database.png" width="24" height="24" style="vertical-align: middle;" alt="Analytics"> **[Analytics](docs/analytics/) & [Data Models](docs/data/)**: Chuẩn bị dữ liệu (Silver materialization), Data Quality EDA
-- <img src="https://img.icons8.com/fluency/48/shield.png" width="24" height="24" style="vertical-align: middle;" alt="Security"> **[Security](docs/security/)**: Các biện pháp bảo mật (chống SSRF, an toàn tải file)
-- <img src="https://img.icons8.com/fluency/48/test-tube.png" width="24" height="24" style="vertical-align: middle;" alt="Testing"> **[Testing](docs/testing/)**: Chiến lược kiểm thử, Regression test, Data Isolation
-- <img src="https://img.icons8.com/fluency/48/search.png" width="24" height="24" style="vertical-align: middle;" alt="Audit"> **[Audit](docs/audit/) & [Logs](docs/log/)**: Các đợt kiểm tra kiến trúc, biên bản sự cố (Incidents)
-- <img src="https://img.icons8.com/fluency/48/server.png" width="24" height="24" style="vertical-align: middle;" alt="Infrastructure"> **[Infrastructure](docs/infrastructure/)**: Quản lý hạ tầng Docker, Database, Storage
-- <img src="https://img.icons8.com/fluency/48/idea.png" width="24" height="24" style="vertical-align: middle;" alt="Superpowers"> **[Superpowers](docs/superpowers/)**: Thiết kế tính năng (Specs & Plans)
+- 📚 **[Documentation Index & Roadmap](docs/README.md)**: Thứ tự đọc đề xuất, ma trận trạng thái và nguyên tắc tài liệu.
+- 🏛️ **[00-Overview](docs/00-overview/)**: [Tổng quan dự án](docs/00-overview/PROJECT_OVERVIEW.md), [Kiến trúc mục tiêu 6 Plane](docs/00-overview/TARGET_ARCHITECTURE.md), [Vòng đời dữ liệu](docs/00-overview/DATA_LAYERS_AND_LIFECYCLE.md), [Trạng thái triển khai](docs/00-overview/IMPLEMENTATION_STATUS.md), [Lộ trình di chuyển](docs/00-overview/GAP_AND_MIGRATION_PLAN.md).
+- 🎮 **[01-Control-Plane](docs/01-control-plane/)**: [Kiến trúc Airflow 3](docs/01-control-plane/AIRFLOW_ARCHITECTURE.md) và [Danh mục 6 DAGs](docs/01-control-plane/DAG_CATALOG.md).
+- 🕸️ **[02-Ingestion](docs/02-ingestion/)**: [Kiến trúc Crawler](docs/02-ingestion/CRAWLER_ARCHITECTURE.md), [12 Nguồn dữ liệu](docs/02-ingestion/SOURCE_ADAPTERS.md), [Chính sách truy cập & Robots](docs/02-ingestion/FETCH_ACCESS_AND_ROBOTS.md), [Hợp đồng bóc tách](docs/02-ingestion/EXTRACTION_CONTRACT.md).
+- 💾 **[03-Storage](docs/03-storage/)**: [Tổng quan lưu trữ](docs/03-storage/STORAGE_OVERVIEW.md), [MySQL Bronze SCD2](docs/03-storage/BRONZE_MYSQL.md), [MinIO S3](docs/03-storage/OBJECT_STORAGE_MINIO.md), [Asset Pipeline](docs/03-storage/ASSET_PIPELINE.md).
+- ⚙️ **[04-Processing](docs/04-processing/)**: [Kiến trúc xử lý DuckDB](docs/04-processing/PROCESSING_ARCHITECTURE.md), [Chuẩn hóa địa chỉ](docs/04-processing/ADDRESS_AND_ADMIN_NORMALIZATION.md), [Làm giàu tọa độ](docs/04-processing/GEOCODING_ENRICHMENT.md), [Canonical Silver 80 cột](docs/04-processing/SILVER_CONTRACT.md).
+- 🧠 **[05-Analytics-ML](docs/05-analytics-ml/)**: [Tầng phân tích Gold](docs/05-analytics-ml/ANALYTICS_AND_GOLD.md), [Benchmark định giá V3 LightGBM F4](docs/05-analytics-ml/PRICE_MODEL.md), [Phân giải thực thể trùng](docs/05-analytics-ml/ENTITY_RESOLUTION.md).
+- 🚀 **[06-Serving](docs/06-serving/)**: [Kiến trúc Serving](docs/06-serving/SERVING_ARCHITECTURE.md), [MySQL Serving SPATIAL INDEX & REST API](docs/06-serving/SERVING_SCHEMA_AND_API.md).
+- 🛠️ **[07-Engineering](docs/07-engineering/)**: [Quy tắc phụ thuộc](docs/07-engineering/DEPENDENCY_RULES.md), [Bảo mật SSRF](docs/07-engineering/SECURITY.md), [Kiểm thử Pytest](docs/07-engineering/TESTING.md), [Docker Local](docs/07-engineering/DOCKER_DEVELOPMENT.md), [Cấu hình môi trường](docs/07-engineering/CONFIGURATION.md).
+- 📜 **[Architecture Decision Records (ADR)](docs/adr/)**: Toàn bộ 6 quyết định kiến trúc cốt lõi ([ADR-001](docs/adr/ADR-001.md) đến [ADR-006](docs/adr/ADR-006.md)).
+- 📦 **[Archive](docs/archive/)**: 46 tài liệu lịch sử đã lưu trữ theo chủ đề ([audit](docs/archive/audit/), [incidents](docs/archive/incidents/), [legacy-design](docs/archive/legacy-design/), [plans](docs/archive/plans/), [refactor](docs/archive/refactor/)).
 
 ---
 

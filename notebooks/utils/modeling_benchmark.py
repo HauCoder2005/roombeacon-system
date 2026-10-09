@@ -23,6 +23,12 @@ __all__ = [
     "FORBIDDEN_PREDICTORS",
     "SplitResult",
     "TemporalFold",
+    "InferenceEligibilityMasks",
+    "EligibilityMasks",
+    "build_inference_eligibility",
+    "inference_eligibility_funnel",
+    "build_modeling_eligibility",
+    "eligibility_funnel",
     "build_feature_sets",
     "engineer_safe_features",
     "audit_features",
@@ -62,6 +68,115 @@ class TemporalFold:
     validation_end: pd.Timestamp
     train_groups: int
     validation_groups: int
+
+
+@dataclass(frozen=True)
+class InferenceEligibilityMasks:
+    """Target-free eligibility used by shadow/serving-style inference."""
+
+    silver_rows: pd.Series
+    area_supported: pd.Series
+    rental_compatible: pd.Series
+    final_eligible: pd.Series
+    policy: str
+
+
+@dataclass(frozen=True)
+class EligibilityMasks:
+    silver_rows: pd.Series
+    numeric_target_candidate: pd.Series
+    lineage_trusted: pd.Series
+    semantic_target_supported: pd.Series
+    area_supported: pd.Series
+    rental_compatible: pd.Series
+    final_eligible: pd.Series
+    policy: str
+
+
+def build_inference_eligibility(
+    frame: pd.DataFrame, policy: str = "PERMISSIVE"
+) -> InferenceEligibilityMasks:
+    """Build the canonical target-free area/semantic inference population."""
+    if policy not in {"PERMISSIVE", "STRICT"}:
+        raise ValueError(f"Unknown modeling population policy: {policy}")
+    silver = pd.Series(True, index=frame.index, dtype=bool)
+    area = frame["area_model_suitability"].eq("SUPPORTED") & pd.to_numeric(
+        frame["area_value_clean"], errors="coerce"
+    ).gt(0)
+    if policy == "STRICT":
+        compatible_raw = frame["listing_intent"].eq("RENT") & frame["rental_scope"].eq(
+            "SINGLE_OR_ORDINARY_UNIT"
+        )
+    else:
+        compatible_raw = ~frame["listing_intent"].isin({"SALE", "TRANSFER"}) & ~frame[
+            "rental_scope"
+        ].isin({"WHOLE_BUILDING", "MULTI_UNIT_BUSINESS"})
+    compatible = area & compatible_raw
+    return InferenceEligibilityMasks(silver, area, compatible, compatible, policy)
+
+
+def inference_eligibility_funnel(masks: InferenceEligibilityMasks) -> pd.DataFrame:
+    stages = [
+        ("Silver rows", masks.silver_rows),
+        ("Area supported", masks.area_supported),
+        ("Rental-compatible", masks.rental_compatible),
+        ("Final inference eligible", masks.final_eligible),
+    ]
+    total = int(masks.silver_rows.sum())
+    rows, previous = [], total
+    for stage, mask in stages:
+        count = int(mask.sum())
+        rows.append({
+            "Stage": stage,
+            "Rows": count,
+            "Removed / reviewed": previous - count,
+            "Percent of Silver": count / total * 100 if total else 0.0,
+            "Policy": masks.policy,
+        })
+        previous = count
+    return pd.DataFrame(rows)
+
+
+def build_modeling_eligibility(frame: pd.DataFrame, policy: str = "PERMISSIVE") -> EligibilityMasks:
+    """Build cumulative, auditable model-eligibility masks from Silver contracts."""
+    inference = build_inference_eligibility(frame, policy=policy)
+    silver = inference.silver_rows
+    numeric = (
+        pd.to_numeric(frame["price_amount_clean"], errors="coerce").gt(0)
+        & ~frame["price_quality_status"].eq("MISSING_OR_REVIEW")
+    )
+    lineage = numeric & frame["price_target_trust_status"].isin(
+        {"TRUSTED_EXISTING", "TRUSTED_REPARSED"}
+    ) & pd.to_numeric(frame["price_model_value"], errors="coerce").gt(0)
+    semantic_target = lineage & frame["price_model_suitability"].eq("SUPPORTED")
+    area = semantic_target & inference.area_supported
+    compatible = area & inference.rental_compatible
+    return EligibilityMasks(silver, numeric, lineage, semantic_target, area, compatible, compatible, policy)
+
+
+def eligibility_funnel(masks: EligibilityMasks) -> pd.DataFrame:
+    stages = [
+        ("Silver rows", masks.silver_rows),
+        ("Numeric target candidate", masks.numeric_target_candidate),
+        ("Lineage trusted", masks.lineage_trusted),
+        ("Semantic target supported", masks.semantic_target_supported),
+        ("Area supported", masks.area_supported),
+        ("Rental-compatible", masks.rental_compatible),
+        ("Final model eligible", masks.final_eligible),
+    ]
+    total = int(masks.silver_rows.sum())
+    rows, previous = [], total
+    for stage, mask in stages:
+        count = int(mask.sum())
+        rows.append({
+            "Stage": stage,
+            "Rows": count,
+            "Removed / reviewed": previous - count,
+            "Percent of Silver": count / total * 100 if total else 0.0,
+            "Policy": masks.policy,
+        })
+        previous = count
+    return pd.DataFrame(rows)
 
 def build_feature_sets(columns: Iterable[str]) -> dict[str, list[str]]:
     available = set(columns)

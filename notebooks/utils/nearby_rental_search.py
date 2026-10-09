@@ -7,6 +7,8 @@ price display policy enforcement, and market summarization.
 """
 
 from __future__ import annotations
+import re
+import unicodedata
 
 from collections.abc import Iterable, Mapping
 from typing import Any
@@ -217,6 +219,34 @@ def derive_display_price(
     return result
 
 
+_DISTRICT_IN_KEY = re.compile(r"\b((?:quan|huyen|thi xa|thanh pho)\s+.+)$")
+
+
+def _ascii_key(text: str) -> str:
+    decomposed = unicodedata.normalize("NFD", text)
+    plain = "".join(c for c in decomposed if unicodedata.category(c) != "Mn").replace("đ", "d").replace("Đ", "D")
+    return " ".join(plain.lower().split())
+
+
+def reference_ward_district_consistency(ward: str | None, district: str | None) -> str:
+    """Check a user-supplied current ward against its district via the internal ward mapping.
+
+    Returns CONSISTENT, WARD_NOT_IN_DISTRICT, UNKNOWN_WARD, UNVERIFIABLE (the mapping
+    records no district for that ward) or NOT_APPLICABLE (ward or district missing).
+    """
+    if not ward or not district:
+        return "NOT_APPLICABLE"
+    from roombeacon_processing.ward_mapping import WARD_MAPPING
+
+    sources = [key for key, wards in WARD_MAPPING.items() if ward in wards]
+    if not sources:
+        return "UNKNOWN_WARD"
+    districts = {match.group(1) for key in sources if (match := _DISTRICT_IN_KEY.search(key))}
+    if not districts:
+        return "UNVERIFIABLE"
+    return "CONSISTENT" if _ascii_key(district) in districts else "WARD_NOT_IN_DISTRICT"
+
+
 def create_reference_location_contract(
     name: str,
     latitude: float | None,
@@ -253,6 +283,7 @@ def create_reference_location_contract(
         "reference_ward": norm_ward,
         "reference_district": norm_dist,
         "reference_admin_verification_status": verification_status,
+        "reference_admin_consistency": reference_ward_district_consistency(norm_ward, norm_dist),
         "is_exact_distance_capable": has_coord,
     }
 

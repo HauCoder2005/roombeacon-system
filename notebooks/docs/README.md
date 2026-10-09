@@ -4,6 +4,9 @@ Official notebooks and execution instructions: [notebooks/README.md](../README.m
 Numeric results in the older methodology documents are **historical snapshots**;
 current findings come from the executed official notebooks and their `RUN_CONTEXT`.
 Refactor checks: [validation report](notebook_refactor_validation.json).
+Detailed notebook architecture and per-cell guides (01–06):
+[notebook explanations](./notebook_explanations/README.md), including
+[06 Shadow Validation](./notebook_explanations/06_shadow_validation_explained.md).
 
 PART 01 — Data Understanding & EDA
 - [01 — Kiểm kê Dataset và Current Snapshot](./01_dataset_inventory_and_snapshot.md)
@@ -20,3 +23,8 @@ PART 02 — Cleaning, Standardization & Validation
 - [09 — Chuẩn hóa và phân tích cấu trúc địa chỉ](./09_address_standardization.md)
 - [10 — Chuẩn hóa Phường/Xã và Administrative Mapping](./10_ward_normalization_and_mapping.md)
 - [11 — Kiểm tra và phục hồi Price / Area](./11_price_area_validation.md)
+
+PART 03 — Modeling & Training Architecture
+- [12 — Kiến trúc Phân vùng Huấn luyện (TRAIN Partition Architecture)](./train_partition_architecture.md)
+- [13 — Giải thích Bản chất TRAIN, VALIDATION và TEST trong Machine Learning & RoomBeacon](./train_validation_test_explained.md)
+

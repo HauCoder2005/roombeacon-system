@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "roombeacon-processing"
+version = "0.1.0"
+description = "Deterministic RoomBeacon Bronze snapshot to Silver transformations"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=2.0,<3",
+    "pandas>=2.2,<4",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]

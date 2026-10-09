@@ -1,5 +1,6 @@
 import hashlib
 import json
+import re
 from pathlib import Path
 
 import pandas as pd
@@ -117,6 +118,6 @@ def test_official_notebooks_use_one_local_snapshot_contract_only():
     silver = (root / "notebooks/02_roombeacon_silver.ipynb").read_text()
     for notebook in (eda, silver):
         assert "load_bronze_snapshot" in notebook
-        assert "data' / 'bronze' / 'snapshot" in notebook or "data'/'bronze'/'snapshot" in notebook
+        assert re.search(r"""data\\?['"]\s*/\s*\\?['"]bronze\\?['"]\s*/\s*\\?['"]snapshot""", notebook)
         assert "create_analytics_connection" not in notebook
         assert "load_snapshot(" not in notebook
