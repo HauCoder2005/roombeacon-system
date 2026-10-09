@@ -15,8 +15,9 @@ nền tảng tìm phòng trọ / nhà thuê tại **TP.HCM** dựa trên dữ li
 2. Backend đang chạy ở máy local: `http://127.0.0.1:8000` (Swagger: `http://127.0.0.1:8000/docs`).
    Biến môi trường nằm trong `frontend/.env.local` (mẫu: `frontend/.env.example`):
    - `ROOMBEACON_API_URL` — địa chỉ backend
-   - `ROOMBEACON_API_KEY` — key gốc, **chỉ** proxy dev được đọc
-   - `VITE_API_BASE_PATH=/api/v1`, `VITE_DEV_PORT=5173`
+   - `ROOMBEACON_API_KEY` — key gốc, **chỉ code phía server Next.js** được đọc
+   - `REVALIDATE_SECONDS=300` — thời gian cache phía server; `PORT=3000`
+   - Trình duyệt **không** gọi thẳng `/api/v1/*`: dùng route handler cùng origin `/api/rb/*` (brief mục 3).
 3. **Chỉ tạo/sửa file trong thư mục `frontend/`.** Không đụng backend, crawler, Airflow, docker-compose hay
    bất kỳ file nào ngoài `frontend/`. Giữ nguyên `frontend/.env.example` và `frontend/.gitignore` đã có.
 
@@ -128,31 +129,39 @@ Từ trên xuống:
 - Responsive từ 360px; không cuộn ngang; ảnh/placeholder giữ tỉ lệ; chạm tối thiểu 44px.
 - Tôn trọng `prefers-reduced-motion`. Focus ring rõ ràng bằng `--brand`.
 
-## 7. Kỹ thuật
+## 7. Kỹ thuật — Next.js
 
-- **Vite + React 18 + TypeScript (strict) + Tailwind CSS + TanStack Query + React Router + lucide-react.**
-- Scaffold vào `frontend/` (giữ `.env.example`, `.gitignore`). **Ghim phiên bản chính xác** trong `package.json`
-  (không `^`/`~`), commit `package-lock.json`.
-- `vite.config.ts`: đọc `ROOMBEACON_API_URL`, `ROOMBEACON_API_KEY`, `VITE_DEV_PORT` bằng `loadEnv(mode, cwd, "")`;
-  proxy `/api` → `ROOMBEACON_API_URL` và **chèn header `X-API-Key` phía proxy**. Key **không** được xuất hiện trong
-  bundle, `import.meta.env`, `localStorage` hay log trình duyệt.
-- Lớp dữ liệu `src/api/`: `client.ts` đọc envelope cho **mọi** mã HTTP (kể cả 300/4xx/5xx, không ném lỗi mù);
-  `locations.ts` (API thật); `listings.mock.ts` (mock, cùng chữ ký với API dự kiến). Component chỉ gọi hook
-  `useDistricts`, `useWards`, `useResolveWard`, `useListings`.
-- Cấu trúc thư mục theo mục 9 của brief. Tách component nhỏ, không file > 300 dòng.
+- **Next.js 16.3.6 App Router**, React 19.3.0, TypeScript 6.0.3 strict, Tailwind CSS 4.3.3 (+ `@tailwindcss/postcss`
+  4.3.3), TanStack Query 5.103.2, lucide-react 1.48.0, `server-only` 0.0.1. **Ghim phiên bản chính xác** trong
+  `package.json` (không `^`/`~`), commit `package-lock.json`. `output: "standalone"`.
+- Scaffold vào `frontend/` (không dùng `src/`), giữ `.env.example` và `.gitignore` đã có.
+- **Server-first:** trang chủ, trang khu vực, thẻ thị trường là **Server Components** lấy dữ liệu qua
+  `lib/api/server.ts` (`import "server-only"`, kèm `X-API-Key`, `next: { revalidate }`). Chỉ SearchBar,
+  LocationPicker, bộ lọc, phân trang tương tác là Client Components (`"use client"`).
+- **BFF proxy** `app/api/rb/[...path]/route.ts` đúng như brief mục 3 (chỉ GET, whitelist `/locations/*`, timeout 10s,
+  chuyển tiếp `Retry-After`/`ETag`/`X-Request-ID`). Client gọi `/api/rb/...` qua `lib/api/client.ts`, đọc envelope cho
+  **mọi** mã HTTP (kể cả 300/4xx/5xx). Hook: `useDistricts`, `useWards`, `useResolveWard`, `useListings` (mock).
+- **SEO:** `generateMetadata` cho `/khu-vuc/[districtId]` ("Giá thuê phòng trọ Quận 7 — RoomBeacon", mô tả có giá
+  trung vị); `app/sitemap.ts` liệt kê các trang khu vực; `robots.ts`.
+- `loading.tsx` (skeleton) và `error.tsx` cho từng route; `not-found.tsx` thân thiện.
+- `frontend/Dockerfile`: multi-stage (deps → build → runner `node:22-alpine` ghim tag cụ thể), copy
+  `.next/standalone` + `.next/static` + `public`, chạy user không phải root, `EXPOSE 3000`, `CMD ["node","server.js"]`.
+- Key **không** được xuất hiện trong client component, `NEXT_PUBLIC_*`, `localStorage`, log trình duyệt hay `.next/static`.
 - Không thêm thư viện bản đồ; không vẽ ghim toạ độ; không hiển thị số điện thoại hay thông tin người đăng.
 
 ## 8. Thứ tự làm & tự kiểm tra
 
-1. Scaffold + Tailwind + token màu/font + layout (header/footer).
-2. `src/types/api.ts`, `src/api/*`, hook TanStack Query; gọi thử `/api/v1/locations/districts` qua proxy.
+1. Scaffold Next.js (App Router, TypeScript, Tailwind, không `src/`) + token màu/font + layout (header/footer).
+2. `lib/types/api.ts`, `lib/api/server.ts`, route handler `/api/rb/[...path]`, `lib/api/client.ts` + hook; gọi thử
+   `/api/rb/locations/districts` từ trình duyệt và từ Server Component.
 3. SearchBar + LocationPicker (kể cả xử lý `300`) → trang chủ đầy đủ.
 4. Trang `/tim-phong` (mock tin + thẻ thị trường thật) → trang `/khu-vuc/:id`.
 5. Trạng thái loading/empty/lỗi, dark mode, mobile bottom sheet, bàn phím/ARIA.
 6. Kiểm tra cuối:
    - `npm run build` và `npx tsc --noEmit` không lỗi.
-   - `npm run dev`, mở `http://localhost:5173`: thanh tìm kiếm ở giữa trang chủ; Location Picker chọn được
+   - `npm run dev`, mở `http://localhost:3000`: thanh tìm kiếm ở giữa trang chủ; Location Picker chọn được
      "Quận 7 → Phường Tân Hưng"; gõ "Phường Tân Hưng" khi chưa chọn quận → hiện lựa chọn theo quận.
-   - Tìm trong `dist/` không thấy chuỗi key (`grep -r "$ROOMBEACON_API_KEY" dist` rỗng).
+   - Không thấy chuỗi key trong bundle: `grep -r "$ROOMBEACON_API_KEY" .next/static` rỗng.
+   - Xem nguồn trang `/khu-vuc/e2ed9f251d8cc334` thấy sẵn "Quận 7" và giá (render phía server).
    - Đi qua từng mục trong phần **11. Tiêu chí hoàn thành** của brief và đánh dấu.
 7. Báo cáo: ảnh chụp trang chủ (desktop + mobile), Location Picker, trang kết quả; danh sách những gì đang là mock.

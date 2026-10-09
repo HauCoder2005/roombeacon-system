@@ -23,40 +23,56 @@ của các trang rao vặt bất động sản quen thuộc), nhưng **thương 
 | **Danh sách tin đăng / tìm kiếm tin** | ❌ **Chưa có** | Dùng **mock adapter** theo hợp đồng dự kiến ở mục 6. **Không gọi** endpoint chưa tồn tại |
 | Chi tiết 1 tin, ảnh, bản đồ | ❌ Chưa có | Mock; **không vẽ bản đồ/ghim toạ độ** (dữ liệu toạ độ tin cậy < 2%) |
 
-Code gọi dữ liệu phải đi qua **một lớp adapter** (`src/api/`) để sau này thay mock bằng API thật mà không
+Code gọi dữ liệu phải đi qua **một lớp adapter** (`lib/api/`) để sau này thay mock bằng API thật mà không
 sửa component.
 
-## 3. Kết nối & bảo mật
+## 3. Kết nối & bảo mật (Next.js App Router)
 
-- Base URL API (dev): `http://127.0.0.1:8000`. Tài liệu Swagger: `http://127.0.0.1:8000/docs`.
-- Mọi endpoint `/api/v1/*` bắt buộc header **`X-API-Key`**.
-- **Tuyệt đối không đưa API key vào code frontend / bundle** (không dùng biến `VITE_*` cho key).
-  Dùng **Vite dev-server proxy**: trình duyệt gọi `/api/...` cùng origin, proxy chèn header phía server.
+- Backend: `ROOMBEACON_API_URL` — dev `http://127.0.0.1:8000`, trong Docker `http://api:8000`.
+  Swagger: `http://127.0.0.1:8000/docs`. Mọi endpoint `/api/v1/*` bắt buộc header **`X-API-Key`**.
+- **Key chỉ tồn tại phía server Next.js**: đọc `process.env.ROOMBEACON_API_KEY` trong module có
+  `import "server-only"`. **Không** dùng tiền tố `NEXT_PUBLIC_` cho key, **không** truyền key xuống client component.
+- Hai đường gọi API:
+  1. **Server Components / `generateMetadata`** gọi thẳng backend qua `lib/api/server.ts` (kèm key) — trang chủ,
+     trang khu vực, thẻ thị trường. Cache: `fetch(url, { next: { revalidate: Number(process.env.REVALIDATE_SECONDS ?? 300) } })`.
+  2. **Tương tác phía trình duyệt** (Location Picker, gợi ý khi gõ, cuộn vô hạn) gọi **route handler cùng origin**
+     `GET /api/rb/<đường dẫn sau /api/v1/>` — handler chuyển tiếp sang backend kèm key. Ví dụ trình duyệt gọi
+     `/api/rb/locations/districts?q=binh` thay cho `/api/v1/locations/districts?q=binh`.
 
 ```ts
-// vite.config.ts
-import { defineConfig, loadEnv } from "vite";
-import react from "@vitejs/plugin-react";
+// app/api/rb/[...path]/route.ts — BFF proxy: chỉ GET, chỉ các đường /locations/* có thật
+import "server-only";
+import { NextRequest, NextResponse } from "next/server";
 
-export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), ""); // đọc ROOMBEACON_API_URL / ROOMBEACON_API_KEY từ frontend/.env.local (git-ignored; mẫu: frontend/.env.example)
-  return {
-    plugins: [react()],
-    server: {
-      proxy: {
-        "/api": {
-          target: env.ROOMBEACON_API_URL ?? "http://127.0.0.1:8000",
-          changeOrigin: true,
-          headers: { "X-API-Key": env.ROOMBEACON_API_KEY },
-        },
-      },
-    },
-  };
-});
+const ALLOWED = /^locations\/(districts(\/[0-9a-f]{16}(\/wards)?)?|resolve)$/;
+const PASS_HEADERS = ["Retry-After", "ETag", "X-Request-ID", "X-RateLimit-Limit", "X-RateLimit-Remaining"];
+
+export async function GET(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
+  const path = (await params).path.join("/");
+  if (!ALLOWED.test(path)) {
+    return NextResponse.json({ success: false, code: 404, status: "NOT_FOUND" }, { status: 404 });
+  }
+  const headers: Record<string, string> = { "X-API-Key": process.env.ROOMBEACON_API_KEY ?? "" };
+  const ifNoneMatch = req.headers.get("if-none-match");
+  if (ifNoneMatch) headers["If-None-Match"] = ifNoneMatch;
+  const upstream = await fetch(`${process.env.ROOMBEACON_API_URL}/api/v1/${path}${req.nextUrl.search}`, {
+    headers,
+    cache: "no-store",
+    signal: AbortSignal.timeout(10_000),
+  });
+  const out = new Headers({ "Content-Type": "application/json; charset=utf-8" });
+  for (const name of PASS_HEADERS) {
+    const value = upstream.headers.get(name);
+    if (value) out.set(name, value);
+  }
+  return new NextResponse(upstream.status === 304 ? null : await upstream.text(), { status: upstream.status, headers: out });
+}
 ```
 
-- Giới hạn **60 request/phút/key** → ô gõ tìm kiếm phải **debounce 300 ms**, cache bằng TanStack Query
-  (`staleTime: 5 phút`). Gặp `429` thì đọc header `Retry-After` và hiển thị "Thử lại sau N giây".
+- **Mọi trình duyệt dùng chung một key** qua BFF, nên giới hạn tần suất của backend tính chung cho cả site:
+  đặt `API_RATE_LIMIT_PER_MINUTE` của backend đủ lớn (vd 600) và tận dụng cache `revalidate`. Phía client vẫn
+  **debounce 300 ms** ô gõ và cache bằng TanStack Query (`staleTime: 5 phút`). Gặp `429` → đọc `Retry-After`,
+  hiển thị "Thử lại sau N giây".
 - Tiếng Việt có dấu gửi thẳng (UTF-8, URL-encode bình thường); server tự chuẩn hoá NFC.
 - API **không trả thông tin người đăng / số điện thoại**. UI không được hiển thị hay suy đoán thông tin liên hệ.
 
@@ -215,7 +231,7 @@ body cho mọi mã, rồi rẽ nhánh theo `code`.
 | code | Ý nghĩa | UI |
 |---|---|---|
 | 304 | Không đổi (khi gửi `If-None-Match`) | dùng cache |
-| 401 | Thiếu/sai key | "Phiên kết nối không hợp lệ" (lỗi cấu hình proxy, không phải lỗi người dùng) |
+| 401 | Thiếu/sai key | "Phiên kết nối không hợp lệ" (lỗi cấu hình server, không phải lỗi người dùng) |
 | 404 | Không tìm thấy | trạng thái rỗng thân thiện |
 | 422 | Tham số sai — `errors[].field` cho biết ô nào | báo lỗi tại ô tương ứng |
 | 429 | Gọi quá nhanh | "Thử lại sau {Retry-After} giây" |
@@ -340,29 +356,38 @@ Ngôn ngữ UI: **tiếng Việt**. Responsive (mobile trước, ≥ 360 px). S�
 
 Dùng `Intl.NumberFormat("vi-VN")`.
 
-## 9. Công nghệ & cấu trúc đề xuất
+## 9. Công nghệ & cấu trúc
 
-- **Vite + React + TypeScript**, **Tailwind CSS**, **TanStack Query**, **React Router**.
-- Thư mục `frontend/` ở gốc repo:
+- **Next.js 16.3.6 (App Router)**, React 19.3.0, TypeScript 6.0.3 (strict), Tailwind CSS 4.3.3 +
+  `@tailwindcss/postcss` 4.3.3, TanStack Query 5.103.2 (chỉ cho phần tương tác phía client), lucide-react 1.48.0,
+  `server-only` 0.0.1. Node ≥ 20.9 (máy dev có Node 22). **Ghim phiên bản chính xác** (không `^`/`~`), commit
+  `package-lock.json`. `next.config.ts` bật `output: "standalone"`.
+- Thư mục `frontend/` ở gốc repo (không dùng `src/`):
 
 ```
 frontend/
-  src/api/client.ts          fetch + đọc envelope cho MỌI mã (kể cả 300/4xx/5xx), không ném lỗi mù
-  src/api/locations.ts       5 hàm gọi API thật (mục 5)
-  src/api/listings.mock.ts   mock theo mục 6 (cùng chữ ký sẽ dùng khi có API thật)
-  src/types/api.ts           các type ở mục 4 và 6
-  src/components/SearchBar/  SearchBar, LocationPicker, PriceFilter, AreaFilter
-  src/components/cards/      DistrictCard, WardCard, ListingCard, MarketPriceBadge
-  src/pages/                 Home, Search, District
-  src/lib/format.ts          định dạng mục 8
+  app/layout.tsx                     font Be Vietnam Pro (next/font/google), header/footer, <Providers>
+  app/page.tsx                       Trang chủ — Server Component (thẻ quận + snapshot)
+  app/tim-phong/page.tsx             Kết quả — đọc searchParams
+  app/khu-vuc/page.tsx               Danh sách quận
+  app/khu-vuc/[districtId]/page.tsx  Trang khu vực + generateMetadata (SEO)
+  app/api/rb/[...path]/route.ts      BFF proxy (mục 3)
+  app/not-found.tsx, app/error.tsx, loading.tsx mỗi route (skeleton)
+  lib/api/server.ts                  gọi backend kèm key — import "server-only"
+  lib/api/client.ts                  gọi /api/rb/* từ trình duyệt; đọc envelope cho MỌI mã (kể cả 300/4xx/5xx)
+  lib/api/listings.mock.ts           mock tin đăng theo mục 6 (cùng chữ ký sẽ dùng khi có API thật)
+  lib/types/api.ts                   type mục 4 và 6
+  lib/format.ts                      định dạng mục 8
+  components/search/                 SearchBar, LocationPicker, PriceFilter, AreaFilter ("use client")
+  components/cards/                  DistrictCard, WardCard, ListingCard, PriceRangeStrip, MarketPriceBadge
+  Dockerfile                         multi-stage, standalone, user non-root (uid 10002), EXPOSE 3000
 ```
 
-- Tạo `frontend/.gitignore` gồm `node_modules/`, `dist/`, `.env.local` (repo gốc chưa ignore `node_modules/`).
-- Ghim phiên bản dependency chính xác trong `package.json` (không dùng `^`/`~`) và commit `package-lock.json`.
+- Giữ `frontend/.gitignore` (đã có `node_modules/`, `.next/`, `.env.local`) và `frontend/.env.example`.
 
 ## 10. Những điều KHÔNG được làm
 
-- Không đặt API key trong code, bundle, `localStorage` hay biến `VITE_*`.
+- Không đặt API key trong client component, bundle, `localStorage` hay biến `NEXT_PUBLIC_*`; chỉ đọc trong module `server-only`.
 - Không gọi endpoint chưa tồn tại (mục 6) — dùng mock.
 - Không vẽ bản đồ / ghim toạ độ, không tự suy toạ độ từ tên quận/phường.
 - Không hiển thị hay suy đoán số điện thoại / thông tin người đăng.
@@ -376,6 +401,7 @@ frontend/
 - [ ] Thẻ quận/phường hiển thị số tin, giá trung vị, dải p25–p75, đ/m² theo đúng định dạng mục 8.
 - [ ] Phân trang/cuộn dùng `meta.pagination` / `links.next`.
 - [ ] Xử lý đủ 401/404/422/429/500/503 theo bảng 5.6; 500 hiển thị `request_id`.
-- [ ] Key chỉ nằm trong proxy dev (`ROOMBEACON_API_KEY` trong `frontend/.env.local`, đã git-ignore).
+- [ ] Key chỉ đọc phía server (`lib/api/server.ts`, route handler); `grep` chuỗi key trong `.next/static` rỗng.
+- [ ] Trang `/khu-vuc/[districtId]` render sẵn nội dung (xem nguồn trang thấy tên quận, giá) và có `<title>` riêng.
 - [ ] Footer hiển thị thời điểm cập nhật dữ liệu từ `meta.data_snapshot.loaded_at`.
 - [ ] Tin đăng là mock và được đánh dấu rõ trong code (`listings.mock.ts`).
