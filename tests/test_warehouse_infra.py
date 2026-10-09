@@ -132,5 +132,5 @@ def test_scheduler_memory_fits_silver_build_alongside_the_crawler():
     # scheduler's ~385MB idle footprint; 768MB OOM-killed it.
     block = _service_block("airflow-scheduler")
 
-    assert 'mem_limit: "1536m"' in block
-    assert 'memswap_limit: "2048m"' in block
+    assert 'mem_limit: "2560m"' in block
+    assert 'memswap_limit: "3072m"' in block

@@ -25,7 +25,7 @@ SILVER_RENTAL_LISTINGS_ASSET = Asset("silver_rental_listings")
     start_date=datetime(2026, 10, 1, tzinfo=timezone.utc),
     catchup=False,
     max_active_runs=1,
-    # Queue time counts: PARALLELISM=2 slots can be held by crawler tasks
+    # Queue time counts: the shared DuckDB pool slot can be held by a crawler task
     # (up to 180 min), so budget one crawler task plus every attempt.
     dagrun_timeout=timedelta(hours=8),
     tags=["roombeacon", "analytics", "silver", "asset", "snapshot"],

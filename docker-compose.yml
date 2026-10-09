@@ -501,9 +501,15 @@ services:
 
       AIRFLOW__CORE__DEFAULT_TIMEZONE: "${AIRFLOW__CORE__DEFAULT_TIMEZONE}"
 
-      AIRFLOW__CORE__PARALLELISM: "2"
+      # MAX_ACTIVE_TASKS_PER_DAG caps the crawler at 2 slots; the other 2 stay
+      # free for the post-Silver chain (snapshot -> silver -> curated -> warehouse).
+      AIRFLOW__CORE__PARALLELISM: "4"
 
       AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: "2"
+
+      # A task lost between scheduler and executor fails into a retry after
+      # 5 min instead of sitting queued until dagrun_timeout.
+      AIRFLOW__SCHEDULER__TASK_QUEUED_TIMEOUT: "300"
 
 
 
@@ -841,13 +847,14 @@ services:
 
     restart: "${DOCKER_RESTART_POLICY}"
 
-    # Raised from 768m: Silver build peaks ~856MB RSS and runs here next to
-    # the crawler (LocalExecutor). Measured 2026-10-07.
-    mem_limit: "1536m"
+    # Silver build peaks ~856MB RSS (measured 2026-10-07) and runs here next to
+    # up to two crawler tasks (LocalExecutor, PARALLELISM=4). With 1 CPU the
+    # executor stalled and post-Silver tasks never left the queue (2026-10-09).
+    mem_limit: "2560m"
     mem_reservation: "384m"
-    memswap_limit: "2048m"
+    memswap_limit: "3072m"
     mem_swappiness: 40
-    cpus: 1.0
+    cpus: 2.0
 
 
 

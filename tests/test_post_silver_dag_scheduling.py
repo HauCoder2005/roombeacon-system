@@ -1,7 +1,7 @@
 """Post-Silver DAGs must survive waiting for a LocalExecutor slot.
 
-With AIRFLOW__CORE__PARALLELISM=2 the crawler's mapped source tasks
-(execution_timeout 180 min) can hold both executor slots. Queue time counts
+A crawler task (execution_timeout 180 min) can hold the shared
+duckdb_analytics_pool slot or executor slots. Queue time counts
 toward dagrun_timeout, so each post-Silver DAG must (a) jump the queue when a
 slot frees and (b) budget for one full crawler task before its own attempts.
 """
