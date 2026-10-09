@@ -20,6 +20,7 @@ POST_SILVER_DAGS = (
     "roombeacon_silver_build.py",
     "roombeacon_curated_observations.py",
     "roombeacon_warehouse_load.py",
+    "roombeacon_listing_freshness.py",
 )
 CRAWLER_TASK_TIMEOUT = timedelta(minutes=180)
 MIN_PRIORITY = 100

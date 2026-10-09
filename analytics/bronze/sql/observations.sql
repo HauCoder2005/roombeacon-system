@@ -13,7 +13,7 @@ WITH price_per_version AS (
     WHERE child_rank = 1
 ),
 detail_per_version AS (
-    SELECT rental_post_version_id, area_raw, area_value
+    SELECT rental_post_version_id, area_raw, area_value, posted_at_raw, property_type_raw
     FROM (
         SELECT *, ROW_NUMBER() OVER (
             PARTITION BY rental_post_version_id ORDER BY id DESC
@@ -36,7 +36,9 @@ SELECT
     price.currency,
     price.period,
     detail.area_raw,
-    CAST(detail.area_value AS DOUBLE) AS area_value
+    CAST(detail.area_value AS DOUBLE) AS area_value,
+    NULLIF(TRIM(detail.posted_at_raw), '') AS posted_at_raw,
+    NULLIF(TRIM(detail.property_type_raw), '') AS property_type_raw
 FROM rental_post_versions version
 JOIN rental_posts post ON post.id = version.rental_post_id
 JOIN platforms platform ON platform.id = post.platform_id

@@ -86,6 +86,8 @@ def _tables():
                 "rental_post_version_id": [101, 102, 103],
                 "area_raw": ["20 m2", "20 m2", "25 m2"],
                 "area_value": [20.0, 20.0, 25.0],
+                "posted_at_raw": ["2 ngày trước", "Hôm nay", "15/03/2019"],
+                "property_type_raw": ["Phòng trọ", "Phòng trọ", None],
             }
         ),
     }
@@ -402,3 +404,33 @@ def test_failed_rollback_does_not_mask_the_original_error():
     with pytest.raises(snap.BronzeSnapshotError, match="post_prices: TimeoutError"):
         snap.extract_bronze_frames(connection)
     assert connection.closed is True
+
+
+def test_observation_history_carries_raw_posted_dates_and_property_type():
+    connection = FakeConnection(_tables())
+    frames, _ = snap.extract_bronze_frames(connection)
+
+    history = snap.build_observation_history(frames).set_index("observation_id")
+
+    assert history.loc[101, "posted_at_raw"] == "2 ngày trước"
+    assert history.loc[103, "posted_at_raw"] == "15/03/2019"
+    assert history.loc[101, "property_type_raw"] == "Phòng trọ"
+    detail_sql = next(sql for sql, _ in connection.executed if "FROM post_details" in sql)
+    assert "posted_at_raw" in detail_sql and "property_type_raw" in detail_sql
+
+
+def test_snapshot_without_posted_date_columns_is_not_current(tmp_path):
+    import json
+
+    connection = FakeConnection(_tables())
+    metadata = snap.build_bronze_snapshot(
+        project_root=ROOT, snapshot_dir=tmp_path, connect=lambda: connection, source_database="fixture",
+    )
+    watermark = snap.BronzeWatermark(**metadata["watermark"])
+    assert snap.is_snapshot_current(tmp_path, watermark)
+
+    stored = json.loads((tmp_path / "metadata.json").read_text(encoding="utf-8"))
+    stored["observation_columns"] = [c for c in stored["observation_columns"] if c not in {"posted_at_raw", "property_type_raw"}]
+    (tmp_path / "metadata.json").write_text(json.dumps(stored), encoding="utf-8")
+
+    assert not snap.is_snapshot_current(tmp_path, watermark)

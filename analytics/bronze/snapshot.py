@@ -71,6 +71,8 @@ REQUIRED_LATEST_COLUMNS = {
     "latest_observed_at",
 }
 REQUIRED_EVIDENCE_COLUMNS = {"rental_post_id", *EVIDENCE_COLUMNS}
+# Added after the first published snapshots; optional for readers, required for "current".
+EVOLVED_OBSERVATION_COLUMNS = ("posted_at_raw", "property_type_raw")
 REQUIRED_OBSERVATION_COLUMNS = (
     "observation_id",
     "rental_post_id",
@@ -561,7 +563,8 @@ BRONZE_QUERIES: dict[str, str] = {
         f"WHERE rental_post_version_id <= {_VERSION_BOUND} AND {_PAGE}"
     ),
     "post_details": (
-        "SELECT id, rental_post_id, rental_post_version_id, area_raw, area_value "
+        "SELECT id, rental_post_id, rental_post_version_id, area_raw, area_value, "
+        "posted_at_raw, property_type_raw "
         f"FROM post_details WHERE rental_post_version_id <= {_VERSION_BOUND} AND {_PAGE}"
     ),
 }
@@ -608,6 +611,8 @@ STAGING_SCHEMAS: dict[str, tuple[tuple[str, str], ...]] = {
     "post_details": (
         ("id", "BIGINT"), ("rental_post_id", "BIGINT"), ("rental_post_version_id", "BIGINT"),
         ("area_raw", "VARCHAR"), ("area_value", "DOUBLE"),
+        # Raw text as shown by the source; interpreted downstream (listing freshness).
+        ("posted_at_raw", "VARCHAR"), ("property_type_raw", "VARCHAR"),
     ),
 }
 # PyMySQL returns DECIMAL as Python Decimal objects; convert per batch.
@@ -805,6 +810,9 @@ def is_snapshot_current(snapshot_dir: Path, watermark: BronzeWatermark) -> bool:
     """True when the published snapshot already covers this watermark."""
     metadata = _current_metadata(snapshot_dir)
     if not metadata or metadata.get("watermark") != watermark.to_dict():
+        return False
+    # A snapshot from before a column was added must be rebuilt even at the same watermark.
+    if not set(EVOLVED_OBSERVATION_COLUMNS) <= set(metadata.get("observation_columns") or ()):
         return False
     # Integrity only (sha256 per published file); never load the data here.
     files = metadata.get("files") or {}
