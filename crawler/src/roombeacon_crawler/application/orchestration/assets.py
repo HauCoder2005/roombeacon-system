@@ -5,6 +5,7 @@ orchestrators. It does not discover images from HTML or depend on Airflow.
 """
 
 from dataclasses import asdict
+import os
 
 from roombeacon_crawler.application.assets.asset_reconciler import (
     DEFAULT_ASSET_BATCH_SIZE,
@@ -14,8 +15,21 @@ from roombeacon_crawler.application.orchestration.errors import CrawlerWorkflowE
 from roombeacon_crawler.infrastructure.mysql.schema import ensure_mysql_schema
 
 
-def sync_assets_minio(batch_size: int = DEFAULT_ASSET_BATCH_SIZE) -> dict:
+MAX_ASSET_BATCH_SIZE = 2000
+
+
+def asset_batch_size() -> int:
+    """ASSET_BATCH_SIZE from the environment, bounded to 1..MAX_ASSET_BATCH_SIZE."""
+    try:
+        value = int(os.environ.get("ASSET_BATCH_SIZE", DEFAULT_ASSET_BATCH_SIZE))
+    except ValueError:
+        return DEFAULT_ASSET_BATCH_SIZE
+    return max(1, min(value, MAX_ASSET_BATCH_SIZE))
+
+
+def sync_assets_minio(batch_size: int | None = None) -> dict:
     """Reconcile one fair, bounded batch and return scheduler-safe metrics."""
+    batch_size = batch_size or asset_batch_size()
     try:
         ensure_mysql_schema()
         result = AssetReconcilerService().reconcile_batch(batch_size=batch_size)

@@ -1047,6 +1047,8 @@ services:
       MINIO_BUCKET_QUARANTINE: "${MINIO_BUCKET_QUARANTINE}"
 
       MINIO_BUCKET_EXPORTS: "${MINIO_BUCKET_EXPORTS}"
+      # Listing photos downloaded per crawl run, step 08_assets_sync_minio (1-2000).
+      ASSET_BATCH_SIZE: "${ASSET_BATCH_SIZE:-300}"
 
 
 

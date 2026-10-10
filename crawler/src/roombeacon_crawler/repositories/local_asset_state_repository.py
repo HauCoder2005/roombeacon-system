@@ -7,6 +7,7 @@ belong to the asset reconciliation service.
 import json
 import logging
 from pathlib import Path
+from roombeacon_crawler.config.get_env import env
 from roombeacon_crawler.models.asset_item import AssetItem, AssetStatus
 
 logger = logging.getLogger(__name__)
@@ -17,13 +18,12 @@ class LocalAssetStateRepository:
 
     def __init__(self, base_dir: Path | str | None = None) -> None:
         if base_dir is None:
-            candidate = Path("./data/state/assets").resolve()
-            if candidate.parent.parent.exists():
-                self.base_dir = candidate
-            elif Path("/data/state/assets").exists():
-                self.base_dir = Path("/data/state/assets")
-            else:
-                self.base_dir = candidate
+            # Same mounted root as the crawl state, so asset outcomes survive container restarts.
+            self.base_dir = (Path(env.crawler.data_dir) / "state" / "assets").resolve()
+            try:
+                self.base_dir.mkdir(parents=True, exist_ok=True)
+            except (OSError, PermissionError):
+                self.base_dir = Path("./data/state/assets").resolve()
         else:
             self.base_dir = Path(base_dir).resolve()
 
@@ -59,6 +59,35 @@ class LocalAssetStateRepository:
             logger.error("Asset state write failed (path=%s, error_class=%s)", item_path, type(exc).__name__)
             if tmp_path.exists():
                 tmp_path.unlink()
+
+    def _cursor_path(self, source: str) -> Path:
+        # Not *.json and outside the per-source folders, so status scans never see it.
+        return self.base_dir / "_cursors" / f"{source}.cursor"
+
+    def get_cursor(self, source: str) -> tuple[str, int] | None:
+        """Where the backfill scan of a source stopped: (last_observed_at, rental_post_id)."""
+        path = self._cursor_path(source)
+        if not path.exists():
+            return None
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            return str(data["last_observed_at"]), int(data["rental_post_id"])
+        except Exception as exc:
+            logger.warning("Asset cursor read failed (path=%s, error_class=%s)", path, type(exc).__name__)
+            return None
+
+    def save_cursor(self, source: str, cursor: tuple[str, int] | None) -> None:
+        """Persist the backfill position; None restarts the next backfill from the newest posts."""
+        path = self._cursor_path(source)
+        if cursor is None:
+            path.unlink(missing_ok=True)
+            return
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = path.with_suffix(".tmp")
+        tmp_path.write_text(
+            json.dumps({"last_observed_at": str(cursor[0]), "rental_post_id": int(cursor[1])}), encoding="utf-8"
+        )
+        tmp_path.replace(path)
 
     def is_success(self, source: str, asset_id: str) -> bool:
         """Kiểm tra xem asset đã hoàn thành tải và upload MinIO thành công chưa."""

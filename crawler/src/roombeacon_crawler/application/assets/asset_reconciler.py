@@ -5,7 +5,7 @@ downloads and retry classification. Airflow ordering is outside this module.
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 import boto3
 from botocore.client import Config
@@ -14,6 +14,7 @@ import pymysql
 import requests
 from urllib.parse import urljoin
 
+from roombeacon_crawler.application.assets.listing_photos import select_post_photos
 from roombeacon_crawler.config.get_env import env
 from roombeacon_crawler.models.asset_item import (
     AssetBatchResult,
@@ -43,7 +44,41 @@ USER_AGENT = (
 MAX_ASSET_BYTES = 15 * 1024 * 1024  # 15 MB
 DEFAULT_TIMEOUT_SECONDS = 12
 MAX_REDIRECTS = 5
+MYSQL_IO_TIMEOUT_SECONDS = 60
 DEFAULT_ASSET_BATCH_SIZE = 100
+# Newest posts are checked every run; older ones are backfilled from a saved cursor.
+FRESH_POSTS_PER_SOURCE = 300
+BACKFILL_POSTS_PER_SOURCE = 2000
+POST_PAGE_SIZE = 200
+RETRY_COOLDOWN = timedelta(hours=24)
+NEWEST_CURSOR = ("9999-12-31 23:59:59", 9_223_372_036_854_775_807)
+
+# One page of posts below a (last_observed_at, id) cursor with the images of every
+# version: a card-only latest version must not hide an earlier detail gallery.
+# LEFT JOIN keeps image-less posts so the cursor advances.
+POST_IMAGES_PAGE_SQL = """
+    SELECT
+        p.id AS rental_post_id,
+        p.platform_post_id,
+        p.last_observed_at,
+        pi.id AS image_id,
+        pi.rental_post_version_id,
+        pi.image_url,
+        pi.position,
+        %s AS source
+    FROM (
+        SELECT rp.id, rp.platform_post_id, rp.last_observed_at
+        FROM rental_posts rp
+        JOIN platforms pl ON pl.id = rp.platform_id
+        WHERE pl.code = %s
+          -- Spelled out (not a row comparison) so idx_platform_last_observed drives a range scan.
+          AND (rp.last_observed_at < %s OR (rp.last_observed_at = %s AND rp.id < %s))
+        ORDER BY rp.last_observed_at DESC, rp.id DESC
+        LIMIT %s
+    ) p
+    LEFT JOIN post_images pi ON pi.rental_post_id = p.id
+    ORDER BY p.last_observed_at DESC, p.id DESC, pi.rental_post_version_id DESC, pi.position ASC
+"""
 
 
 class AssetReconcilerService:
@@ -56,8 +91,14 @@ class AssetReconcilerService:
         max_retries: int = 3,
         timeout: int = DEFAULT_TIMEOUT_SECONDS,
         resolver: Resolver = resolve_host_addresses,
+        fresh_posts: int = FRESH_POSTS_PER_SOURCE,
+        backfill_posts: int = BACKFILL_POSTS_PER_SOURCE,
+        post_page_size: int = POST_PAGE_SIZE,
     ) -> None:
         self.state_repo = state_repo or LocalAssetStateRepository()
+        self.fresh_posts = fresh_posts
+        self.backfill_posts = backfill_posts
+        self.post_page_size = post_page_size
         self.minio_cfg = env.minio
         self.bucket_name = bucket_name or self.minio_cfg.bucket_assets
         self.max_retries = max_retries
@@ -91,6 +132,13 @@ class AssetReconcilerService:
                     database=mysql_cfg.database,
                     cursorclass=pymysql.cursors.DictCursor,
                     connect_timeout=5,
+                    # Never hold a Bronze connection slot on a stuck read or lock wait.
+                    read_timeout=MYSQL_IO_TIMEOUT_SECONDS,
+                    write_timeout=MYSQL_IO_TIMEOUT_SECONDS,
+                    init_command=(
+                        f"SET SESSION MAX_EXECUTION_TIME={MYSQL_IO_TIMEOUT_SECONDS * 1000}, "
+                        f"SESSION lock_wait_timeout={MYSQL_IO_TIMEOUT_SECONDS}"
+                    ),
                 )
             except Exception:
                 continue
@@ -162,48 +210,21 @@ class AssetReconcilerService:
             return 0
 
     def get_source_accounting(self) -> dict[str, SourceAssetMetrics]:
-        """Tính toán bảng kiểm kê chính xác (Accounting Invariant) cho từng nguồn.
+        """Per-source outcome counts from the durable asset state.
 
-        Total Metadata = Stored + Actionable Pending + Retryable Failed + Terminal
+        Sources come from the small platforms table. Pending photos are not
+        counted: that needs a GROUP BY over every post_images URL, which starved
+        the single-CPU Bronze server twice per crawl run. total_metadata is the
+        number of photos with a recorded outcome.
         """
         conn = self.get_mysql_connection()
         accounting: dict[str, SourceAssetMetrics] = {}
 
         with conn:
             with conn.cursor() as cur:
-                cur.execute("""
-                    SELECT
-                        refs.source,
-                        COUNT(*) AS total_rows,
-                        SUM(refs.is_http) AS http_rows,
-                        SUM(1 - refs.is_http) AS non_http_rows
-                    FROM (
-                        SELECT
-                            pl.code AS source,
-                            p.platform_post_id,
-                            pi.image_url,
-                            CASE
-                                WHEN pi.image_url LIKE 'http://%'
-                                  OR pi.image_url LIKE 'https://%'
-                                THEN 1 ELSE 0
-                            END AS is_http
-                        FROM platforms pl
-                        JOIN rental_posts p ON p.platform_id = pl.id
-                        JOIN post_images pi ON pi.rental_post_id = p.id
-                        GROUP BY pl.code, p.platform_post_id, pi.image_url
-                    ) refs
-                    GROUP BY refs.source
-                    ORDER BY refs.source ASC
-                """)
+                cur.execute("SELECT code AS source FROM platforms ORDER BY code ASC")
                 for row in cur.fetchall():
-                    s = row["source"]
-                    total_m = int(row["total_rows"])
-                    non_http_m = int(row["non_http_rows"] or 0)
-                    accounting[s] = SourceAssetMetrics(
-                        source=s,
-                        total_metadata=total_m,
-                        terminal=non_http_m,
-                    )
+                    accounting[row["source"]] = SourceAssetMetrics(source=row["source"])
 
         for s, metrics in accounting.items():
             s_dir = self.state_repo.base_dir / s
@@ -222,14 +243,9 @@ class AssetReconcilerService:
                         elif item.status == AssetStatus.TERMINAL_FAILURE:
                             metrics.terminal += 1
 
-            metrics.actionable_pending = max(
-                0,
-                metrics.total_metadata
-                - metrics.stored
-                - metrics.terminal
-                - metrics.retryable_failed,
-            )
-            metrics.remaining_actionable = metrics.actionable_pending
+            metrics.total_metadata = metrics.stored + metrics.terminal + metrics.retryable_failed
+            metrics.actionable_pending = 0
+            metrics.remaining_actionable = metrics.retryable_failed
 
         return accounting
 
@@ -239,7 +255,7 @@ class AssetReconcilerService:
         max_per_source: int = 500,
         s3: Any | None = None,
     ) -> dict[str, list[AssetItem]]:
-        """Truy vấn các ứng viên actionable pending cho từng nguồn, sắp xếp theo ID tăng dần (oldest first)."""
+        """Own-photo candidates per source: the newest posts first, then a resumable backfill of older ones."""
         conn = self.get_mysql_connection()
         candidates_by_source: dict[str, list[AssetItem]] = {s: [] for s in active_sources}
         self._last_already_stored_by_source = {s: 0 for s in active_sources}
@@ -247,91 +263,123 @@ class AssetReconcilerService:
         with conn:
             with conn.cursor() as cur:
                 for s in active_sources:
+                    found = candidates_by_source[s]
                     seen_asset_ids: set[str] = set()
-                    page_size = max_per_source * 2
-                    last_image_id = 0
-                    while len(candidates_by_source[s]) < max_per_source:
-                        cur.execute(
-                            """
-                            SELECT
-                                MIN(pi.id) AS image_id,
-                                MIN(pi.rental_post_id) AS rental_post_id,
-                                pi.image_url,
-                                MIN(pi.position) AS position,
-                                p.platform_post_id,
-                                pl.code AS source
-                            FROM post_images pi
-                            JOIN rental_posts p ON pi.rental_post_id = p.id
-                            JOIN platforms pl ON p.platform_id = pl.id
-                            WHERE pl.code = %s
-                              AND (pi.image_url LIKE 'http://%%' OR pi.image_url LIKE 'https://%%')
-                            GROUP BY pl.code, p.platform_post_id, pi.image_url
-                            HAVING MIN(pi.id) > %s
-                            ORDER BY MIN(pi.id) ASC
-                            LIMIT %s
-                            """,
-                            (s, last_image_id, page_size),
-                        )
-                        rows = cur.fetchall()
-                        if not rows:
-                            break
-                        last_image_id = int(rows[-1]["image_id"])
-
-                        for row in rows:
-                            source = row["source"]
-                            platform_post_id = str(row["platform_post_id"])
-                            image_url = row["image_url"]
-                            position = int(row.get("position", 1))
-
-                            asset_id = AssetItem.generate_asset_id(source, platform_post_id, image_url)
-                            object_key = AssetItem.generate_object_key(source, platform_post_id, position, image_url)
-
-                            # Multiple observations may repeat the same canonical image.
-                            # Schedule the identity at most once in this reconciliation run.
-                            if asset_id in seen_asset_ids:
-                                continue
-                            seen_asset_ids.add(asset_id)
-
-                            existing_state = self.state_repo.get_asset(source, asset_id)
-
-                            if existing_state and existing_state.status == AssetStatus.SUCCESS:
-                                if s3 is None or self._object_exists(s3, existing_state.object_key):
-                                    self._last_already_stored_by_source[source] += 1
-                                    continue
-                                # Durable state is not sufficient when the referenced object
-                                # was removed externally; make the item actionable again.
-                                existing_state.status = AssetStatus.PENDING
-                            if existing_state and existing_state.status == AssetStatus.TERMINAL_FAILURE:
-                                continue
-                            if (
-                                existing_state
-                                and existing_state.status == AssetStatus.RETRYABLE_FAILURE
-                                and existing_state.attempt_count >= self.max_retries
-                            ):
-                                continue
-
-                            if existing_state:
-                                item = existing_state
-                            else:
-                                item = AssetItem(
-                                    asset_id=asset_id,
-                                    source=source,
-                                    platform_post_id=platform_post_id,
-                                    rental_post_id=row["rental_post_id"],
-                                    image_url=image_url,
-                                    position=position,
-                                    object_key=object_key,
-                                    max_retries=self.max_retries,
-                                )
-
-                            candidates_by_source[source].append(item)
-                            if len(candidates_by_source[source]) >= max_per_source:
-                                break
-
-                        if len(rows) < page_size:
-                            break
+                    fresh_end, fresh_exhausted = self._scan_posts(
+                        cur, s, NEWEST_CURSOR, self.fresh_posts, found, seen_asset_ids, max_per_source, s3
+                    )
+                    if fresh_exhausted:
+                        self.state_repo.save_cursor(s, None)
+                        continue
+                    if len(found) >= max_per_source or self.backfill_posts <= 0:
+                        continue
+                    saved = self.state_repo.get_cursor(s)
+                    start = saved if saved is not None and saved < fresh_end else fresh_end
+                    end, exhausted = self._scan_posts(
+                        cur, s, start, self.backfill_posts, found, seen_asset_ids, max_per_source, s3
+                    )
+                    self.state_repo.save_cursor(s, None if exhausted else end)
 
         return candidates_by_source
+
+    def _scan_posts(
+        self,
+        cur: Any,
+        source: str,
+        start: tuple[str, int],
+        max_posts: int,
+        found: list[AssetItem],
+        seen_asset_ids: set[str],
+        max_per_source: int,
+        s3: Any | None,
+    ) -> tuple[tuple[str, int], bool]:
+        """Walk posts below `start` newest-first; return the last post handled and whether the source ran out."""
+        cursor, scanned = start, 0
+        while scanned < max_posts and len(found) < max_per_source:
+            limit = min(self.post_page_size, max_posts - scanned)
+            cur.execute(POST_IMAGES_PAGE_SQL, (source, source, cursor[0], cursor[0], cursor[1], limit))
+            posts = self._group_posts(cur.fetchall())
+            if not posts:
+                return cursor, True
+            for post in posts:
+                self._collect_post_photos(post, found, seen_asset_ids, s3)
+                cursor = (str(post["last_observed_at"]), int(post["rental_post_id"]))
+                scanned += 1
+                if len(found) >= max_per_source:
+                    return cursor, False
+            if len(posts) < limit:
+                return cursor, True
+        return cursor, False
+
+    @staticmethod
+    def _group_posts(rows: list[dict]) -> list[dict]:
+        posts: dict[int, dict] = {}
+        for row in rows:
+            post = posts.setdefault(int(row["rental_post_id"]), {
+                "rental_post_id": int(row["rental_post_id"]),
+                "platform_post_id": str(row["platform_post_id"]),
+                "last_observed_at": row["last_observed_at"],
+                "source": row["source"],
+                "versions": {},
+            })
+            if row.get("image_url"):
+                version = post["versions"].setdefault(row.get("rental_post_version_id"), [])
+                version.append((int(row.get("position") or 1), row["image_url"]))
+        return list(posts.values())
+
+    def _collect_post_photos(
+        self, post: dict, found: list[AssetItem], seen_asset_ids: set[str], s3: Any | None
+    ) -> None:
+        source, platform_post_id = post["source"], post["platform_post_id"]
+        for position, image_url in select_post_photos(source, platform_post_id, post["versions"].values()):
+            asset_id = AssetItem.generate_asset_id(source, platform_post_id, image_url)
+            # Multiple observations may repeat the same canonical image.
+            if asset_id in seen_asset_ids:
+                continue
+            seen_asset_ids.add(asset_id)
+
+            existing_state = self.state_repo.get_asset(source, asset_id)
+            if existing_state and existing_state.status == AssetStatus.SUCCESS:
+                if s3 is None or self._object_exists(s3, existing_state.object_key):
+                    self._last_already_stored_by_source[source] = self._last_already_stored_by_source.get(source, 0) + 1
+                    continue
+                # Durable state is not sufficient when the referenced object
+                # was removed externally; make the item actionable again.
+                existing_state.status = AssetStatus.PENDING
+            if existing_state and existing_state.status == AssetStatus.TERMINAL_FAILURE:
+                continue
+            if (
+                existing_state
+                and existing_state.status == AssetStatus.RETRYABLE_FAILURE
+                and existing_state.attempt_count >= self.max_retries
+            ):
+                if not self._retry_cooled_down(existing_state):
+                    continue
+                # Transient failures (timeouts, 5xx) get a fresh retry budget after the cooldown.
+                existing_state.attempt_count = 0
+
+            found.append(existing_state or AssetItem(
+                asset_id=asset_id,
+                source=source,
+                platform_post_id=platform_post_id,
+                rental_post_id=post["rental_post_id"],
+                image_url=image_url,
+                position=position,
+                object_key=AssetItem.generate_object_key(source, platform_post_id, position, image_url),
+                max_retries=self.max_retries,
+            ))
+
+    @staticmethod
+    def _retry_cooled_down(item: AssetItem) -> bool:
+        if not item.last_attempt_at:
+            return True
+        try:
+            last = datetime.fromisoformat(item.last_attempt_at)
+        except ValueError:
+            return True
+        if last.tzinfo is None:
+            last = last.replace(tzinfo=timezone.utc)
+        return datetime.now(timezone.utc) - last >= RETRY_COOLDOWN
 
     def reconcile_batch(
         self,
