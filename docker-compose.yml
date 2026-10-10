@@ -107,7 +107,13 @@ services:
 
       - "--innodb-buffer-pool-size=512M"
 
-      - "--max-connections=20"
+      # Headroom for the Airflow pools; idle and lock waits are bounded so a stuck
+      # client can never hold every slot (ERROR 1040 Too many connections).
+      - "--max-connections=60"
+
+      - "--wait-timeout=600"
+
+      - "--lock-wait-timeout=120"
 
       - "--skip-name-resolve"
 

@@ -193,14 +193,22 @@ def ensure_mysql_schema(engine=None) -> None:
                 if stmt_clean:
                     conn.execute(text(stmt_clean))
 
-        # Ensure ingestion_origin column exists in existing deployments
-        try:
-            with conn.begin():
-                conn.execute(text("ALTER TABLE rental_post_versions ADD COLUMN ingestion_origin VARCHAR(32) NOT NULL DEFAULT 'UNKNOWN'"))
-                logger.info("Migrated rental_post_versions: added ingestion_origin")
-        except Exception as e:
-            if "Duplicate column name" not in str(e):
-                raise
+        # Ensure ingestion_origin column exists in existing deployments. Check first:
+        # an ALTER on every crawl run queues behind long readers for the metadata
+        # lock and every later query on the table queues behind the ALTER.
+        has_column = conn.execute(text(
+            "SELECT COUNT(*) FROM information_schema.columns "
+            "WHERE table_schema = DATABASE() AND table_name = 'rental_post_versions' "
+            "AND column_name = 'ingestion_origin'"
+        )).scalar()
+        if not has_column:
+            try:
+                with conn.begin():
+                    conn.execute(text("ALTER TABLE rental_post_versions ADD COLUMN ingestion_origin VARCHAR(32) NOT NULL DEFAULT 'UNKNOWN'"))
+                    logger.info("Migrated rental_post_versions: added ingestion_origin")
+            except Exception as e:
+                if "Duplicate column name" not in str(e):
+                    raise
 
     from roombeacon_crawler.infrastructure.mysql.repositories.geocode_repository import MySQLGeocodeRepository
     MySQLGeocodeRepository().ensure_table()
