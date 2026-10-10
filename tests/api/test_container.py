@@ -80,3 +80,14 @@ def test_api_reads_images_with_a_read_only_minio_account():
     assert resources == {"arn:aws:s3:::roombeacon-assets", "arn:aws:s3:::roombeacon-assets/*"}
     assert (ROOT / "infrastructure/minio/create_api_reader.sh").is_file()
     assert '"boto3==1.43.102"' in PYPROJECT.read_text(encoding="utf-8")
+
+
+def test_api_takes_only_its_image_settings_from_the_main_env_file():
+    block = _service_block("api")
+
+    # Compose interpolates these from the main .env; the whole file is never injected.
+    assert 'API_IMAGES_ENABLED: "${API_IMAGES_ENABLED:-false}"' in block
+    assert 'MINIO_API_READER_ACCESS_KEY: "${MINIO_API_READER_ACCESS_KEY:-}"' in block
+    assert 'MINIO_API_READER_SECRET_KEY: "${MINIO_API_READER_SECRET_KEY:-}"' in block
+    assert 'MINIO_BUCKET_ASSETS: "${MINIO_BUCKET_ASSETS:-roombeacon-assets}"' in block
+    assert 'path: ".env"' not in block

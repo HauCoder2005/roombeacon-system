@@ -1410,8 +1410,12 @@ services:
       API_CLICKHOUSE_HOST: "clickhouse"
       API_SILVER_PATH: "/data/silver/rental_listings.parquet"
       API_MODEL_DIR: "/models/price"
-      # Listing images (only used when API_IMAGES_ENABLED=true in .env.local).
+      # Listing images: only these settings come from the main .env (never the whole file).
       API_MINIO_ENDPOINT: "minio:9000"
+      API_IMAGES_ENABLED: "${API_IMAGES_ENABLED:-false}"
+      MINIO_API_READER_ACCESS_KEY: "${MINIO_API_READER_ACCESS_KEY:-}"
+      MINIO_API_READER_SECRET_KEY: "${MINIO_API_READER_SECRET_KEY:-}"
+      MINIO_BUCKET_ASSETS: "${MINIO_BUCKET_ASSETS:-roombeacon-assets}"
     volumes:
       - "./data/silver:/data/silver:ro"
       - "./data/modeling/roombeacon_price_benchmark_v3:/models/price:ro"
